@@ -14,22 +14,12 @@ PAGE_ICON = "🖨️"
 # --- NTFY EINSTELLUNGEN ---
 NTFY_TOPIC = "fotobox_status_secret_4566"
 NTFY_ACTIVE_DEFAULT = True
-WARNING_THRESHOLD = 20
+WARNING_THRESHOLD = 20  # ab wie vielen Bildern Warnung
 
 # --- SEITEN LAYOUT ---
 st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="centered")
 
-# --- GLOBALER CSS FIX: Abstand zwischen Icon & Text ---
-st.markdown("""
-<style>
-div[data-testid="column"] {
-    gap: 0rem !important;
-}
-div[data-testid="column"] > div {
-    padding-right: 0.2rem !important;
-}
-</style>
-""", unsafe_allow_html=True)
+# (CSS-Hack von vorher brauchen wir hier nicht mehr, Layout ist Text links / Icon rechts)
 
 # --- SESSION STATE ---
 if "confirm_reset" not in st.session_state:
@@ -37,7 +27,7 @@ if "confirm_reset" not in st.session_state:
 if "ntfy_active" not in st.session_state:
     st.session_state.ntfy_active = NTFY_ACTIVE_DEFAULT
 if "last_warn_status" not in st.session_state:
-    st.session_state.last_warn_status = None
+    st.session_state.last_warn_status = None  # "error", "low_paper", "ok"
 if "max_prints" not in st.session_state:
     st.session_state.max_prints = 400
 if "current_status_mode" not in st.session_state:
@@ -56,9 +46,9 @@ def send_ntfy_push(title, message, tags="warning", priority="default"):
             f"https://ntfy.sh/{NTFY_TOPIC}",
             data=message.encode("utf-8"),
             headers=headers,
-            timeout=5
+            timeout=5,
         )
-    except:
+    except Exception:
         pass
 
 
@@ -69,7 +59,7 @@ def load_lottieurl(url):
         r = requests.get(url, timeout=5)
         if r.status_code == 200:
             return r.json()
-    except:
+    except Exception:
         pass
     return None
 
@@ -80,8 +70,8 @@ lottie_warning  = load_lottieurl("https://assets1.lottiefiles.com/packages/lf20_
 lottie_error    = load_lottieurl("https://assets7.lottiefiles.com/private_files/lf30_editor_e7qk3x0q.json")
 
 # Fallbacks
-if lottie_warning is None: lottie_warning = lottie_ready
-if lottie_error   is None: lottie_error   = lottie_warning
+if lottie_warning  is None: lottie_warning  = lottie_ready
+if lottie_error    is None: lottie_error    = lottie_warning
 if lottie_printing is None: lottie_printing = lottie_ready
 
 
@@ -93,12 +83,13 @@ def get_worksheet():
     gc = gspread.authorize(creds)
     return gc.open_by_key(SHEET_ID).sheet1
 
+
 @st.cache_data(ttl=0)
 def get_data():
     try:
         data = get_worksheet().get_all_records()
         return pd.DataFrame(data)
-    except:
+    except Exception:
         return pd.DataFrame()
 
 
@@ -108,7 +99,7 @@ def clear_google_sheet():
         ws.batch_clear(["A2:Z10000"])
         st.cache_data.clear()
         st.toast("Log erfolgreich zurückgesetzt!", icon="♻️")
-    except:
+    except Exception:
         st.error("Fehler beim Reset")
 
 
@@ -119,7 +110,6 @@ st.title(f"{PAGE_ICON} {PAGE_TITLE}")
 @st.fragment(run_every=10)
 def show_live_status():
     df = get_data()
-
     if df.empty:
         st.info("System wartet auf Start…")
         st.caption("Noch keine Druckdaten empfangen.")
@@ -143,13 +133,16 @@ def show_live_status():
             current_lottie = None  # keine Animation bei Fehler
 
             if prev_status != "error":
-                send_ntfy_push("🔴 Fehler", f"Druckerfehler: {last.get('Status')}", tags="rotating_light")
-
+                send_ntfy_push(
+                    "🔴 Fehler",
+                    f"Druckerfehler: {last.get('Status')}",
+                    tags="rotating_light",
+                )
             st.session_state.last_warn_status = "error"
 
         elif media_remaining <= WARNING_THRESHOLD:
             status_mode   = "low_paper"
-            display_text  = "Papier fast leer!"
+            display_text  = "⚠️ Papier fast leer!"
             display_color = "orange"
             current_lottie = lottie_warning
 
@@ -162,7 +155,7 @@ def show_live_status():
 
         elif "printing" in raw_status or "processing" in raw_status:
             status_mode   = "printing"
-            display_text  = "Druckt gerade…"
+            display_text  = "🖨️ Druckt gerade…"
             display_color = "blue"
             current_lottie = lottie_printing
 
@@ -173,7 +166,7 @@ def show_live_status():
 
         else:
             status_mode   = "ready"
-            display_text  = "Bereit"
+            display_text  = "✅ Bereit"
             display_color = "green"
             current_lottie = None  # ready ohne Animation
 
@@ -182,7 +175,7 @@ def show_live_status():
 
             st.session_state.last_warn_status = "ok"
 
-        # --- ANIMATIONS-LOGIK ---
+        # --- ANIMATIONS-STEUERUNG ---
         if st.session_state.current_status_mode != status_mode:
             st.session_state.current_status_mode = status_mode
             st.session_state.status_loop_counter = 0
@@ -191,41 +184,38 @@ def show_live_status():
         if status_mode == "printing":
             show_animation = True
         elif status_mode == "low_paper":
+            # nur die ersten 3 Zyklen animieren, danach ruhig
             if st.session_state.status_loop_counter < 3:
                 show_animation = True
                 st.session_state.status_loop_counter += 1
 
-        # --- HEADER UI ---
-        col1, col2 = st.columns([1, 2])
+        # --- HEADER: TEXT LINKS, ANIMATION / ICON RECHTS ---
+        col_text, col_anim = st.columns([3, 1])
 
-        with col1:
-            if show_animation and current_lottie:
-                st_lottie(
-                    current_lottie,
-                    height=150,
-                    loop=True,
-                    key=f"anim_{status_mode}"
-                )
-            else:
-                # WICHTIG: Bei ERROR HIER NICHTS ZEIGEN => kein doppeltes Icon
-                if status_mode == "ready":
-                    st.markdown("## ✅")
-                elif status_mode == "low_paper":
-                    st.markdown("## ⚠️")
-                elif status_mode == "error":
-                    st.markdown("&nbsp;")   # leer lassen
-                else:
-                    st.markdown("## 🤖")
-
-        with col2:
+        with col_text:
             st.markdown(
                 f"<h2 style='color:{display_color}; margin-top:0;'>{display_text}</h2>",
                 unsafe_allow_html=True,
             )
             st.caption(f"Letztes Signal: {timestamp}")
-
             if status_mode == "error":
                 st.error("Bitte Drucker prüfen (Störung aktiv).")
+
+        with col_anim:
+            if show_animation and current_lottie:
+                st_lottie(
+                    current_lottie,
+                    height=140,
+                    loop=True,
+                    key=f"anim_{status_mode}",
+                )
+            else:
+                # Nur bei Ready ein kleines Icon rechts, bei den anderen reicht der Text links
+                if status_mode == "ready":
+                    st.markdown("### ✅")
+                elif status_mode == "printing":
+                    st.markdown("### 🖨️")
+                # low_paper + error bekommen rechts nichts, da schon Emoji im Text links
 
         # --- PAPIERSTATUS ---
         st.markdown("#### Papierstatus")
@@ -284,12 +274,17 @@ st.markdown("---")
 # --- ADMIN ---
 with st.expander("🛠️ Admin & Einstellungen"):
     c1, c2 = st.columns(2)
+
     with c1:
         st.write("### Externe Links")
-        st.link_button("🔗 Fotoshare Cloud", "https://fotoshare.co/admin/index")
+        st.link_button("🔗 Fotoshare Cloud", "https://fotoshare.co/admin/index", use_container_width=True)
+
         st.write("### Benachrichtigungen")
         st.code(NTFY_TOPIC)
-        st.session_state.ntfy_active = st.checkbox("Push-Nachrichten aktiv", st.session_state.ntfy_active)
+        st.session_state.ntfy_active = st.checkbox(
+            "Push-Nachrichten aktiv",
+            st.session_state.ntfy_active,
+        )
         if st.button("Test Push 🔔"):
             send_ntfy_push("Test", "Test erfolgreich", tags="tada")
             st.toast("Test gesendet!")
@@ -305,19 +300,19 @@ with st.expander("🛠️ Admin & Einstellungen"):
         )
 
         if not st.session_state.confirm_reset:
-            if st.button("Papierwechsel durchgeführt (Reset) 🔄"):
+            if st.button("Papierwechsel durchgeführt (Reset) 🔄", use_container_width=True):
                 st.session_state.confirm_reset = True
                 st.session_state.temp_package_size = size
                 st.rerun()
         else:
             st.warning(f"Log löschen & {st.session_state.temp_package_size}-Rolle setzen?")
             y, n = st.columns(2)
-            if y.button("✅ Ja"):
+            if y.button("✅ Ja", use_container_width=True):
                 st.session_state.max_prints = st.session_state.temp_package_size
                 clear_google_sheet()
                 st.session_state.confirm_reset = False
                 st.session_state.last_warn_status = None
                 st.rerun()
-            if n.button("❌ Nein"):
+            if n.button("❌ Nein", use_container_width=True):
                 st.session_state.confirm_reset = False
                 st.rerun()
