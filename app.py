@@ -8,7 +8,7 @@ from datetime import datetime
 
 # --- KONFIGURATION ---
 # HIER DEINE ID EINFÜGEN (aus der Browser-URL kopieren)
-SHEET_ID = "HIER_DIE_LANGE_ID_EINFÜGEN" 
+SHEET_ID = "10uLjotNMT3AewBHdkuYyOudbbOCEuquDqGbwr2Wu7ig" 
 
 MAX_PRINTS_PER_ROLL = 400
 PAGE_TITLE = "Fotobox Drucker Status"
@@ -39,7 +39,7 @@ def get_data():
         gc = gspread.authorize(creds)
         
         # WICHTIG: open_by_key statt open
-        if SHEET_ID == "10uLjotNMT3AewBHdkuYyOudbbOCEuquDqGbwr2Wu7ig":
+        if SHEET_ID == "HIER_DIE_LANGE_ID_EINFÜGEN":
             st.error("Bitte trage die Google Sheet ID im Code ein (Zeile 13).")
             return pd.DataFrame()
             
