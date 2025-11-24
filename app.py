@@ -122,23 +122,25 @@ def show_live_status():
 
     if df.empty:
         st.info("System wartet auf Start…")
+        st.caption("Noch keine Druckdaten empfangen.")
         return
 
     try:
         last = df.iloc[-1]
 
-        timestamp     = str(last.get("Timestamp", ""))
-        raw_status    = str(last.get("Status", "")).lower()
+        # Spalten: Timestamp | Status | Paper_Status | Media_Remaining
+        timestamp       = str(last.get("Timestamp", ""))
+        raw_status      = str(last.get("Status", "")).lower()
         media_remaining = int(last.get("Media_Remaining", 0))
 
         prev_status = st.session_state.last_warn_status
 
         # --- ENTSCHEIDUNG STATUS ---
         if any(w in raw_status for w in ["error", "failure", "fehler", "stau", "unknown"]):
-            status_mode = "error"
-            display_text = f"⚠️ STÖRUNG: {last.get('Status')}"
+            status_mode   = "error"
+            display_text  = f"⚠️ STÖRUNG: {last.get('Status')}"
             display_color = "red"
-            current_lottie = None  # WICHTIG: KEINE LOTTIE BEI FEHLER
+            current_lottie = None  # keine Animation bei Fehler
 
             if prev_status != "error":
                 send_ntfy_push("🔴 Fehler", f"Druckerfehler: {last.get('Status')}", tags="rotating_light")
@@ -146,8 +148,8 @@ def show_live_status():
             st.session_state.last_warn_status = "error"
 
         elif media_remaining <= WARNING_THRESHOLD:
-            status_mode = "low_paper"
-            display_text = "Papier fast leer!"
+            status_mode   = "low_paper"
+            display_text  = "Papier fast leer!"
             display_color = "orange"
             current_lottie = lottie_warning
 
@@ -159,8 +161,8 @@ def show_live_status():
             st.session_state.last_warn_status = "low_paper"
 
         elif "printing" in raw_status or "processing" in raw_status:
-            status_mode = "printing"
-            display_text = "Druckt gerade…"
+            status_mode   = "printing"
+            display_text  = "Druckt gerade…"
             display_color = "blue"
             current_lottie = lottie_printing
 
@@ -170,8 +172,8 @@ def show_live_status():
             st.session_state.last_warn_status = "ok"
 
         else:
-            status_mode = "ready"
-            display_text = "Bereit"
+            status_mode   = "ready"
+            display_text  = "Bereit"
             display_color = "green"
             current_lottie = None  # ready ohne Animation
 
@@ -180,16 +182,14 @@ def show_live_status():
 
             st.session_state.last_warn_status = "ok"
 
-        # --- ANIMATION LOGIK ---
+        # --- ANIMATIONS-LOGIK ---
         if st.session_state.current_status_mode != status_mode:
             st.session_state.current_status_mode = status_mode
             st.session_state.status_loop_counter = 0
 
         show_animation = False
-
         if status_mode == "printing":
             show_animation = True
-
         elif status_mode == "low_paper":
             if st.session_state.status_loop_counter < 3:
                 show_animation = True
@@ -200,15 +200,20 @@ def show_live_status():
 
         with col1:
             if show_animation and current_lottie:
-                st_lottie(current_lottie, height=150, loop=True, key=f"anim_{status_mode}")
+                st_lottie(
+                    current_lottie,
+                    height=150,
+                    loop=True,
+                    key=f"anim_{status_mode}"
+                )
             else:
-                # FEHLER → NUR EIN ICON HIER (KEIN DOPPEL-ICON!)
+                # WICHTIG: Bei ERROR HIER NICHTS ZEIGEN => kein doppeltes Icon
                 if status_mode == "ready":
                     st.markdown("## ✅")
                 elif status_mode == "low_paper":
                     st.markdown("## ⚠️")
                 elif status_mode == "error":
-                    st.markdown("## ⚠️")  # nur EIN Icon
+                    st.markdown("&nbsp;")   # leer lassen
                 else:
                     st.markdown("## 🤖")
 
@@ -225,24 +230,51 @@ def show_live_status():
         # --- PAPIERSTATUS ---
         st.markdown("#### Papierstatus")
 
-        remaining_text = "–" if status_mode == "error" else f"{media_remaining} Stk"
-
-        # Restlaufzeit
         if status_mode == "error":
+            remaining_text = "–"
             forecast = "Unbekannt (Störung)"
         else:
+            remaining_text = f"{media_remaining} Stk"
             if media_remaining > 0:
                 m = int(media_remaining * 1.5)
-                forecast = f"{m} Min." if m < 60 else f"{m//60} Std. {m%60} Min."
+                if m < 60:
+                    forecast = f"{m} Min."
+                else:
+                    forecast = f"{m//60} Std. {m%60} Min."
             else:
                 forecast = "0 Min."
 
         c1, c2 = st.columns(2)
         c1.metric("Verbleibend", remaining_text, f"von {st.session_state.max_prints}")
-        c2.metric("Restlaufzeit", forecast)
+        c2.metric("Restlaufzeit (geschätzt)", forecast)
+
+        # Fortschrittsbalken
+        if status_mode == "error":
+            progress_val = 0.0
+            bar_color = "red"
+        else:
+            progress_val = max(0.0, min(1.0, media_remaining / st.session_state.max_prints))
+            if progress_val < 0.1:
+                bar_color = "red"
+            elif progress_val < 0.25:
+                bar_color = "orange"
+            else:
+                bar_color = "blue"
+
+        st.markdown(
+            f"""
+            <style>
+            .stProgress > div > div > div > div {{
+                background-color: {bar_color};
+            }}
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.progress(progress_val)
 
     except Exception as e:
-        st.error(f"Fehler: {e}")
+        st.error(f"Fehler bei der Datenverarbeitung: {e}")
 
 
 show_live_status()
@@ -253,31 +285,39 @@ st.markdown("---")
 with st.expander("🛠️ Admin & Einstellungen"):
     c1, c2 = st.columns(2)
     with c1:
+        st.write("### Externe Links")
         st.link_button("🔗 Fotoshare Cloud", "https://fotoshare.co/admin/index")
+        st.write("### Benachrichtigungen")
         st.code(NTFY_TOPIC)
-        st.session_state.ntfy_active = st.checkbox("Push aktiv", st.session_state.ntfy_active)
+        st.session_state.ntfy_active = st.checkbox("Push-Nachrichten aktiv", st.session_state.ntfy_active)
         if st.button("Test Push 🔔"):
             send_ntfy_push("Test", "Test erfolgreich", tags="tada")
             st.toast("Test gesendet!")
 
     with c2:
-        size = st.radio("Paketgröße", [200, 400], horizontal=True,
-                        index=1 if st.session_state.max_prints == 400 else 0)
+        st.write("### Neuer Auftrag")
+        st.write("Welches Papier liegt ein?")
+        size = st.radio(
+            "Paketgröße",
+            [200, 400],
+            horizontal=True,
+            index=1 if st.session_state.max_prints == 400 else 0,
+        )
 
         if not st.session_state.confirm_reset:
             if st.button("Papierwechsel durchgeführt (Reset) 🔄"):
                 st.session_state.confirm_reset = True
                 st.session_state.temp_package_size = size
-                st.experimental_rerun()
+                st.rerun()
         else:
-            st.warning(f"Log löschen & {size}-Rolle setzen?")
+            st.warning(f"Log löschen & {st.session_state.temp_package_size}-Rolle setzen?")
             y, n = st.columns(2)
-            if y.button("Ja"):
+            if y.button("✅ Ja"):
                 st.session_state.max_prints = st.session_state.temp_package_size
                 clear_google_sheet()
                 st.session_state.confirm_reset = False
                 st.session_state.last_warn_status = None
-                st.experimental_rerun()
-            if n.button("Nein"):
+                st.rerun()
+            if n.button("❌ Nein"):
                 st.session_state.confirm_reset = False
-                st.experimental_rerun()
+                st.rerun()
