@@ -10,275 +10,182 @@ from datetime import datetime, timedelta
 # --- KONFIGURATION ---
 SHEET_ID = "10uLjotNMT3AewBHdkuYyOudbbOCEuquDqGbwr2Wu7ig"
 MAX_PRINTS_PER_ROLL = 400
-WARNING_THRESHOLD = 20  # Ab hier wird gewarnt
+WARNING_THRESHOLD = 20
 PAGE_TITLE = "Fotobox Drucker Status"
 PAGE_ICON = "🖨️"
+
+# --- NTFY EINSTELLUNGEN ---
+NTFY_TOPIC = "fotobox_status_secret_4566"
+NTFY_ACTIVE_DEFAULT = True
 
 # --- SEITEN KONFIGURATION ---
 st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="centered")
 
 # --- SESSION STATE INITIALISIERUNG ---
-# Wir speichern Zustände, um Benachrichtigungs-Spam zu verhindern
-if "confirm_reset" not in st.session_state:
-    st.session_state.confirm_reset = False
-
-# ntfy Einstellungen
 if "ntfy_active" not in st.session_state:
-    st.session_state.ntfy_active = False  # Standard aus
-if "ntfy_topic" not in st.session_state:
-    st.session_state.ntfy_topic = "fotobox_status_secret_123" # Standard Topic (sollte geändert werden)
-
-# Status-Speicher (damit wir nur bei Änderungen benachrichtigen)
-if "last_known_status" not in st.session_state:
-    st.session_state.last_known_status = "Startup"
+    st.session_state.ntfy_active = NTFY_ACTIVE_DEFAULT
 if "low_paper_warned" not in st.session_state:
     st.session_state.low_paper_warned = False
 
-# --- CACHING & LOTTIE ---
+# --- HELPER FUNCTIONS ---
 @st.cache_data(ttl=3600)
 def load_lottieurl(url):
     try:
         r = requests.get(url)
-        if r.status_code != 200:
-            return None
+        if r.status_code != 200: return None
         return r.json()
-    except:
-        return None
+    except: return None
 
+# Animationen
 lottie_printing = load_lottieurl("https://assets9.lottiefiles.com/packages/lf20_yyja09.json")
-lottie_ready = load_lottieurl("https://assets1.lottiefiles.com/packages/lf20_jbrw3hcz.json")
-lottie_error = load_lottieurl("https://assets10.lottiefiles.com/packages/lf20_Tkwjw8.json")
+lottie_warning = load_lottieurl("https://assets10.lottiefiles.com/packages/lf20_2ycju1.json")
+lottie_ok = load_lottieurl("https://assets.lottiefiles.com/packages/lf20_jbrw3hcz.json")
 
-# --- GOOGLE SHEETS HELPER ---
-def get_worksheet():
-    secrets = st.secrets["gcp_service_account"]
-    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-    creds = Credentials.from_service_account_info(secrets, scopes=scopes)
-    gc = gspread.authorize(creds)
-    sh = gc.open_by_key(SHEET_ID)
-    return sh.sheet1
-
-# --- DATEN LADEN (MIT CACHE) ---
-@st.cache_data(ttl=0)
 def get_data():
-    try:
-        worksheet = get_worksheet()
-        data = worksheet.get_all_records()
-        df = pd.DataFrame(data)
-        if not df.empty and "Timestamp" in df.columns:
-             df["dt_obj"] = pd.to_datetime(df["Timestamp"], format="%Y-%m-%d %H:%M:%S", errors='coerce')
-        return df
-    except Exception as e:
-        return pd.DataFrame()
+    """Lädt Daten aus Google Sheets"""
+    scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+    client = gspread.authorize(creds)
+    sheet = client.open_by_key(SHEET_ID).sheet1
+    data = sheet.get_all_records()
+    df = pd.DataFrame(data)
+    
+    # Zeitstempel in echtes Datum umwandeln
+    if not df.empty and 'Time' in df.columns:
+        df['Time'] = pd.to_datetime(df['Time'], errors='coerce')
+    return df
 
-# --- DATEN LÖSCHEN FUNKTION ---
 def clear_google_sheet():
-    try:
-        ws = get_worksheet()
-        ws.batch_clear(["A2:Z10000"]) 
-        st.toast("Log erfolgreich geleert!", icon="✅")
-        st.cache_data.clear()
-        # Reset Flags
-        st.session_state.low_paper_warned = False
-        st.session_state.last_known_status = "Reset"
-    except Exception as e:
-        st.error(f"Fehler beim Löschen: {e}")
+    """Setzt das Google Sheet zurück"""
+    scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+    client = gspread.authorize(creds)
+    sheet = client.open_by_key(SHEET_ID).sheet1
+    sheet.clear()
+    sheet.append_row(["Time", "Status", "Media_Remaining"])
+    st.session_state.low_paper_warned = False # Warnstatus zurücksetzen
 
-# --- NTFY PUSH FUNKTION ---
-def send_ntfy_push(title, message, priority="3", tags=""):
-    """Sendet eine Push-Nachricht via ntfy.sh"""
+def send_ntfy_push(title, message, tags="warning", priority=3):
+    """Sendet Push via ntfy.sh"""
     if not st.session_state.ntfy_active:
-        return
-
-    topic = st.session_state.ntfy_topic.strip()
-    if not topic:
-        return
-
-    url = f"https://ntfy.sh/{topic}"
+        return False
+    
+    url = f"https://ntfy.sh/{NTFY_TOPIC}"
     try:
+        # Kodierung als utf-8 für Emojis
         requests.post(
             url,
             data=message.encode(encoding='utf-8'),
             headers={
                 "Title": title,
-                "Priority": priority, # 1=min, 3=default, 5=high
+                "Priority": str(priority),
                 "Tags": tags,
             },
-            timeout=3
+            timeout=5
         )
-        # Kleiner Toast im Dashboard als Bestätigung, dass gesendet wurde (optional)
-        # st.toast(f"Push gesendet: {title}") 
+        return True
     except Exception as e:
         print(f"NTFY Fehler: {e}")
+        return False
 
-# --- HILFSFUNKTION: RESTZEIT ---
-def calculate_time_remaining(df, current_media):
-    try:
-        if df.empty or "dt_obj" not in df.columns: return "Keine Daten"
-        df_sorted = df.dropna(subset=["dt_obj"]).sort_values("dt_obj")
-        now = datetime.now()
-        one_hour_ago = now - timedelta(hours=1)
-        last_hour_df = df_sorted[df_sorted["dt_obj"] > one_hour_ago]
-        
-        if len(last_hour_df) < 2: return "Lerne..."
-            
-        start_media = last_hour_df.iloc[0]["Media_Remaining"]
-        prints_made = start_media - current_media
-        
-        if prints_made <= 0: return "Standby"
-        hours_left = current_media / prints_made
-        
-        if hours_left < 1: return f"ca. {int(hours_left * 60)} Min"
-        else: return f"ca. {hours_left:.1f} Std"
-    except Exception: return "n/a"
+def calculate_forecast(df, remaining_prints):
+    """Berechnet Restlaufzeit basierend auf den letzten 60 Minuten"""
+    if df.empty or 'Time' not in df.columns:
+        return "Keine Daten"
+    
+    now = datetime.now()
+    one_hour_ago = now - timedelta(hours=1)
+    
+    # Zähle Drucke der letzten Stunde
+    recent_prints = df[df['Time'] > one_hour_ago]
+    prints_per_hour = len(recent_prints)
+    
+    if prints_per_hour < 2:
+        return "Warte auf Drucke..."
+    
+    hours_left = remaining_prints / prints_per_hour
+    
+    if hours_left > 24:
+        return "> 24 Std."
+    
+    h = int(hours_left)
+    m = int((hours_left - h) * 60)
+    return f"ca. {h} Std. {m} Min."
 
-# --- LAYOUT START ---
-st.title(f"{PAGE_ICON} {PAGE_TITLE}")
-st.markdown("---")
-
-# --- LIVE FRAGMENT (Logik + UI) ---
+# --- MAIN DASHBOARD (LIVE REFRESH) ---
 @st.fragment(run_every=10)
 def show_live_status():
-    if st.button("🔄 Status prüfen", key="refresh_fragment"):
-        st.cache_data.clear()
-
+    st.title("📸 Fotobox Status")
+    
     df = get_data()
+    
+    # Berechnung
+    prints_done = len(df)
+    prints_remaining = MAX_PRINTS_PER_ROLL - prints_done
+    
+    # Prozent für Progress Bar
+    progress_value = max(0.0, min(1.0, prints_remaining / MAX_PRINTS_PER_ROLL))
+    
+    # Prognose
+    forecast_text = calculate_forecast(df, prints_remaining)
 
-    if not df.empty:
-        try:
-            latest_entry = df.iloc[-1]
-            status = latest_entry.get("Status", "Unknown")
-            media_remaining = int(latest_entry.get("Media_Remaining", 0))
-            timestamp = latest_entry.get("Timestamp", "Unbekannt")
+    # --- ANZEIGE ---
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Verbleibend", f"{prints_remaining}", f"Max: {MAX_PRINTS_PER_ROLL}")
+    col2.metric("Gedruckt", f"{prints_done}")
+    col3.metric("Laufzeit-Prognose", forecast_text)
 
-            # --- ALARM LOGIK (NTFY) ---
-            # 1. Papier Warnung (Nur einmalig feuern bis Auffüllung)
-            if media_remaining < WARNING_THRESHOLD and media_remaining > 0:
-                if not st.session_state.low_paper_warned:
-                    send_ntfy_push(
-                        title="⚠️ Drucker Papier fast leer!",
-                        message=f"Nur noch {media_remaining} Bilder übrig. Bitte bald wechseln.",
-                        priority="4",
-                        tags="roll_of_paper,warning"
-                    )
-                    st.session_state.low_paper_warned = True
-            elif media_remaining > WARNING_THRESHOLD:
-                # Reset Flag wenn aufgefüllt wurde
-                st.session_state.low_paper_warned = False
+    st.progress(progress_value)
 
-            # 2. Fehler Status Warnung
-            # Ignoriere 'normal' status changes zwischen Ready und Printing
-            is_error = status not in ["Ready", "Printing"]
-            
-            # Wenn Status ein Fehler ist UND sich vom letzten bekannten Status unterscheidet
-            if is_error and status != st.session_state.last_known_status:
-                send_ntfy_push(
-                    title=f"🚨 Drucker Fehler: {status}",
-                    message=f"Der Drucker meldet ein Problem: {status}. Bitte prüfen!",
-                    priority="5",
-                    tags="rotating_light,printer"
-                )
-            
-            # Status aktualisieren
-            st.session_state.last_known_status = status
-
-            # --- VISUALISIERUNG ---
-            col1, col2 = st.columns([1, 2])
-
-            if status == "Printing":
-                current_lottie = lottie_printing
-                status_color = "orange"
-                status_text = "Druckt gerade..."
-            elif status == "Ready":
-                current_lottie = lottie_ready
-                status_color = "green"
-                status_text = "Drucker bereit"
-            else:
-                current_lottie = lottie_error
-                status_color = "red"
-                status_text = f"Status: {status}"
-
-            with col1:
-                st_lottie(current_lottie, height=200, key="status_animation")
-
-            with col2:
-                st.markdown(f"<h2 style='color:{status_color};'>{status_text}</h2>", unsafe_allow_html=True)
-                st.write(f"🕒 Letztes Update: **{timestamp}**")
+    # Status Logik & Animation
+    if prints_remaining <= 0:
+        st.error("⚠️ PAPIER LEER! Bitte wechseln.")
+        st_lottie(lottie_warning, height=200, key="anim_empty")
+    elif prints_remaining <= WARNING_THRESHOLD:
+        st.warning(f"⚠️ Papier fast leer (<{WARNING_THRESHOLD})")
+        st_lottie(lottie_warning, height=200, key="anim_warn")
+        
+        # Push Senden (nur einmal)
+        if not st.session_state.low_paper_warned:
+            sent = send_ntfy_push(
+                "⚠️ Papier kritisch!",
+                f"Nur noch {prints_remaining} Bilder übrig! Bitte Rolle bereitlegen.",
+                tags="rotating_light",
+                priority=4
+            )
+            if sent:
+                st.session_state.low_paper_warned = True
                 
-                time_left = calculate_time_remaining(df, media_remaining)
-                
-                c_metric1, c_metric2 = st.columns(2)
-                c_metric1.metric(label="Verbleibende Bilder", value=f"{media_remaining} Stk")
-                c_metric2.metric(label="Geschätzte Laufzeit", value=time_left)
-
-                progress_val = max(0.0, min(1.0, media_remaining / MAX_PRINTS_PER_ROLL))
-                st.write("Papierstatus:")
-                if progress_val < 0.1:
-                    st.progress(progress_val, text="⚠️ Wenig Papier")
-                else:
-                    st.progress(progress_val)
-            
-            # Browser Error Message (Visuell)
-            if media_remaining < WARNING_THRESHOLD:
-                 st.error(f"Nur noch {media_remaining} Bilder!")
-            if status not in ["Ready", "Printing"]:
-                 st.error(f"Drucker Fehler erkannt: {status}")
-
-            with st.expander("📊 Statistik & Verlauf"):
-                st.caption("Verlauf Papierstand")
-                if "dt_obj" in df.columns:
-                    chart_df = df.dropna(subset=["dt_obj"]).set_index("dt_obj")["Media_Remaining"]
-                    st.line_chart(chart_df, height=200)
-                st.dataframe(df.tail(5).sort_index(ascending=False), use_container_width=True)
-
-        except Exception as e:
-            st.error(f"Fehler in der Datenverarbeitung: {e}")
     else:
-        st.info("Warte auf Daten...")
+        st.success("System läuft normal")
+        st_lottie(lottie_printing, height=200, key="anim_ok")
 
-# Fragment starten
+    # Letzte Aktivität
+    if not df.empty:
+        last_time = df.iloc[-1]['Time']
+        st.caption(f"Letzter Druck: {last_time}")
+
+# --- APP START ---
+
 show_live_status()
 
-st.markdown("---")
+st.divider()
 
-# --- ADMIN TOOLS ---
-with st.expander("🛠️ Admin & Einstellungen", expanded=True):
+# --- ADMIN BEREICH ---
+with st.expander("⚙️ Admin & Einstellungen"):
+    st.write("### Benachrichtigungen")
+    st.info(f"Sende an Topic: `{NTFY_TOPIC}`")
     
-    col_admin1, col_admin2 = st.columns(2)
-
-    with col_admin1:
-        st.write("**Push-Benachrichtigungen (ntfy.sh)**")
-        
-        # Checkbox für Aktivierung
-        ntfy_check = st.checkbox("🔔 Benachrichtigungen aktivieren", 
-                                 value=st.session_state.ntfy_active)
-        st.session_state.ntfy_active = ntfy_check
-
-        # Topic Eingabe
-        topic_input = st.text_input("Dein ntfy Topic Name", 
-                                    value=st.session_state.ntfy_topic,
-                                    help="Geheim halten! Auf deinem Handy App installieren und dieses Topic abonnieren.")
-        st.session_state.ntfy_topic = topic_input
-        
-        if st.button("Test Nachricht senden"):
-            send_ntfy_push("Test vom Dashboard", "Wenn du das liest, funktioniert die Verbindung! 🚀", tags="tada")
-            st.success("Test gesendet!")
-
-    with col_admin2:
-        st.write("**Datenbank Management**")
-        st.link_button("🔗 Zu Fotoshare Admin", "https://fotoshare.co/admin/index", use_container_width=True)
-        
-        if not st.session_state.confirm_reset:
-            if st.button("🗑️ Log Datei leeren", use_container_width=True):
-                st.session_state.confirm_reset = True
-                st.rerun()
+    st.session_state.ntfy_active = st.checkbox("Push-Nachrichten aktivieren", value=st.session_state.ntfy_active)
+    
+    if st.button("Test-Nachricht senden 🚀"):
+        success = send_ntfy_push("Test", "Dies ist ein Test vom Dashboard! 📱", tags="tada")
+        if success:
+            st.toast("Nachricht gesendet!", icon="✅")
         else:
-            st.warning("⚠️ Wirklich löschen?")
-            col_yes, col_no = st.columns(2)
-            if col_yes.button("✅ Ja", use_container_width=True):
-                clear_google_sheet()
-                st.session_state.confirm_reset = False
-                st.rerun()
-            if col_no.button("❌ Nein", use_container_width=True):
-                st.session_state.confirm_reset = False
-                st.rerun()
+            st.error("Fehler beim Senden.")
+
+    st.write("### Wartung")
+    if st.button("Papierwechsel durchgeführt (Reset) 🔄"):
+        clear_google_sheet()
+        st.rerun()
