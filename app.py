@@ -10,10 +10,10 @@ SHEET_ID = "10uLjotNMT3AewBHdkuYyOudbbOCEuquDqGbwr2Wu7ig"
 PAGE_TITLE = "Fotobox Drucker Status"
 PAGE_ICON = "🖨️"
 
-# --- NTFY EINSTELLUNGEN ---
+# --- NTFY ---
 NTFY_TOPIC = "fotobox_status_secret_4566"
 NTFY_ACTIVE_DEFAULT = True
-WARNING_THRESHOLD = 20  # Ab wie vielen Bildern Warnung?
+WARNING_THRESHOLD = 20
 
 # --- SEITEN LAYOUT ---
 st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="centered")
@@ -24,7 +24,7 @@ if "confirm_reset" not in st.session_state:
 if "ntfy_active" not in st.session_state:
     st.session_state.ntfy_active = NTFY_ACTIVE_DEFAULT
 if "last_warn_status" not in st.session_state:
-    st.session_state.last_warn_status = None  # "error", "low_paper", "ok"
+    st.session_state.last_warn_status = None
 if "max_prints" not in st.session_state:
     st.session_state.max_prints = 400
 
@@ -40,9 +40,8 @@ def send_ntfy_push(title, message, tags="warning", priority="default"):
             headers=headers,
             timeout=5,
         )
-    except Exception:
+    except:
         pass
-
 
 # --- GOOGLE SHEETS ---
 def get_worksheet():
@@ -52,15 +51,12 @@ def get_worksheet():
     gc = gspread.authorize(creds)
     return gc.open_by_key(SHEET_ID).sheet1
 
-
 @st.cache_data(ttl=0)
 def get_data():
     try:
-        data = get_worksheet().get_all_records()
-        return pd.DataFrame(data)
-    except Exception:
+        return pd.DataFrame(get_worksheet().get_all_records())
+    except:
         return pd.DataFrame()
-
 
 def clear_google_sheet():
     try:
@@ -68,18 +64,17 @@ def clear_google_sheet():
         ws.batch_clear(["A2:Z10000"])
         st.cache_data.clear()
         st.toast("Log erfolgreich zurückgesetzt!", icon="♻️")
-    except Exception:
-        st.error("Fehler beim Reset")
+    except Exception as e:
+        st.error(f"Fehler beim Reset: {e}")
 
 
-# --- UI START ---
+# --- START DES UI ---
 st.title(f"{PAGE_ICON} {PAGE_TITLE}")
 
 
 @st.fragment(run_every=10)
 def show_live_status():
     df = get_data()
-
     if df.empty:
         st.info("System wartet auf Start…")
         st.caption("Noch keine Druckdaten empfangen.")
@@ -87,27 +82,20 @@ def show_live_status():
 
     try:
         last = df.iloc[-1]
-
-        # Spalten im Sheet: Timestamp | Status | Paper_Status | Media_Remaining
         timestamp       = str(last.get("Timestamp", ""))
         raw_status      = str(last.get("Status", "")).lower()
         media_remaining = int(last.get("Media_Remaining", 0))
-
-        prev_status = st.session_state.last_warn_status
+        prev_status     = st.session_state.last_warn_status
 
         # --- STATUS ERMITTELN ---
-        if any(w in raw_status for w in ["error", "failure", "fehler", "stau", "unknown"]):
+        if any(w in raw_status for w in ["error", "fehler", "stau", "failure", "unknown"]):
             status_mode   = "error"
             display_text  = f"⚠️ STÖRUNG: {last.get('Status')}"
             display_color = "red"
 
             if prev_status != "error":
-                send_ntfy_push(
-                    "🔴 Fehler",
-                    f"Druckerfehler: {last.get('Status')}",
-                    tags="rotating_light",
-                    priority="high",
-                )
+                send_ntfy_push("🔴 Fehler", f"Druckerfehler: {last.get('Status')}", tags="rotating_light")
+
             st.session_state.last_warn_status = "error"
 
         elif media_remaining <= WARNING_THRESHOLD:
@@ -116,17 +104,11 @@ def show_live_status():
             display_color = "orange"
 
             if prev_status == "error":
-                send_ntfy_push(
-                    "✅ Störung behoben",
-                    "Drucker läuft wieder.",
-                    tags="white_check_mark",
-                )
+                send_ntfy_push("✅ Störung behoben", "Drucker läuft wieder.", tags="white_check_mark")
+
             if prev_status != "low_paper":
-                send_ntfy_push(
-                    "⚠️ Papierwarnung",
-                    f"Noch {media_remaining} Bilder!",
-                    tags="warning",
-                )
+                send_ntfy_push("⚠️ Papierwarnung", f"Noch {media_remaining} Bilder!", tags="warning")
+
             st.session_state.last_warn_status = "low_paper"
 
         elif "printing" in raw_status or "processing" in raw_status:
@@ -135,11 +117,8 @@ def show_live_status():
             display_color = "blue"
 
             if prev_status == "error":
-                send_ntfy_push(
-                    "✅ Störung behoben",
-                    "Drucker druckt wieder.",
-                    tags="white_check_mark",
-                )
+                send_ntfy_push("✅ Störung behoben", "Drucker druckt wieder.", tags="white_check_mark")
+
             st.session_state.last_warn_status = "ok"
 
         else:
@@ -148,25 +127,29 @@ def show_live_status():
             display_color = "green"
 
             if prev_status == "error":
-                send_ntfy_push(
-                    "✅ Störung behoben",
-                    "Drucker ist wieder bereit.",
-                    tags="white_check_mark",
-                )
+                send_ntfy_push("✅ Störung behoben", "Drucker ist wieder bereit.", tags="white_check_mark")
+
             st.session_state.last_warn_status = "ok"
 
-        # --- HEADER (nur Text + Icon im Text) ---
-        st.markdown(
-            f"<h2 style='color:{display_color}; margin-top:0; text-align:center;'>{display_text}</h2>",
-            unsafe_allow_html=True,
-        )
-        st.caption(f"Letztes Signal: {timestamp}")
+        # --- HEADER (links, ohne Lottie, sauber formatiert) ---
+        header_html = f"""
+        <div style='text-align: left; margin-top: 0;'>
+            <h2 style='color:{display_color}; font-weight: 700; margin-bottom: 4px;'>
+                {display_text}
+            </h2>
+            <div style='color: #666; font-size: 14px; margin-bottom: 12px;'>
+                Letztes Signal: {timestamp}
+            </div>
+        </div>
+        """
+
+        st.markdown(header_html, unsafe_allow_html=True)
 
         if status_mode == "error":
             st.error("Bitte Drucker prüfen (Störung aktiv).")
 
         # --- PAPIERSTATUS ---
-        st.markdown("#### Papierstatus")
+        st.markdown("### Papierstatus")
 
         if status_mode == "error":
             remaining_text = "–"
@@ -175,29 +158,29 @@ def show_live_status():
             remaining_text = f"{media_remaining} Stk"
             if media_remaining > 0:
                 m = int(media_remaining * 1.5)
-                if m < 60:
-                    forecast = f"{m} Min."
-                else:
-                    forecast = f"{m//60} Std. {m%60} Min."
+                forecast = (
+                    f"{m} Min."
+                    if m < 60
+                    else f"{m//60} Std. {m%60} Min."
+                )
             else:
                 forecast = "0 Min."
 
-        c1, c2 = st.columns(2)
-        c1.metric("Verbleibend", remaining_text, f"von {st.session_state.max_prints}")
-        c2.metric("Restlaufzeit (geschätzt)", forecast)
+        colA, colB = st.columns(2)
+        colA.metric("Verbleibend", remaining_text, f"von {st.session_state.max_prints}")
+        colB.metric("Restlaufzeit (geschätzt)", forecast)
 
-        # Fortschrittsbalken
+        # Farbbalken
         if status_mode == "error":
-            progress_val = 0.0
             bar_color = "red"
+            progress_val = 0
         else:
-            progress_val = max(0.0, min(1.0, media_remaining / st.session_state.max_prints))
-            if progress_val < 0.1:
-                bar_color = "red"
-            elif progress_val < 0.25:
-                bar_color = "orange"
-            else:
-                bar_color = "blue"
+            progress_val = max(0, min(1, media_remaining / st.session_state.max_prints))
+            bar_color = (
+                "red" if progress_val < 0.1 else
+                "orange" if progress_val < 0.25 else
+                "blue"
+            )
 
         st.markdown(
             f"""
@@ -221,29 +204,22 @@ st.markdown("---")
 
 # --- ADMIN ---
 with st.expander("🛠️ Admin & Einstellungen"):
-    c1, c2 = st.columns(2)
+    col1, col2 = st.columns(2)
 
-    with c1:
+    with col1:
         st.write("### Externe Links")
-        st.link_button(
-            "🔗 Fotoshare Cloud",
-            "https://fotoshare.co/admin/index",
-            use_container_width=True,
-        )
+        st.link_button("🔗 Fotoshare Cloud", "https://fotoshare.co/admin/index", use_container_width=True)
 
         st.write("### Benachrichtigungen")
         st.code(NTFY_TOPIC)
-        st.session_state.ntfy_active = st.checkbox(
-            "Push-Nachrichten aktiv",
-            st.session_state.ntfy_active,
-        )
+        st.session_state.ntfy_active = st.checkbox("Push aktiv", st.session_state.ntfy_active)
+
         if st.button("Test Push 🔔"):
             send_ntfy_push("Test", "Test erfolgreich", tags="tada")
             st.toast("Test gesendet!")
 
-    with c2:
+    with col2:
         st.write("### Neuer Auftrag")
-        st.write("Welches Papier liegt ein?")
         size = st.radio(
             "Paketgröße",
             [200, 400],
@@ -257,14 +233,14 @@ with st.expander("🛠️ Admin & Einstellungen"):
                 st.session_state.temp_package_size = size
                 st.rerun()
         else:
-            st.warning(f"Log löschen & {st.session_state.temp_package_size}-Rolle setzen?")
+            st.warning(f"Log löschen & auf {st.session_state.temp_package_size}er Rolle setzen?")
             y, n = st.columns(2)
-            if y.button("✅ Ja", use_container_width=True):
+            if y.button("Ja", use_container_width=True):
                 st.session_state.max_prints = st.session_state.temp_package_size
                 clear_google_sheet()
                 st.session_state.confirm_reset = False
                 st.session_state.last_warn_status = None
                 st.rerun()
-            if n.button("❌ Nein", use_container_width=True):
+            if n.button("Nein", use_container_width=True):
                 st.session_state.confirm_reset = False
                 st.rerun()
