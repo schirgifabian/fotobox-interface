@@ -20,7 +20,7 @@ PRINTERS = {
         "cost_per_roll_eur": 46.58,
     },
     "Fotobox Weinkellerei": {
-        "sheet_id": "HIER_DIE_NEUE_SHEET_ID_EINSETZEN",
+        "sheet_id": "1zZ0Xd4OhRnIsCH7JPbaEEE8GzLvdn9usMj1YUOc_-rs",
         "ntfy_topic": "fotobox_status_secret_4566-weinkellerei",
         "warning_threshold": 50,      # kannst du bei Bedarf anpassen
         "default_max_prints": 400,    # oder 200, je nach Rolle
