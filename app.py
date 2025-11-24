@@ -18,7 +18,7 @@ PRINTERS = {
         "warning_threshold": 20,
         "default_max_prints": 400,
         # Wenn du Kosten anzeigen willst, hier Preis pro Rolle eintragen (z.B. 35.0)
-        "cost_per_roll_eur": None,
+        "cost_per_roll_eur": 46.59,
     },
     # Weitere Boxen kannst du einfach ergänzen:
     # "Zweite Box": {
