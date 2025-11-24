@@ -1,74 +1,101 @@
 import streamlit as st
-import pandas as pd
 import gspread
-from google.oauth2.service_account import Credentials
+import pandas as pd
+from datetime import datetime
 
-# Seite konfigurieren
-st.set_page_config(page_title="Drucker Monitor", page_icon="🖨️", layout="centered")
+# --- SEITE KONFIGURIEREN ---
+st.set_page_config(
+    page_title="Citizen CX-02 Monitor",
+    page_icon="🖨️",
+    layout="centered"
+)
 
-# --- VERBINDUNG ZU GOOGLE SHEETS ---
-# In Streamlit Cloud legst du die secrets in .streamlit/secrets.toml ab
-# Format der Secrets:
-# [gcp_service_account]
-# type = "service_account"
-# ... (der ganze Inhalt deiner JSON Datei)
+# --- CSS FÜR BESSERE OPTIK ---
+st.markdown("""
+    <style>
+    .stMetric {
+        background-color: #f0f2f6;
+        padding: 15px;
+        border-radius: 10px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-@st.cache_data(ttl=10) # Cache für 10 Sekunden, damit wir nicht zu viele Anfragen senden
+# --- FUNKTION ZUM LADEN DER DATEN ---
 def load_data():
-    # Scopes definieren
-    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-    
-    # Credentials aus Streamlit Secrets laden
-    credentials = Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"],
-        scopes=scopes
-    )
-    
-    gc = gspread.authorize(credentials)
-    # Öffne das Sheet über den Namen oder die URL (URL ist sicherer)
-    # Ersetze DEINE_SHEET_URL mit der URL deines Google Sheets
-    sh = gc.open_by_url("DEINE_GOOGLE_SHEET_URL_HIER_EINFÜGEN")
-    worksheet = sh.sheet1
-    
-    # Daten holen (nur die zweite Zeile, da dort der aktuelle Status steht)
-    # Wir holen alles als DataFrame für einfacheres Handling
-    data = worksheet.get_all_records()
-    return data
+    try:
+        # 1. Zugangsdaten aus den Streamlit Secrets holen
+        # Der Name in den eckigen Klammern muss exakt dem in den Secrets entsprechen: [gcp_service_account]
+        credentials_dict = st.secrets["gcp_service_account"]
+        
+        # 2. Verbindung zu Google Sheets herstellen
+        gc = gspread.service_account_from_dict(credentials_dict)
+        
+        # 3. Das Google Sheet öffnen
+        # ACHTUNG: "DruckerStatus" muss exakt so heißen wie dein Google Sheet oben links
+        sh = gc.open("DruckerStatus")
+        
+        # 4. Erstes Tabellenblatt wählen
+        worksheet = sh.sheet1
+        
+        # 5. Alle Daten holen und in ein Pandas DataFrame umwandeln
+        data = worksheet.get_all_records()
+        df = pd.DataFrame(data)
+        
+        return df, None
+        
+    except Exception as e:
+        return None, str(e)
 
-# --- UI BAUEN ---
-
+# --- HAUPTPROGRAMM ---
 st.title("🖨️ Citizen CX-02 Status")
 
-try:
-    data = load_data()
+if st.button('🔄 Aktualisieren'):
+    st.rerun()
+
+# Daten laden
+df, error = load_data()
+
+if error:
+    st.error(f"⚠️ Verbindung fehlgeschlagen! Fehlerdetails:\n\n{error}")
+    st.info("Tipp: Prüfe, ob du das Sheet mit der 'client_email' aus den Secrets geteilt hast und ob der Name 'DruckerStatus' stimmt.")
+
+elif df is not None and not df.empty:
+    # Wir nehmen die letzte Zeile, da dies der neuste Eintrag ist
+    latest_entry = df.iloc[-1]
     
-    if not data:
-        st.warning("Noch keine Daten im Sheet.")
-    else:
-        # Wir nehmen den letzten Eintrag (bzw. den einzigen in Zeile 2)
-        latest_entry = data[0] 
-        
-        status = latest_entry['Status'] # Spalte C
-        details = latest_entry['Details'] # Spalte D
-        timestamp = latest_entry['Zeitstempel'] # Spalte A
+    # Daten auslesen (Namen müssen mit deinen Spaltenüberschriften im Sheet übereinstimmen)
+    # Falls deine Spalten anders heißen, pass das hier an:
+    timestamp = latest_entry.get('Timestamp', 'Unbekannt')
+    status = latest_entry.get('Status', 'Unbekannt')
+    paper = latest_entry.get('Paper_Status', 'Unbekannt')
+    # Falls du Restbilder mitloggst:
+    remaining = latest_entry.get('Media_Remaining', '-') 
 
-        # Große Anzeige
-        if status == "OK" or status == "Bereit":
-            st.success(f"### STATUS: {status}")
-            st.markdown(f"**Alles in Ordnung.**")
-        else:
-            st.error(f"### STATUS: {status}")
-            st.markdown(f"⚠️ **Achtung:** Handlungsbedarf!")
+    # --- ANZEIGE ---
+    
+    # Status Farbe bestimmen
+    status_color = "🟢" if "Ready" in str(status) or "Bereit" in str(status) else "🔴"
+    if "Printing" in str(status): status_color = "🟡"
 
-        # Metriken
-        col1, col2 = st.columns(2)
-        col1.metric("Letztes Update", timestamp.split(" ")[1]) # Nur Uhrzeit
-        col2.metric("Details", details)
-        
-        # Refresh Button
-        if st.button("Status aktualisieren"):
-            st.rerun()
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.metric(label="Drucker Status", value=f"{status_color} {status}")
+    
+    with col2:
+        st.metric(label="Papier Status", value=f"📄 {paper}")
 
-except Exception as e:
-    st.error(f"Verbindung zur Datenbank fehlgeschlagen: {e}")
-    st.info("Bitte prüfe die Secrets in der Streamlit Cloud.")
+    # Zusätzliche Infos
+    st.divider()
+    c1, c2 = st.columns(2)
+    c1.write(f"**Letztes Update:** {timestamp}")
+    if remaining != '-':
+        c2.write(f"**Verbleibende Bilder:** {remaining}")
+
+    # Historie anzeigen (optional, ausklappbar)
+    with st.expander("Verlauf anzeigen (Letzte 10 Einträge)"):
+        st.dataframe(df.tail(10).sort_index(ascending=False))
+
+else:
+    st.warning("Verbindung steht, aber das Google Sheet ist leer.")
