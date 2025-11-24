@@ -22,31 +22,78 @@ PRINTERS = {
     "Fotobox Weinkellerei": {
         "sheet_id": "1zZ0Xd4OhRnIsCH7JPbaEEE8GzLvdn9usMj1YUOc_-rs",
         "ntfy_topic": "fotobox_status_secret_4566-weinkellerei",
-        "warning_threshold": 50,      # kannst du bei Bedarf anpassen
-        "default_max_prints": 400,    # oder 200, je nach Rolle
-        "cost_per_roll_eur": None,    # oder None, wenn du die Kosten nicht brauchst
+        "warning_threshold": 50,
+        "default_max_prints": 400,
+        "cost_per_roll_eur": None,
     },
 }
 
-
-HEARTBEAT_WARN_MINUTES = 60      # ab wann "keine aktuellen Daten" gewarnt wird
+HEARTBEAT_WARN_MINUTES = 60
 NTFY_ACTIVE_DEFAULT = True
-ALERT_SOUND_URL = "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"  # optionaler Warnton
+ALERT_SOUND_URL = "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
 
 # --- SEITEN LAYOUT ---
 st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="centered")
 
+# --- GOOGLE CONNECT HELPERS (Vorab definiert, da wir sie oben brauchen) ---
+def get_gspread_client():
+    secrets = st.secrets["gcp_service_account"]
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    creds = Credentials.from_service_account_info(secrets, scopes=scopes)
+    gc = gspread.authorize(creds)
+    return gc
+
+def get_spreadsheet():
+    gc = get_gspread_client()
+    sheet_id = st.session_state.sheet_id
+    return gc.open_by_key(sheet_id)
+
+def get_main_worksheet():
+    return get_spreadsheet().sheet1
+
+# --- PUSH SETTING SPEICHERN & LADEN (NEU) ---
+def load_push_setting():
+    """Lädt Einstellung aus Spalte K (K2) und setzt Header in K1."""
+    try:
+        ws = get_main_worksheet()
+        # 1. Header prüfen/setzen in K1
+        k1_val = ws.acell("K1").value
+        if k1_val != "Push":
+            ws.update_acell("K1", "Push")
+        
+        # 2. Wert laden aus K2
+        val = ws.acell("K2").value
+        
+        # Wenn leer oder TRUE -> Aktiv, wenn FALSE -> Inaktiv
+        if val and val.strip().upper() == "FALSE":
+            return False
+        return True
+    except Exception as e:
+        # Fallback, falls API Fehler, damit App nicht crasht
+        print(f"Fehler beim Laden der Push-Settings: {e}")
+        return True
+
+def save_push_setting():
+    """Speichert den aktuellen Session-State in K2."""
+    new_status = st.session_state.ntfy_active
+    try:
+        ws = get_main_worksheet()
+        # Schreibt 'TRUE' oder 'FALSE' als String
+        ws.update_acell("K2", str(new_status).upper())
+        st.toast(f"Einstellung gespeichert: Push {'Ein' if new_status else 'Aus'}", icon="💾")
+    except Exception as e:
+        st.error(f"Konnte Einstellung nicht speichern: {e}")
+
 # --- SESSION STATE INIT ---
 if "confirm_reset" not in st.session_state:
     st.session_state.confirm_reset = False
-if "ntfy_active" not in st.session_state:
-    st.session_state.ntfy_active = NTFY_ACTIVE_DEFAULT
+# ntfy_active wird nun dynamisch geladen, Initialisierung unten beachten
 if "last_warn_status" not in st.session_state:
     st.session_state.last_warn_status = None
 if "last_sound_status" not in st.session_state:
     st.session_state.last_sound_status = None
 if "max_prints" not in st.session_state:
-    st.session_state.max_prints = None      # wird nach Box-Auswahl gesetzt
+    st.session_state.max_prints = None
 if "selected_printer" not in st.session_state:
     st.session_state.selected_printer = None
 
@@ -59,17 +106,26 @@ sound_enabled = st.sidebar.toggle("Sound bei Warnungen", value=False)
 # Konfiguration der gewählten Box in Session übernehmen
 printer_cfg = PRINTERS[printer_name]
 
+# Logik beim Wechsel der Box
 if st.session_state.selected_printer != printer_name:
-    # Beim Box-Wechsel Status zurücksetzen
     st.session_state.selected_printer = printer_name
+    st.session_state.sheet_id = printer_cfg["sheet_id"] # ID muss gesetzt sein für load_push_setting
+    st.session_state.ntfy_topic = printer_cfg["ntfy_topic"]
+    
+    # Status zurücksetzen
     st.session_state.last_warn_status = None
     st.session_state.last_sound_status = None
     st.session_state.max_prints = printer_cfg["default_max_prints"]
+    
+    # NEU: Einstellung aus Sheet K2 laden
+    st.session_state.ntfy_active = load_push_setting()
 
+# (Redundant aber sicherheitshalber Variablen update falls oben nicht getriggert)
 st.session_state.sheet_id = printer_cfg["sheet_id"]
 st.session_state.ntfy_topic = printer_cfg["ntfy_topic"]
 WARNING_THRESHOLD = printer_cfg["warning_threshold"]
 COST_PER_ROLL_EUR = printer_cfg["cost_per_roll_eur"]
+
 
 # --- FUNKTIONEN: PUSH ---
 def send_ntfy_push(title, message, tags="warning", priority="default"):
@@ -87,46 +143,32 @@ def send_ntfy_push(title, message, tags="warning", priority="default"):
             timeout=5,
         )
     except Exception:
-        # bewusst leise – Dashboard soll nicht crashen, wenn ntfy nicht geht
         pass
 
-# --- FUNKTIONEN: GOOGLE SHEETS ---
-def get_gspread_client():
-    secrets = st.secrets["gcp_service_account"]
-    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-    creds = Credentials.from_service_account_info(secrets, scopes=scopes)
-    gc = gspread.authorize(creds)
-    return gc
-
-def get_spreadsheet():
-    gc = get_gspread_client()
-    sheet_id = st.session_state.sheet_id
-    return gc.open_by_key(sheet_id)
-
-def get_main_worksheet():
-    # Annahme: erste Tabelle = Log vom Drucker
-    return get_spreadsheet().sheet1
-
+# --- FUNKTIONEN: DATEN VERWALTUNG ---
 @st.cache_data(ttl=10)
 def get_data(sheet_id: str):
     try:
+        # Cache Invalidierung beachten wenn manuell geschrieben wird
         ws = get_gspread_client().open_by_key(sheet_id).sheet1
         return pd.DataFrame(ws.get_all_records())
     except Exception:
         return pd.DataFrame()
 
 def clear_google_sheet():
-    """Log (A2:Z) der Haupt-Tabelle leeren."""
+    """
+    Log (A2:J) der Haupt-Tabelle leeren.
+    WICHTIG: Nur bis Spalte J (10) löschen, damit Spalte K (11, Push-Settings) erhalten bleibt!
+    """
     try:
         ws = get_main_worksheet()
-        ws.batch_clear(["A2:Z10000"])
+        ws.batch_clear(["A2:J10000"]) 
         get_data.clear()
         st.toast("Log erfolgreich zurückgesetzt!", icon="♻️")
     except Exception as e:
         st.error(f"Fehler beim Reset: {e}")
 
 def log_reset_event(package_size: int, note: str = ""):
-    """Papierwechsel in separater 'Meta'-Tabelle protokollieren."""
     try:
         sh = get_spreadsheet()
         try:
@@ -142,12 +184,10 @@ def log_reset_event(package_size: int, note: str = ""):
 
 # --- STATUS-LOGIK ---
 def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
-    """Ermittelt Status-Modus, Anzeige-Text/Farbe und ggf. Push-Meldung."""
     prev_status = st.session_state.last_warn_status
 
     raw_status_l = (raw_status or "").lower()
 
-    # Grund-Status anhand Status-Text & Papier
     if any(w in raw_status_l for w in ["error", "fehler", "stau", "failure", "unknown"]):
         status_mode = "error"
         display_text = f"⚠️ STÖRUNG: {raw_status}"
@@ -165,7 +205,6 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
         display_text = "✅ Bereit"
         display_color = "green"
 
-    # Heartbeat / keine aktuellen Daten
     minutes_diff = None
     ts_parsed = pd.to_datetime(timestamp, errors="coerce")
     if pd.notna(ts_parsed):
@@ -176,7 +215,6 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
             display_text = "⚠️ Keine aktuellen Daten"
             display_color = "orange"
 
-    # Push-Entscheidung
     push = None
     if status_mode == "error" and prev_status != "error":
         push = ("🔴 Fehler", f"Druckerfehler: {raw_status}", "rotating_light")
@@ -192,9 +230,7 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
     elif prev_status == "error" and status_mode not in ["error", None]:
         push = ("✅ Störung behoben", "Drucker läuft wieder.", "white_check_mark")
 
-    # Session-Status aktualisieren
     st.session_state.last_warn_status = status_mode
-
     return status_mode, display_text, display_color, push, minutes_diff
 
 def maybe_play_sound(status_mode: str, sound_enabled: bool):
@@ -241,7 +277,7 @@ def show_live_status(sound_enabled: bool = False):
 
         maybe_play_sound(status_mode, sound_enabled)
 
-        # --- HEADER ---
+        # HEADER
         heartbeat_info = ""
         if minutes_diff is not None:
             heartbeat_info = f" (vor {minutes_diff} Min)"
@@ -256,7 +292,6 @@ def show_live_status(sound_enabled: bool = False):
             </div>
         </div>
         """
-
         st.markdown(header_html, unsafe_allow_html=True)
 
         if status_mode == "error":
@@ -264,9 +299,8 @@ def show_live_status(sound_enabled: bool = False):
         elif status_mode == "stale":
             st.warning("Seit einigen Minuten keine Daten – Verbindung / Script prüfen.")
 
-        # --- PAPIERSTATUS ---
+        # PAPIERSTATUS
         st.markdown("### Papierstatus")
-
         if status_mode == "error":
             remaining_text = "–"
             forecast = "Unbekannt (Störung)"
@@ -282,7 +316,6 @@ def show_live_status(sound_enabled: bool = False):
         colA.metric("Verbleibend", remaining_text, f"von {st.session_state.max_prints}")
         colB.metric("Restlaufzeit (geschätzt)", forecast)
 
-        # Kosten-Anzeige, falls konfiguriert
         if COST_PER_ROLL_EUR:
             try:
                 used = max(0, st.session_state.max_prints - media_remaining)
@@ -329,21 +362,17 @@ def show_history():
         return
 
     st.subheader("Verlauf & Analyse")
-
-    # Zeitreihe vorbereiten
     if "Timestamp" in df.columns and "Media_Remaining" in df.columns:
         df_plot = df.copy()
         df_plot["Timestamp"] = pd.to_datetime(df_plot["Timestamp"], errors="coerce")
         df_plot = df_plot.dropna(subset=["Timestamp"]).set_index("Timestamp")
         st.line_chart(df_plot["Media_Remaining"], use_container_width=True)
 
-    # Kennzahlen
     last = df.iloc[-1]
     try:
         media_remaining = int(last.get("Media_Remaining", 0))
     except Exception:
         media_remaining = 0
-
     total_rows = len(df)
     prints_since_reset = max(0, st.session_state.max_prints - media_remaining)
 
@@ -365,7 +394,6 @@ def show_history():
 
 # --- INHALT RENDERN ---
 if event_mode:
-    # Nur Live-Status anzeigen – ideal für Monitor/Kiosk
     show_live_status(sound_enabled)
 else:
     tab_live, tab_hist = st.tabs(["Live-Status", "Historie & Analyse"])
@@ -389,7 +417,14 @@ if not event_mode:
 
             st.write("### Benachrichtigungen")
             st.code(st.session_state.ntfy_topic or "(kein Topic konfiguriert)")
-            st.session_state.ntfy_active = st.checkbox("Push aktiv", st.session_state.ntfy_active)
+            
+            # Checkbox mit Callback zum sofortigen Speichern
+            push_active = st.checkbox(
+                "Push aktiv (Einstellung wird in Spalte K gespeichert)", 
+                value=st.session_state.ntfy_active,
+                key="ntfy_active",
+                on_change=save_push_setting 
+            )
 
             if st.button("Test Push 🔔"):
                 send_ntfy_push("Test", "Test erfolgreich", tags="tada")
@@ -403,7 +438,6 @@ if not event_mode:
                 horizontal=True,
                 index=1 if st.session_state.max_prints == 400 else 0,
             )
-
             reset_note = st.text_input("Notiz zum Papierwechsel (optional)", key="reset_note")
 
             if not st.session_state.confirm_reset:
