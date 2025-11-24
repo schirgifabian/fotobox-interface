@@ -28,6 +28,11 @@ if "last_warn_status" not in st.session_state:
     st.session_state.last_warn_status = None   # "error", "low_paper", "ok"
 if "max_prints" not in st.session_state:
     st.session_state.max_prints = 400
+# Neu: Status für Animation
+if "current_status_mode" not in st.session_state:
+    st.session_state.current_status_mode = None
+if "status_loop_counter" not in st.session_state:
+    st.session_state.status_loop_counter = 0
 
 
 # --- FUNKTION: Push Nachricht Senden ---
@@ -64,19 +69,19 @@ def load_lottieurl(url):
 
 # Lotties (stabile URLs)
 lottie_printing = load_lottieurl(
-    "https://assets9.lottiefiles.com/packages/lf20_q5pk6p1k.json"   # Drucker / Loading
+    "https://assets9.lottiefiles.com/packages/lf20_q5pk6p1k.json"   # Druckt
 )
 lottie_ready = load_lottieurl(
-    "https://assets9.lottiefiles.com/packages/lf20_jbrw3hcz.json"   # Success / bereit
+    "https://assets9.lottiefiles.com/packages/lf20_jbrw3hcz.json"   # Ready / Success
 )
 lottie_warning = load_lottieurl(
-    "https://assets1.lottiefiles.com/packages/lf20_touohxv0.json"   # Warn-Dreieck
+    "https://assets1.lottiefiles.com/packages/lf20_touohxv0.json"   # Warnung
 )
 lottie_error = load_lottieurl(
     "https://assets7.lottiefiles.com/private_files/lf30_editor_e7qk3x0q.json"  # Error
 )
 
-# Fallbacks: wenn was nicht lädt, nimm etwas anderes damit nie „nichts“ da ist
+# Fallbacks
 if lottie_warning is None:
     lottie_warning = lottie_ready
 if lottie_error is None:
@@ -138,13 +143,12 @@ def show_live_status():
                 last_update = None
 
             raw_status = str(last_entry.get("Status", "")).lower()
-            # HIER der Fix: richtiger Spaltenname "Media_Remaining"
             media_remaining = int(last_entry.get("Media_Remaining", 0))
             current_max = st.session_state.max_prints
 
             prev_status = st.session_state.last_warn_status
 
-            # --- ENTSCHEIDUNGSBAUM ---
+            # --- ENTSCHEIDUNGSBAUM für Status ---
             if (
                 "error" in raw_status
                 or "unknown" in raw_status
@@ -217,13 +221,51 @@ def show_live_status():
 
                 st.session_state.last_warn_status = "ok"
 
+            # --- Animations-Logik nach Wunsch C ---
+            # Reset Zähler bei Statuswechsel
+            if st.session_state.current_status_mode != status_mode:
+                st.session_state.current_status_mode = status_mode
+                st.session_state.status_loop_counter = 0
+
+            show_animation = False
+            loop_flag = True  # nur relevant, wenn Animation gezeigt wird
+
+            if status_mode == "printing":
+                # Immer animiert
+                show_animation = True
+                loop_flag = True
+
+            elif status_mode in ("error", "low_paper"):
+                # Erste 3 „Runden“ animiert, danach statisch
+                if st.session_state.status_loop_counter < 3:
+                    show_animation = True
+                    loop_flag = True
+                    st.session_state.status_loop_counter += 1
+                else:
+                    show_animation = False  # statisches ⚠️
+
+            elif status_mode == "ready":
+                # Immer statisch (kein Lottie)
+                show_animation = False
+
             # --- ANZEIGE HEADER ---
             col1, col2 = st.columns([1, 2])
             with col1:
-                if current_lottie:
-                    st_lottie(current_lottie, height=180, key="status_anim_main")
+                if show_animation and current_lottie:
+                    st_lottie(
+                        current_lottie,
+                        height=180,
+                        key=f"status_anim_{status_mode}",
+                        loop=loop_flag,
+                    )
                 else:
-                    st.markdown("## 🤖")
+                    # statische Icons je nach Status
+                    if status_mode == "ready":
+                        st.markdown("## ✅")
+                    elif status_mode in ("error", "low_paper"):
+                        st.markdown("## ⚠️")
+                    else:
+                        st.markdown("## 🤖")
 
             with col2:
                 st.markdown(
