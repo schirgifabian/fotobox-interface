@@ -4,38 +4,24 @@ from google.oauth2.service_account import Credentials
 import requests
 from streamlit_lottie import st_lottie
 import pandas as pd
-from datetime import datetime
+from streamlit_autorefresh import st_autorefresh # Wichtig für automatische Updates
 
 # --- KONFIGURATION ---
 SHEET_ID = "10uLjotNMT3AewBHdkuYyOudbbOCEuquDqGbwr2Wu7ig"
 MAX_PRINTS_PER_ROLL = 400
-PAGE_TITLE = "Drucker Monitor"
+PAGE_TITLE = "Fotobox Drucker Status"
 PAGE_ICON = "🖨️"
-REFRESH_RATE = 10
+REFRESH_INTERVAL = 10000  # 10 Sekunden
 
+# --- SEITEN KONFIGURATION (Muss ganz oben stehen) ---
 st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="centered")
 
-# --- CUSTOM CSS FÜR SCHÖNEREN LOOK ---
-st.markdown("""
-    <style>
-        /* Etwas Platz oben entfernen */
-        .block-container {
-            padding-top: 2rem;
-            padding-bottom: 2rem;
-        }
-        /* Metrik-Label stylen */
-        div[data-testid="stMetricLabel"] {
-            font-size: 1.1rem !important;
-        }
-        /* Metrik-Wert größer machen */
-        div[data-testid="stMetricValue"] {
-            font-size: 2.5rem !important;
-        }
-    </style>
-""", unsafe_allow_html=True)
+# --- AUTO-REFRESH ---
+# Aktualisiert die Seite automatisch alle 10 Sekunden
+st_autorefresh(interval=REFRESH_INTERVAL, limit=None, key="fotorrefresh")
 
-# --- LOTTIE LADEN ---
-@st.cache_data
+# --- CACHING & LOTTIE ---
+@st.cache_data(ttl=3600) # Lotties für 1 Stunde cachen
 def load_lottieurl(url):
     try:
         r = requests.get(url)
@@ -45,117 +31,93 @@ def load_lottieurl(url):
     except:
         return None
 
-# Animationen
-lottie_printing = load_lottieurl("https://lottie.host/55b00152-04f4-486a-b39d-229421c2136c/c8lq8p6KqY.json") # Drucker Animation
-lottie_ready = load_lottieurl("https://assets1.lottiefiles.com/packages/lf20_jbrw3hcz.json") # Checkmark
-lottie_error = load_lottieurl("https://assets10.lottiefiles.com/packages/lf20_qpwbv5gm.json") # Warnung
+lottie_printing = load_lottieurl("https://assets9.lottiefiles.com/packages/lf20_yyja09.json")
+lottie_ready = load_lottieurl("https://assets1.lottiefiles.com/packages/lf20_jbrw3hcz.json")
+lottie_error = load_lottieurl("https://assets10.lottiefiles.com/packages/lf20_Tkwjw8.json")
 
 # --- GOOGLE SHEETS VERBINDUNG ---
-@st.cache_resource
-def get_connection():
-    scope = [
-        "https://spreadsheets.google.com/feeds",
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive",
-    ]
-    creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
-    client = gspread.authorize(creds)
-    return client
-
-# --- HAUPT-APP (AUTO-REFRESH) ---
-@st.fragment(run_every=REFRESH_RATE)
-def show_status_monitor():
-    st.title(f"{PAGE_ICON} {PAGE_TITLE}")
+# Cache für 10 Sekunden, damit wir nicht bei jedem Klick die API belasten
+@st.cache_data(ttl=10) 
+def get_data():
+    secrets = st.secrets["gcp_service_account"]
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
     
     try:
-        gc = get_connection()
+        creds = Credentials.from_service_account_info(secrets, scopes=scopes)
+        gc = gspread.authorize(creds)
+        
         sh = gc.open_by_key(SHEET_ID)
         worksheet = sh.sheet1
-        data = worksheet.get_all_records()
         
-        if not data:
-            st.info("Verbindung erfolgreich, warte auf erste Daten...")
-            return
-
+        data = worksheet.get_all_records()
         df = pd.DataFrame(data)
+        return df
+    except Exception as e:
+        return pd.DataFrame() # Leeres DataFrame bei Fehler
+
+# --- APP LOGIK & DESIGN ---
+st.title(f"{PAGE_ICON} {PAGE_TITLE}")
+st.markdown("---")
+
+# Manueller Button (zusätzlich zum Auto-Refresh)
+if st.button("🔄 Sofort aktualisieren"):
+    st.cache_data.clear() # Cache löschen für sofortige frische Daten
+    st.rerun()
+
+df = get_data()
+
+if not df.empty:
+    try:
         last_entry = df.iloc[-1]
         
-        # Daten auslesen
-        status_raw = str(last_entry.get("Status", "Unbekannt"))
+        status = str(last_entry.get("Status", "Unknown"))
+        
         try:
             media_remaining = int(last_entry.get("Media_Remaining", 0))
-        except:
+        except ValueError:
             media_remaining = 0
+            
         timestamp = last_entry.get("Timestamp", "-")
-
-        # --- LOGIK FÜR STATUS ---
-        # Standardwerte
-        lottie_to_show = lottie_error
-        status_color = "#FF4B4B" # Rot
-        status_display_text = f"⚠ {status_raw}"
         
-        if "Printing" in status_raw:
-            lottie_to_show = lottie_printing
-            status_color = "#FFA500" # Orange
-            status_display_text = "Druckt..."
-            
-        elif "Ready" in status_raw or "Bereit" in status_raw or "OK" in status_raw:
-            lottie_to_show = lottie_ready
-            status_color = "#09AB3B" # Grün
-            status_display_text = "Bereit"
+        # --- DEIN URSPRÜNGLICHES LAYOUT (1:2 Spalten) ---
+        col1, col2 = st.columns([1, 2])
 
-        # --- DARSTELLUNG ---
-        
-        # Wir packen alles in einen Container mit Rahmen (sieht aus wie eine Karte)
-        with st.container(border=True):
-            
-            # Spalten: Links Bild, Rechts Text.
-            # vertical_alignment="center" sorgt dafür, dass Text mittig zum Bild steht!
-            col_anim, col_info = st.columns([1, 1.5], gap="large", vertical_alignment="center")
-            
-            with col_anim:
-                if lottie_to_show:
-                    st_lottie(lottie_to_show, height=180, key=f"anim_{timestamp}")
-                else:
-                    st.write("🎞") # Platzhalter falls Lottie fehlschlägt
-
-            with col_info:
-                # Status Titel in Farbe
-                st.markdown(f"""
-                    <h1 style='color: {status_color}; margin:0; padding:0; font-size: 2.8rem;'>
-                        {status_display_text}
-                    </h1>
-                    """, unsafe_allow_html=True)
-                
-                st.markdown(f"<p style='color:gray; margin-top: -10px;'>Letztes Update: {timestamp}</p>", unsafe_allow_html=True)
-
-        # --- FORTSCHRITTSBALKEN & DETAILS ---
-        st.write("") # Abstand
-        
-        col_metric, col_bar = st.columns([1, 2], vertical_alignment="bottom")
-        
-        with col_metric:
-            st.metric(label="Verbleibende Bilder", value=f"{media_remaining}")
-            
-        with col_bar:
-            progress_val = max(0.0, min(1.0, media_remaining / MAX_PRINTS_PER_ROLL))
-            
-            # Farbe des Balkens je nach Füllstand simulieren (Text darüber)
-            if progress_val < 0.1:
-                st.markdown("<b style='color:red'>Papier fast leer! ⚠️</b>", unsafe_allow_html=True)
+        with col1:
+            # Die Animationen passend zum Status
+            if "Printing" in status:
+                st_lottie(lottie_printing, height=200, key="printing")
+                status_color = "orange"
+                status_text = "Druckt gerade..."
+            elif "Ready" in status or "Bereit" in status:
+                st_lottie(lottie_ready, height=200, key="ready")
+                status_color = "green"
+                status_text = "Drucker bereit"
             else:
-                st.write("<b>Papierrolle Status</b>", unsafe_allow_html=True)
-                
-            st.progress(progress_val)
+                # Alles andere ist ein Fehler (Papierstau etc.)
+                st_lottie(lottie_error, height=200, key="error")
+                status_color = "red"
+                status_text = f"Status: {status}"
 
-        # --- VERLAUF (Eingeklappt) ---
-        st.divider()
-        with st.expander("Logbuch anzeigen"):
+        with col2:
+            # Text und Balken
+            st.markdown(f"<h2 style='color:{status_color};'>{status_text}</h2>", unsafe_allow_html=True)
+            st.write(f"🕒 Letztes Update: **{timestamp}**")
+            st.metric(label="Verbleibende Bilder", value=f"{media_remaining} Stk")
+
+            progress_val = max(0.0, min(1.0, media_remaining / MAX_PRINTS_PER_ROLL))
+            st.write("Papierstatus:")
+            
+            if progress_val < 0.1:
+                st.progress(progress_val, text="⚠️ Papier fast leer!")
+            else:
+                st.progress(progress_val)
+
+        # Verlauf unten drunter
+        with st.expander("📜 Verlauf anzeigen"):
             st.dataframe(df.tail(5).sort_index(ascending=False), use_container_width=True)
-
+            
     except Exception as e:
-        st.error(f"Verbindungsfehler: {e}")
-
-# Start
-if __name__ == "__main__":
-    show_status_monitor()
+        st.error(f"Fehler beim Verarbeiten der Daten: {e}")
+else:
+    st.info("Warte auf Datenverbindung...")
+    st.spinner("Lade...")
