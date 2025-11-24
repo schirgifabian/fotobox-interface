@@ -142,7 +142,7 @@ with st.expander("🛠️ Admin & Einstellungen", expanded=True):
     
     with col_admin1:
         # Link Button (öffnet neuen Tab)
-        st.link_button("🔗 Zu Fotoshare Admin", "https://fotoshare.co/admin/index", use_container_width=True)
+        st.link_button("🔗 Zu Fotoshare Cloud", "https://fotoshare.co/admin/index", use_container_width=True)
     
     with col_admin2:
         # Logik für den Reset Button mit Bestätigung
