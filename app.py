@@ -12,14 +12,14 @@ PAGE_ICON = "🖨️"
 
 # Mehrere Boxen vorbereitet – aktuell eine befüllt.
 PRINTERS = {
-    "Standard Fotobox": {
+    "dieFotobox.": {
         "sheet_id": "10uLjotNMT3AewBHdkuYyOudbbOCEuquDqGbwr2Wu7ig",
         "ntfy_topic": "fotobox_status_secret_4566",
         "warning_threshold": 20,
         "default_max_prints": 400,
         "cost_per_roll_eur": 46.58,
     },
-    "Fotobox Laurentius": {
+    "Fotobox Weinkellerei": {
         "sheet_id": "HIER_DIE_NEUE_SHEET_ID_EINSETZEN",
         "ntfy_topic": "fotobox_status_secret_4566-weinkellerei",
         "warning_threshold": 50,      # kannst du bei Bedarf anpassen
