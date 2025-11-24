@@ -4,8 +4,7 @@ from google.oauth2.service_account import Credentials
 import requests
 from streamlit_lottie import st_lottie
 import pandas as pd
-import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # --- KONFIGURATION ---
 SHEET_ID = "10uLjotNMT3AewBHdkuYyOudbbOCEuquDqGbwr2Wu7ig"
@@ -13,9 +12,9 @@ PAGE_TITLE = "Fotobox Drucker Status"
 PAGE_ICON = "🖨️"
 
 # --- NTFY EINSTELLUNGEN (Push Nachrichten) ---
-NTFY_TOPIC = "fotobox_status_secret_4566" 
+NTFY_TOPIC = "fotobox_status_secret_4566"
 NTFY_ACTIVE_DEFAULT = True
-WARNING_THRESHOLD = 20 # Ab wie vielen Bildern Warnung?
+WARNING_THRESHOLD = 20  # Ab wie vielen Bildern Warnung?
 
 # --- SEITEN KONFIGURATION ---
 st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="centered")
@@ -26,9 +25,10 @@ if "confirm_reset" not in st.session_state:
 if "ntfy_active" not in st.session_state:
     st.session_state.ntfy_active = NTFY_ACTIVE_DEFAULT
 if "last_warn_status" not in st.session_state:
-    st.session_state.last_warn_status = None 
+    st.session_state.last_warn_status = None   # "error", "low_paper", "ok"
 if "max_prints" not in st.session_state:
-    st.session_state.max_prints = 400 
+    st.session_state.max_prints = 400
+
 
 # --- FUNKTION: Push Nachricht Senden ---
 def send_ntfy_push(title, message, tags="warning", priority="default"):
@@ -36,33 +36,49 @@ def send_ntfy_push(title, message, tags="warning", priority="default"):
         return
     try:
         headers = {
-            "Title": title.encode('utf-8'),
+            "Title": title.encode("utf-8"),
             "Tags": tags,
-            "Priority": priority
+            "Priority": priority,
         }
         requests.post(
             f"https://ntfy.sh/{NTFY_TOPIC}",
-            data=message.encode(encoding='utf-8'),
+            data=message.encode(encoding="utf-8"),
             headers=headers,
-            timeout=5
+            timeout=5,
         )
     except Exception as e:
         print(f"Push Fehler: {e}")
+
 
 # --- FUNKTION: Lottie Laden ---
 @st.cache_data(ttl=3600)
 def load_lottieurl(url):
     try:
         r = requests.get(url, timeout=3)
-        if r.status_code != 200: return None
+        if r.status_code != 200:
+            return None
         return r.json()
     except:
         return None
 
-lottie_printing = load_lottieurl("https://lottie.host/5a8439d0-a686-40df-996c-7234f2903e25/6F0s8Y5s2R.json") 
-lottie_ready = load_lottieurl("https://assets10.lottiefiles.com/packages/lf20_jbrw3hcz.json") 
-lottie_warning = load_lottieurl("https://lottie.host/97b99728-385a-4d12-811c-1e7062bc449e/1tqL2v7z2h.json") 
-lottie_error = load_lottieurl("https://lottie.host/8614466e-448c-41c3-be3b-183217257e8f/GkqQ3s9C7k.json") 
+
+lottie_printing = load_lottieurl(
+    "https://lottie.host/5a8439d0-a686-40df-996c-7234f2903e25/6F0s8Y5s2R.json"
+)
+lottie_ready = load_lottieurl(
+    "https://assets10.lottiefiles.com/packages/lf20_jbrw3hcz.json"
+)
+lottie_warning = load_lottieurl(
+    "https://lottie.host/97b99728-385a-4d12-811c-1e7062bc449e/1tqL2v7z2h.json"
+)
+lottie_error = load_lottieurl(
+    "https://lottie.host/8614466e-448c-41c3-be3b-183217257e8f/GkqQ3s9C7k.json"
+)
+
+# Fallback: wenn das Error-Lottie nicht lädt, nimm das Warn-Lottie
+if lottie_error is None:
+    lottie_error = lottie_warning
+
 
 # --- GOOGLE SHEETS HELPER ---
 def get_worksheet():
@@ -72,6 +88,7 @@ def get_worksheet():
     gc = gspread.authorize(creds)
     sh = gc.open_by_key(SHEET_ID)
     return sh.sheet1
+
 
 @st.cache_data(ttl=0)
 def get_data():
@@ -83,72 +100,98 @@ def get_data():
     except Exception:
         return pd.DataFrame()
 
+
 def clear_google_sheet():
     try:
         ws = get_worksheet()
-        ws.batch_clear(["A2:Z10000"]) 
+        ws.batch_clear(["A2:Z10000"])
         st.cache_data.clear()
         st.toast("Log erfolgreich zurückgesetzt!", icon="♻️")
     except Exception as e:
         st.error(f"Fehler beim Reset: {e}")
 
+
 # --- MAIN APP LOGIK ---
 st.title(f"{PAGE_ICON} {PAGE_TITLE}")
+
 
 @st.fragment(run_every=10)
 def show_live_status():
     df = get_data()
-    
+
     if not df.empty:
-        # HIER WAR DER FEHLER: Das try muss geschlossen werden
         try:
             last_entry = df.iloc[-1]
             timestamp_str = str(last_entry.get("Timestamp", ""))
-            
+
             try:
                 last_update = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
-                time_diff = datetime.now() - last_update
-                is_offline = time_diff.total_seconds() > 300 
             except:
-                last_update = datetime.now()
-                is_offline = False
+                last_update = None
 
             raw_status = str(last_entry.get("Status", "")).lower()
             media_remaining = int(last_entry.get("MediaRemaining", 0))
             current_max = st.session_state.max_prints
 
-            # --- ENTSCHEIDUNGSBAUM ---
-            if is_offline:
-                status_mode = "offline"
-                display_text = "Drucker antwortet nicht"
-                display_color = "gray"
-                current_lottie = lottie_warning 
+            prev_status = st.session_state.last_warn_status
 
-            elif "error" in raw_status or "unknown" in raw_status or "stau" in raw_status or "failure" in raw_status:
+            # --- ENTSCHEIDUNGSBAUM (ohne Offline-Check) ---
+            if (
+                "error" in raw_status
+                or "unknown" in raw_status
+                or "stau" in raw_status
+                or "failure" in raw_status
+            ):
                 status_mode = "error"
                 display_text = f"⚠️ STÖRUNG: {last_entry.get('Status')}"
                 display_color = "red"
                 current_lottie = lottie_error
-                
-                if st.session_state.last_warn_status != "error":
-                    send_ntfy_push("🔴 KRITISCHER FEHLER", f"Drucker: {last_entry.get('Status')}", tags="rotating_light", priority="high")
-                    st.session_state.last_warn_status = "error"
+
+                if prev_status != "error":
+                    # Neue Störung
+                    send_ntfy_push(
+                        "🔴 KRITISCHER FEHLER",
+                        f"Drucker: {last_entry.get('Status')}",
+                        tags="rotating_light",
+                        priority="high",
+                    )
+                st.session_state.last_warn_status = "error"
 
             elif media_remaining <= WARNING_THRESHOLD:
                 status_mode = "low_paper"
                 display_text = "Papier fast leer!"
                 display_color = "orange"
                 current_lottie = lottie_warning
-                
-                if st.session_state.last_warn_status != "low_paper":
-                    send_ntfy_push("⚠️ Papierwarnung", f"Noch {media_remaining} Bilder!", tags="warning")
-                    st.session_state.last_warn_status = "low_paper"
+
+                # Störung wurde behoben?
+                if prev_status == "error":
+                    send_ntfy_push(
+                        "✅ Störung behoben",
+                        "Papierstörung behoben, Drucker läuft wieder.",
+                        tags="white_check_mark",
+                    )
+
+                if prev_status != "low_paper":
+                    send_ntfy_push(
+                        "⚠️ Papierwarnung",
+                        f"Noch {media_remaining} Bilder!",
+                        tags="warning",
+                    )
+                st.session_state.last_warn_status = "low_paper"
 
             elif "printing" in raw_status or "processing" in raw_status:
                 status_mode = "printing"
                 display_text = "Druckt gerade..."
                 display_color = "blue"
                 current_lottie = lottie_printing
+
+                if prev_status == "error":
+                    send_ntfy_push(
+                        "✅ Störung behoben",
+                        "Papierstörung behoben, Drucker druckt wieder.",
+                        tags="white_check_mark",
+                    )
+
                 st.session_state.last_warn_status = "ok"
 
             else:
@@ -156,9 +199,17 @@ def show_live_status():
                 display_text = "Bereit"
                 display_color = "green"
                 current_lottie = lottie_ready
+
+                if prev_status == "error":
+                    send_ntfy_push(
+                        "✅ Störung behoben",
+                        "Papierstörung behoben, Drucker ist wieder bereit.",
+                        tags="white_check_mark",
+                    )
+
                 st.session_state.last_warn_status = "ok"
 
-            # --- ANZEIGE ---
+            # --- ANZEIGE HEADER ---
             col1, col2 = st.columns([1, 2])
             with col1:
                 if current_lottie:
@@ -167,51 +218,78 @@ def show_live_status():
                     st.markdown("## 🤖")
 
             with col2:
-                st.markdown(f"<h2 style='color:{display_color}; margin-top:0;'>{display_text}</h2>", unsafe_allow_html=True)
+                st.markdown(
+                    f"<h2 style='color:{display_color}; margin-top:0;'>{display_text}</h2>",
+                    unsafe_allow_html=True,
+                )
                 st.caption(f"Letztes Signal: {timestamp_str}")
-                if status_mode == "offline":
-                    st.error("Verbindung unterbrochen?")
 
-            st.markdown("#### Papierstatus")
-            
-            if media_remaining > 0:
-                minutes_left = int(media_remaining * 1.5) 
-                if minutes_left > 60:
-                    hours = minutes_left // 60
-                    mins = minutes_left % 60
-                    forecast_text = f"ca. {hours} Std. {mins} Min."
+                if status_mode == "error":
+                    st.error("Bitte Drucker prüfen (Störung aktiv).")
                 else:
-                    forecast_text = f"ca. {minutes_left} Min."
+                    if prev_status == "error":
+                        st.success("Störung behoben – Drucker läuft wieder.")
+
+            # --- PAPIERSTATUS ---
+            st.markdown("#### Papierstatus")
+
+            # Restlaufzeit-Text
+            if status_mode == "error":
+                forecast_text = "Unbekannt (Störung)"
             else:
-                forecast_text = "0 Min."
+                if media_remaining > 0:
+                    minutes_left = int(media_remaining * 1.5)
+                    if minutes_left > 60:
+                        hours = minutes_left // 60
+                        mins = minutes_left % 60
+                        forecast_text = f"ca. {hours} Std. {mins} Min."
+                    else:
+                        forecast_text = f"ca. {minutes_left} Min."
+                else:
+                    forecast_text = "0 Min."
+
+            # Anzeige der verbleibenden Stück
+            if status_mode == "error":
+                remaining_text = "–"
+            else:
+                remaining_text = f"{media_remaining} Stk"
 
             m_col1, m_col2 = st.columns(2)
-            m_col1.metric("Verbleibend", f"{media_remaining} Stk", f"von {current_max}")
+            m_col1.metric("Verbleibend", remaining_text, f"von {current_max}")
             m_col2.metric("Restlaufzeit (geschätzt)", forecast_text)
 
-            progress_val = max(0.0, min(1.0, media_remaining / current_max))
-            
+            # Fortschrittsbalken
             if status_mode == "error":
+                progress_val = 0.0
                 bar_color = "red"
-            elif progress_val < 0.1:
-                bar_color = "red"
-            elif progress_val < 0.25:
-                bar_color = "orange"
             else:
-                bar_color = "blue"
+                progress_val = max(0.0, min(1.0, media_remaining / current_max))
+                if progress_val < 0.1:
+                    bar_color = "red"
+                elif progress_val < 0.25:
+                    bar_color = "orange"
+                else:
+                    bar_color = "blue"
 
             st.markdown(
-                f"""<style>.stProgress > div > div > div > div {{ background-color: {bar_color}; }}</style>""",
+                f"""
+                <style>
+                .stProgress > div > div > div > div {{
+                    background-color: {bar_color};
+                }}
+                </style>
+                """,
                 unsafe_allow_html=True,
             )
             st.progress(progress_val)
 
         except Exception as e:
             st.error(f"Fehler bei der Datenverarbeitung: {e}")
-            
+
     else:
         st.info("System wartet auf Start...")
         st.caption("Noch keine Druckdaten empfangen.")
+
 
 show_live_status()
 
@@ -223,28 +301,47 @@ with st.expander("🛠️ Admin & Einstellungen", expanded=False):
 
     with col_admin1:
         st.write("### Externe Links")
-        st.link_button("🔗 Fotoshare Cloud", "https://fotoshare.co/admin/index", use_container_width=True)
-        
+        st.link_button(
+            "🔗 Fotoshare Cloud",
+            "https://fotoshare.co/admin/index",
+            use_container_width=True,
+        )
+
         st.write("### Benachrichtigungen")
         st.code(NTFY_TOPIC, language="text")
-        
-        st.session_state.ntfy_active = st.checkbox("Push-Nachrichten aktiv", value=st.session_state.ntfy_active)
+
+        st.session_state.ntfy_active = st.checkbox(
+            "Push-Nachrichten aktiv", value=st.session_state.ntfy_active
+        )
         if st.button("Test Push 🔔"):
-            send_ntfy_push("Test", f"Test erfolgreich! Paketgröße: {st.session_state.max_prints}", tags="tada")
+            send_ntfy_push(
+                "Test",
+                f"Test erfolgreich! Paketgröße: {st.session_state.max_prints}",
+                tags="tada",
+            )
             st.toast("Test gesendet!")
 
     with col_admin2:
         st.write("### Neuer Auftrag")
         st.write("Welches Papier liegt ein?")
-        new_package_size = st.radio("Paketgröße:", [200, 400], horizontal=True, index=1 if st.session_state.max_prints == 400 else 0)
-        
+        new_package_size = st.radio(
+            "Paketgröße:",
+            [200, 400],
+            horizontal=True,
+            index=1 if st.session_state.max_prints == 400 else 0,
+        )
+
         if not st.session_state.confirm_reset:
-            if st.button("Papierwechsel durchgeführt (Reset) 🔄", use_container_width=True):
+            if st.button(
+                "Papierwechsel durchgeführt (Reset) 🔄", use_container_width=True
+            ):
                 st.session_state.confirm_reset = True
                 st.session_state.temp_package_size = new_package_size
                 st.rerun()
         else:
-            st.warning(f"Log löschen & auf {st.session_state.temp_package_size}er Rolle setzen?")
+            st.warning(
+                f"Log löschen & auf {st.session_state.temp_package_size}er Rolle setzen?"
+            )
             col_yes, col_no = st.columns(2)
             if col_yes.button("✅ Ja", use_container_width=True):
                 st.session_state.max_prints = st.session_state.temp_package_size
