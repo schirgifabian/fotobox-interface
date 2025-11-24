@@ -36,7 +36,6 @@ lottie_error = load_lottieurl("https://assets10.lottiefiles.com/packages/lf20_Tk
 
 # --- GOOGLE SHEETS HELPER ---
 def get_worksheet():
-    """Hilfsfunktion um das Worksheet Objekt zu holen (nicht gecached für Schreiboperationen)"""
     secrets = st.secrets["gcp_service_account"]
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
     creds = Credentials.from_service_account_info(secrets, scopes=scopes)
@@ -59,10 +58,9 @@ def get_data():
 def clear_google_sheet():
     try:
         ws = get_worksheet()
-        # Löscht alles von A2 bis Z10000 (behält die Kopfzeile A1)
-        ws.batch_clear(["A2:Z10000"])
+        ws.batch_clear(["A2:Z10000"]) # Löscht Inhalt, behält Header
         st.toast("Log erfolgreich geleert!", icon="✅")
-        st.cache_data.clear() # Cache leeren damit die Anzeige stimmt
+        st.cache_data.clear()
     except Exception as e:
         st.error(f"Fehler beim Löschen: {e}")
 
@@ -70,10 +68,10 @@ def clear_google_sheet():
 st.title(f"{PAGE_ICON} {PAGE_TITLE}")
 st.markdown("---")
 
-# --- LIVE FRAGMENT (Aktualisiert sich alle 10s) ---
+# --- LIVE FRAGMENT (Aktualisiert alle 10s, aber ohne Flackern) ---
 @st.fragment(run_every=10)
 def show_live_status():
-    # Refresh Button im Fragment
+    # Button zum manuellen Neuladen (nur Daten)
     if st.button("🔄 Status prüfen", key="refresh_fragment"):
         st.cache_data.clear()
     
@@ -91,23 +89,27 @@ def show_live_status():
                 
             timestamp = last_entry.get("Timestamp", "-")
             
+            # Spaltenaufteilung
             col1, col2 = st.columns([1, 2])
 
+            # Logik für Animation und Text bestimmen
+            if "Printing" in status:
+                current_lottie = lottie_printing
+                status_color = "orange"
+                status_text = "Druckt gerade..."
+            elif "Ready" in status or "Bereit" in status:
+                current_lottie = lottie_ready
+                status_color = "green"
+                status_text = "Drucker bereit"
+            else:
+                current_lottie = lottie_error
+                status_color = "red"
+                status_text = f"Status: {status}"
+
             with col1:
-                # Lottie Keys brauchen time.time() damit sie beim Refresh nicht flackern
-                t_stamp = time.time()
-                if "Printing" in status:
-                    st_lottie(lottie_printing, height=200, key=f"p_{t_stamp}")
-                    status_color = "orange"
-                    status_text = "Druckt gerade..."
-                elif "Ready" in status or "Bereit" in status:
-                    st_lottie(lottie_ready, height=200, key=f"r_{t_stamp}")
-                    status_color = "green"
-                    status_text = "Drucker bereit"
-                else:
-                    st_lottie(lottie_error, height=200, key=f"e_{t_stamp}")
-                    status_color = "red"
-                    status_text = f"Status: {status}"
+                # WICHTIG: key="status_animation" bleibt immer gleich. 
+                # Dadurch lädt Streamlit das Lottie NICHT neu, solange sich 'current_lottie' nicht ändert.
+                st_lottie(current_lottie, height=200, key="status_animation")
 
             with col2:
                 st.markdown(f"<h2 style='color:{status_color};'>{status_text}</h2>", unsafe_allow_html=True)
@@ -129,35 +131,33 @@ def show_live_status():
     else:
         st.info("Keine Daten vorhanden oder Datenbank leer.")
 
-# Fragment aufrufen
+# Fragment starten
 show_live_status()
 
 st.markdown("---")
 
-# --- ADMIN TOOLS (Außerhalb des Auto-Refresh Fragments) ---
+# --- ADMIN TOOLS (Stabil, lädt nicht automatisch neu) ---
 with st.expander("🛠️ Admin & Einstellungen", expanded=True):
     
-    # Spalten für Buttons
     col_admin1, col_admin2 = st.columns(2)
     
     with col_admin1:
-        # Link Button (öffnet neuen Tab)
-        st.link_button("🔗 Zu Fotoshare Cloud", "https://fotoshare.co/admin/index", use_container_width=True)
+        st.link_button("🔗 Zu Fotoshare Admin", "https://fotoshare.co/admin/index", use_container_width=True)
     
     with col_admin2:
-        # Logik für den Reset Button mit Bestätigung
+        # Reset Logik mit Bestätigung
         if not st.session_state.confirm_reset:
             if st.button("🗑️ Log Datei leeren", use_container_width=True):
                 st.session_state.confirm_reset = True
                 st.rerun()
         else:
-            st.warning("⚠️ Wirklich den Verlauf löschen?")
+            st.warning("⚠️ Wirklich löschen?")
             col_yes, col_no = st.columns(2)
-            if col_yes.button("✅ Ja, löschen", use_container_width=True):
+            if col_yes.button("✅ Ja", use_container_width=True):
                 clear_google_sheet()
                 st.session_state.confirm_reset = False
                 st.rerun()
             
-            if col_no.button("❌ Abbrechen", use_container_width=True):
+            if col_no.button("❌ Nein", use_container_width=True):
                 st.session_state.confirm_reset = False
                 st.rerun()
