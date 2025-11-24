@@ -17,20 +17,19 @@ PRINTERS = {
         "ntfy_topic": "fotobox_status_secret_4566",
         "warning_threshold": 20,
         "default_max_prints": 400,
-        # Wenn du Kosten anzeigen willst, hier Preis pro Rolle eintragen (z.B. 35.0)
-        "cost_per_roll_eur": None,
+        "cost_per_roll_eur": 46.58,
     },
-    # Weitere Boxen kannst du einfach ergänzen:
-    # "Zweite Box": {
-    #     "sheet_id": "...",
-    #     "ntfy_topic": "...",
-    #     "warning_threshold": 20,
-    #     "default_max_prints": 400,
-    #     "cost_per_roll_eur": 35.0,
-    # },
+    "Fotobox Laurentius": {
+        "sheet_id": "HIER_DIE_NEUE_SHEET_ID_EINSETZEN",
+        "ntfy_topic": "fotobox_status_secret_4566-weinkellerei",
+        "warning_threshold": 50,      # kannst du bei Bedarf anpassen
+        "default_max_prints": 400,    # oder 200, je nach Rolle
+        "cost_per_roll_eur": None,    # oder None, wenn du die Kosten nicht brauchst
+    },
 }
 
-HEARTBEAT_WARN_MINUTES = 5      # ab wann "keine aktuellen Daten" gewarnt wird
+
+HEARTBEAT_WARN_MINUTES = 60      # ab wann "keine aktuellen Daten" gewarnt wird
 NTFY_ACTIVE_DEFAULT = True
 ALERT_SOUND_URL = "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"  # optionaler Warnton
 
