@@ -54,7 +54,7 @@ def send_ntfy_push(title, message, tags="warning", priority="default"):
 @st.cache_data(ttl=3600)
 def load_lottieurl(url):
     try:
-        r = requests.get(url, timeout=3)
+        r = requests.get(url, timeout=5)
         if r.status_code != 200:
             return None
         return r.json()
@@ -62,22 +62,27 @@ def load_lottieurl(url):
         return None
 
 
+# Lotties (stabile URLs)
 lottie_printing = load_lottieurl(
-    "https://lottie.host/5a8439d0-a686-40df-996c-7234f2903e25/6F0s8Y5s2R.json"
+    "https://assets9.lottiefiles.com/packages/lf20_q5pk6p1k.json"   # Drucker / Loading
 )
 lottie_ready = load_lottieurl(
-    "https://assets10.lottiefiles.com/packages/lf20_jbrw3hcz.json"
+    "https://assets9.lottiefiles.com/packages/lf20_jbrw3hcz.json"   # Success / bereit
 )
 lottie_warning = load_lottieurl(
-    "https://lottie.host/97b99728-385a-4d12-811c-1e7062bc449e/1tqL2v7z2h.json"
+    "https://assets1.lottiefiles.com/packages/lf20_touohxv0.json"   # Warn-Dreieck
 )
 lottie_error = load_lottieurl(
-    "https://lottie.host/8614466e-448c-41c3-be3b-183217257e8f/GkqQ3s9C7k.json"
+    "https://assets7.lottiefiles.com/private_files/lf30_editor_e7qk3x0q.json"  # Error
 )
 
-# Fallback: wenn das Error-Lottie nicht lädt, nimm das Warn-Lottie
+# Fallbacks: wenn was nicht lädt, nimm etwas anderes damit nie „nichts“ da ist
+if lottie_warning is None:
+    lottie_warning = lottie_ready
 if lottie_error is None:
     lottie_error = lottie_warning
+if lottie_printing is None:
+    lottie_printing = lottie_ready
 
 
 # --- GOOGLE SHEETS HELPER ---
@@ -122,6 +127,9 @@ def show_live_status():
     if not df.empty:
         try:
             last_entry = df.iloc[-1]
+
+            # Wichtig: Spaltennamen exakt wie im Sheet:
+            # Timestamp | Status | Paper_Status | Media_Remaining
             timestamp_str = str(last_entry.get("Timestamp", ""))
 
             try:
@@ -130,17 +138,19 @@ def show_live_status():
                 last_update = None
 
             raw_status = str(last_entry.get("Status", "")).lower()
-            media_remaining = int(last_entry.get("MediaRemaining", 0))
+            # HIER der Fix: richtiger Spaltenname "Media_Remaining"
+            media_remaining = int(last_entry.get("Media_Remaining", 0))
             current_max = st.session_state.max_prints
 
             prev_status = st.session_state.last_warn_status
 
-            # --- ENTSCHEIDUNGSBAUM (ohne Offline-Check) ---
+            # --- ENTSCHEIDUNGSBAUM ---
             if (
                 "error" in raw_status
                 or "unknown" in raw_status
                 or "stau" in raw_status
                 or "failure" in raw_status
+                or "fehler" in raw_status
             ):
                 status_mode = "error"
                 display_text = f"⚠️ STÖRUNG: {last_entry.get('Status')}"
@@ -148,7 +158,6 @@ def show_live_status():
                 current_lottie = lottie_error
 
                 if prev_status != "error":
-                    # Neue Störung
                     send_ntfy_push(
                         "🔴 KRITISCHER FEHLER",
                         f"Drucker: {last_entry.get('Status')}",
@@ -163,7 +172,6 @@ def show_live_status():
                 display_color = "orange"
                 current_lottie = lottie_warning
 
-                # Störung wurde behoben?
                 if prev_status == "error":
                     send_ntfy_push(
                         "✅ Störung behoben",
