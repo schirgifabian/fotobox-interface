@@ -28,7 +28,7 @@ if "last_warn_status" not in st.session_state:
     st.session_state.last_warn_status = None   # "error", "low_paper", "ok"
 if "max_prints" not in st.session_state:
     st.session_state.max_prints = 400
-# Neu: Status für Animation
+# Status für Animation
 if "current_status_mode" not in st.session_state:
     st.session_state.current_status_mode = None
 if "status_loop_counter" not in st.session_state:
@@ -124,6 +124,18 @@ def clear_google_sheet():
 # --- MAIN APP LOGIK ---
 st.title(f"{PAGE_ICON} {PAGE_TITLE}")
 
+# --- GLOBALER CSS FIX: Abstand zwischen Icon und Text reduzieren ---
+st.markdown("""
+<style>
+/* Reduziert Abstand zwischen den beiden Spalten */
+div[data-testid="column"] {
+    gap: 0rem !important;
+}
+div[data-testid="column"] > div {
+    padding-right: 0.2rem !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 @st.fragment(run_every=10)
 def show_live_status():
@@ -133,8 +145,7 @@ def show_live_status():
         try:
             last_entry = df.iloc[-1]
 
-            # Wichtig: Spaltennamen exakt wie im Sheet:
-            # Timestamp | Status | Paper_Status | Media_Remaining
+            # Spalten: Timestamp | Status | Paper_Status | Media_Remaining
             timestamp_str = str(last_entry.get("Timestamp", ""))
 
             try:
@@ -221,7 +232,11 @@ def show_live_status():
 
                 st.session_state.last_warn_status = "ok"
 
-            # --- Animations-Logik nach Wunsch C ---
+            # Speziell: bei Fehler KEINE Lottie (nur statisches ⚠️)
+            if status_mode == "error":
+                current_lottie = None
+
+            # --- Animations-Logik ---
             # Reset Zähler bei Statuswechsel
             if st.session_state.current_status_mode != status_mode:
                 st.session_state.current_status_mode = status_mode
@@ -235,7 +250,7 @@ def show_live_status():
                 show_animation = True
                 loop_flag = True
 
-            elif status_mode in ("error", "low_paper"):
+            elif status_mode == "low_paper":
                 # Erste 3 „Runden“ animiert, danach statisch
                 if st.session_state.status_loop_counter < 3:
                     show_animation = True
@@ -245,7 +260,11 @@ def show_live_status():
                     show_animation = False  # statisches ⚠️
 
             elif status_mode == "ready":
-                # Immer statisch (kein Lottie)
+                # Immer statisch
+                show_animation = False
+
+            else:
+                # error / sonstiges: statisch (kein Lottie)
                 show_animation = False
 
             # --- ANZEIGE HEADER ---
