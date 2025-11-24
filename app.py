@@ -2,7 +2,6 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import requests
-from streamlit_lottie import st_lottie
 import pandas as pd
 from datetime import datetime
 
@@ -14,12 +13,10 @@ PAGE_ICON = "🖨️"
 # --- NTFY EINSTELLUNGEN ---
 NTFY_TOPIC = "fotobox_status_secret_4566"
 NTFY_ACTIVE_DEFAULT = True
-WARNING_THRESHOLD = 20  # ab wie vielen Bildern Warnung
+WARNING_THRESHOLD = 20  # Ab wie vielen Bildern Warnung?
 
 # --- SEITEN LAYOUT ---
 st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="centered")
-
-# (CSS-Hack von vorher brauchen wir hier nicht mehr, Layout ist Text links / Icon rechts)
 
 # --- SESSION STATE ---
 if "confirm_reset" not in st.session_state:
@@ -30,11 +27,6 @@ if "last_warn_status" not in st.session_state:
     st.session_state.last_warn_status = None  # "error", "low_paper", "ok"
 if "max_prints" not in st.session_state:
     st.session_state.max_prints = 400
-if "current_status_mode" not in st.session_state:
-    st.session_state.current_status_mode = None
-if "status_loop_counter" not in st.session_state:
-    st.session_state.status_loop_counter = 0
-
 
 # --- PUSH ---
 def send_ntfy_push(title, message, tags="warning", priority="default"):
@@ -50,29 +42,6 @@ def send_ntfy_push(title, message, tags="warning", priority="default"):
         )
     except Exception:
         pass
-
-
-# --- LOTTIE LADEN ---
-@st.cache_data(ttl=3600)
-def load_lottieurl(url):
-    try:
-        r = requests.get(url, timeout=5)
-        if r.status_code == 200:
-            return r.json()
-    except Exception:
-        pass
-    return None
-
-
-lottie_printing = load_lottieurl("https://assets9.lottiefiles.com/packages/lf20_q5pk6p1k.json")
-lottie_ready    = load_lottieurl("https://assets9.lottiefiles.com/packages/lf20_jbrw3hcz.json")
-lottie_warning  = load_lottieurl("https://assets1.lottiefiles.com/packages/lf20_touohxv0.json")
-lottie_error    = load_lottieurl("https://assets7.lottiefiles.com/private_files/lf30_editor_e7qk3x0q.json")
-
-# Fallbacks
-if lottie_warning  is None: lottie_warning  = lottie_ready
-if lottie_error    is None: lottie_error    = lottie_warning
-if lottie_printing is None: lottie_printing = lottie_ready
 
 
 # --- GOOGLE SHEETS ---
@@ -110,6 +79,7 @@ st.title(f"{PAGE_ICON} {PAGE_TITLE}")
 @st.fragment(run_every=10)
 def show_live_status():
     df = get_data()
+
     if df.empty:
         st.info("System wartet auf Start…")
         st.caption("Noch keine Druckdaten empfangen.")
@@ -118,25 +88,25 @@ def show_live_status():
     try:
         last = df.iloc[-1]
 
-        # Spalten: Timestamp | Status | Paper_Status | Media_Remaining
+        # Spalten im Sheet: Timestamp | Status | Paper_Status | Media_Remaining
         timestamp       = str(last.get("Timestamp", ""))
         raw_status      = str(last.get("Status", "")).lower()
         media_remaining = int(last.get("Media_Remaining", 0))
 
         prev_status = st.session_state.last_warn_status
 
-        # --- ENTSCHEIDUNG STATUS ---
+        # --- STATUS ERMITTELN ---
         if any(w in raw_status for w in ["error", "failure", "fehler", "stau", "unknown"]):
             status_mode   = "error"
             display_text  = f"⚠️ STÖRUNG: {last.get('Status')}"
             display_color = "red"
-            current_lottie = None  # keine Animation bei Fehler
 
             if prev_status != "error":
                 send_ntfy_push(
                     "🔴 Fehler",
                     f"Druckerfehler: {last.get('Status')}",
                     tags="rotating_light",
+                    priority="high",
                 )
             st.session_state.last_warn_status = "error"
 
@@ -144,78 +114,56 @@ def show_live_status():
             status_mode   = "low_paper"
             display_text  = "⚠️ Papier fast leer!"
             display_color = "orange"
-            current_lottie = lottie_warning
 
             if prev_status == "error":
-                send_ntfy_push("✅ Störung behoben", "Drucker läuft wieder.", tags="white_check_mark")
+                send_ntfy_push(
+                    "✅ Störung behoben",
+                    "Drucker läuft wieder.",
+                    tags="white_check_mark",
+                )
             if prev_status != "low_paper":
-                send_ntfy_push("⚠️ Papierwarnung", f"Noch {media_remaining} Bilder!", tags="warning")
-
+                send_ntfy_push(
+                    "⚠️ Papierwarnung",
+                    f"Noch {media_remaining} Bilder!",
+                    tags="warning",
+                )
             st.session_state.last_warn_status = "low_paper"
 
         elif "printing" in raw_status or "processing" in raw_status:
             status_mode   = "printing"
             display_text  = "🖨️ Druckt gerade…"
             display_color = "blue"
-            current_lottie = lottie_printing
 
             if prev_status == "error":
-                send_ntfy_push("✅ Störung behoben", "Drucker druckt wieder.", tags="white_check_mark")
-
+                send_ntfy_push(
+                    "✅ Störung behoben",
+                    "Drucker druckt wieder.",
+                    tags="white_check_mark",
+                )
             st.session_state.last_warn_status = "ok"
 
         else:
             status_mode   = "ready"
             display_text  = "✅ Bereit"
             display_color = "green"
-            current_lottie = None  # ready ohne Animation
 
             if prev_status == "error":
-                send_ntfy_push("✅ Störung behoben", "Drucker ist wieder bereit.", tags="white_check_mark")
-
+                send_ntfy_push(
+                    "✅ Störung behoben",
+                    "Drucker ist wieder bereit.",
+                    tags="white_check_mark",
+                )
             st.session_state.last_warn_status = "ok"
 
-        # --- ANIMATIONS-STEUERUNG ---
-        if st.session_state.current_status_mode != status_mode:
-            st.session_state.current_status_mode = status_mode
-            st.session_state.status_loop_counter = 0
+        # --- HEADER (nur Text + Icon im Text) ---
+        st.markdown(
+            f"<h2 style='color:{display_color}; margin-top:0; text-align:center;'>{display_text}</h2>",
+            unsafe_allow_html=True,
+        )
+        st.caption(f"Letztes Signal: {timestamp}")
 
-        show_animation = False
-        if status_mode == "printing":
-            show_animation = True
-        elif status_mode == "low_paper":
-            # nur die ersten 3 Zyklen animieren, danach ruhig
-            if st.session_state.status_loop_counter < 3:
-                show_animation = True
-                st.session_state.status_loop_counter += 1
-
-        # --- HEADER: TEXT LINKS, ANIMATION / ICON RECHTS ---
-        col_text, col_anim = st.columns([3, 1])
-
-        with col_text:
-            st.markdown(
-                f"<h2 style='color:{display_color}; margin-top:0;'>{display_text}</h2>",
-                unsafe_allow_html=True,
-            )
-            st.caption(f"Letztes Signal: {timestamp}")
-            if status_mode == "error":
-                st.error("Bitte Drucker prüfen (Störung aktiv).")
-
-        with col_anim:
-            if show_animation and current_lottie:
-                st_lottie(
-                    current_lottie,
-                    height=140,
-                    loop=True,
-                    key=f"anim_{status_mode}",
-                )
-            else:
-                # Nur bei Ready ein kleines Icon rechts, bei den anderen reicht der Text links
-                if status_mode == "ready":
-                    st.markdown("### ✅")
-                elif status_mode == "printing":
-                    st.markdown("### 🖨️")
-                # low_paper + error bekommen rechts nichts, da schon Emoji im Text links
+        if status_mode == "error":
+            st.error("Bitte Drucker prüfen (Störung aktiv).")
 
         # --- PAPIERSTATUS ---
         st.markdown("#### Papierstatus")
@@ -277,7 +225,11 @@ with st.expander("🛠️ Admin & Einstellungen"):
 
     with c1:
         st.write("### Externe Links")
-        st.link_button("🔗 Fotoshare Cloud", "https://fotoshare.co/admin/index", use_container_width=True)
+        st.link_button(
+            "🔗 Fotoshare Cloud",
+            "https://fotoshare.co/admin/index",
+            use_container_width=True,
+        )
 
         st.write("### Benachrichtigungen")
         st.code(NTFY_TOPIC)
