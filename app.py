@@ -8,25 +8,26 @@ from datetime import datetime
 import time
 import uuid
 import hashlib
+import json
 
-# --- AQARA CLIENT -------------------------------------------------------------
+# --------------------------------------------------------------------
+# AQARA CLIENT
+# --------------------------------------------------------------------
 class AqaraClient:
     def __init__(self, app_id, key_id, app_secret, region="ger"):
         self.app_id = app_id
         self.key_id = key_id
         self.app_secret = app_secret
-        # Base URL abhängig von der Region (ger = Europa)
         self.base_url = f"https://open-{region}.aqara.com/v3.0/open/api"
 
     def _generate_headers(self, access_token=None):
-        """Erstellt die nötige Signatur für Aqara"""
-        nonce = str(uuid.uuid4().hex)
+        """Erstellt die nötige Signatur für Aqara V3."""
+        nonce = uuid.uuid4().hex
         timestamp = str(int(time.time() * 1000))
 
-        # Signatur-Formel von Aqara V3
         sign_str = (
-            f"Appid={self.app_id}&Keyid={self.key_id}&Nonce={nonce}"
-            f"&Time={timestamp}{self.app_secret}"
+            f"Appid={self.app_id}&Keyid={self.key_id}"
+            f"&Nonce={nonce}&Time={timestamp}{self.app_secret}"
         )
         sign = hashlib.md5(sign_str.encode("utf-8")).hexdigest().lower()
 
@@ -39,16 +40,14 @@ class AqaraClient:
             "Sign": sign,
             "Lang": "de",
         }
-
         if access_token:
             headers["Accesstoken"] = access_token
-
         return headers
 
     def get_device_value(self, access_token, device_id, resource_name="temperature"):
         """
         Liest Sensorwerte aus.
-        resource_name für Temp-Sensor meist: 'temperature' oder 'humidity'
+        resource_name z.B. '0.1.85' (Temperatur) oder '0.2.85' (Feuchte).
         """
         url = f"{self.base_url}/resource/query"
         headers = self._generate_headers(access_token)
@@ -63,56 +62,68 @@ class AqaraClient:
         }
 
         try:
-            response = requests.post(url, headers=headers, json=payload)
+            response = requests.post(url, headers=headers, json=payload, timeout=5)
             data = response.json()
 
-            # Prüfen ob API Success meldet (code 0)
             if data.get("code") == 0 and data.get("result"):
-                # Wert extrahieren
-                value = data["result"][0]["value"]
-                return value
+                return data["result"][0]["value"]
             else:
                 return f"Fehler: {data.get('message', 'Unbekannt')}"
         except Exception as e:
             return f"Verbindungsfehler: {str(e)}"
 
-    def switch_socket(self, access_token, device_id, turn_on: bool):
+    def switch_socket(
+        self,
+        access_token,
+        device_id,
+        turn_on: bool,
+        resource_id="4.1.85",
+        mode: str = "state",
+    ):
         """
-        Schaltet eine Steckdose
-        turn_on: True (AN) oder False (AUS)
+        Schaltet eine Steckdose.
+
+        mode="state":
+            0 = AUS, 1 = EIN (turn_on steuert den Zustand)
+        mode="toggle":
+            2 = TOGGLE (unabhängig von turn_on)
         """
         url = f"{self.base_url}/resource/update"
         headers = self._generate_headers(access_token)
 
-        # Aqara Smart Plugs nutzen meist '4.1.85' (toggle) oder einfach 'toggle'
-        # Als Value oft '1' für an, '0' für aus. Das kann variieren je nach Modell!
-        state_value = "1" if turn_on else "0"
+        if mode == "toggle":
+            value = 2
+        else:
+            value = 1 if turn_on else 0  # ganz sicher 0/1
 
         payload = {
             "resources": [
                 {
                     "subjectId": device_id,
-                    "resourceId": "toggle",  # Falls das nicht geht, '4.1.85' versuchen
-                    "value": state_value,
+                    "resourceId": resource_id,
+                    "value": value,
                 }
             ]
         }
 
         try:
-            response = requests.post(url, headers=headers, json=payload)
+            response = requests.post(url, headers=headers, json=payload, timeout=5)
             return response.json()
         except Exception as e:
             return {"code": -1, "message": str(e)}
 
 
-# --- AQARA KONFIG AUS SECRETS -------------------------------------------------
+# --------------------------------------------------------------------
+# AQARA KONFIG AUS SECRETS
+# --------------------------------------------------------------------
 AQARA_ENABLED = False
 aqara_client = None
 AQARA_ACCESS_TOKEN = None
 AQARA_SOCKET_DEVICE_ID = None
+AQARA_SOCKET_RESOURCE_ID = "4.1.85"
 AQARA_SENSOR_DEVICE_ID = None
-AQARA_TEMP_RESOURCE = "temperature"
-AQARA_HUM_RESOURCE = "humidity"
+AQARA_TEMP_RESOURCE = "0.1.85"
+AQARA_HUM_RESOURCE = "0.2.85"
 
 try:
     aqara_cfg = st.secrets["aqara"]
@@ -120,12 +131,13 @@ try:
     AQARA_KEY_ID = aqara_cfg["key_id"]
     AQARA_APP_SECRET = aqara_cfg["app_secret"]
     AQARA_ACCESS_TOKEN = aqara_cfg["access_token"]
-    AQARA_SOCKET_DEVICE_ID = aqara_cfg["socket_device_id"]
 
-    # Sensor optional
+    AQARA_SOCKET_DEVICE_ID = aqara_cfg["socket_device_id"]
+    AQARA_SOCKET_RESOURCE_ID = aqara_cfg.get("socket_resource_id", "4.1.85")
+
     AQARA_SENSOR_DEVICE_ID = aqara_cfg.get("sensor_device_id")
-    AQARA_TEMP_RESOURCE = aqara_cfg.get("temperature_resource", "temperature")
-    AQARA_HUM_RESOURCE = aqara_cfg.get("humidity_resource", "humidity")
+    AQARA_TEMP_RESOURCE = aqara_cfg.get("temperature_resource", "0.1.85")
+    AQARA_HUM_RESOURCE = aqara_cfg.get("humidity_resource", "0.2.85")
 
     aqara_client = AqaraClient(
         app_id=AQARA_APP_ID,
@@ -135,15 +147,7 @@ try:
     )
     AQARA_ENABLED = True
 except Exception:
-    # Wenn Secrets nicht konfiguriert sind, bleibt AQARA_ENABLED = False
     AQARA_ENABLED = False
-
-
-def _to_float_or_none(val):
-    try:
-        return float(val)
-    except Exception:
-        return None
 
 
 def get_environment_values():
@@ -151,14 +155,11 @@ def get_environment_values():
     Holt Temperatur & Luftfeuchte vom Aqara-Sensor.
     Gibt (temp, hum, error_msg) zurück.
 
-    Hinweis:
-    - Aqara liefert Werte in 0.01-Einheiten (z.B. 3203 = 32.03 °C),
-      deshalb werden die Rohwerte hier durch 100 geteilt.
+    Aqara liefert 0.01-Einheiten, z.B. 3203 = 32.03.
     """
     if not (AQARA_ENABLED and AQARA_SENSOR_DEVICE_ID and aqara_client):
         return None, None, "Aqara-Sensor nicht konfiguriert."
 
-    # Rohwerte von der API holen
     temp_raw = aqara_client.get_device_value(
         AQARA_ACCESS_TOKEN,
         AQARA_SENSOR_DEVICE_ID,
@@ -170,15 +171,21 @@ def get_environment_values():
         AQARA_HUM_RESOURCE,
     )
 
-    # Wenn die API schon eine Fehlermeldung als String liefert
+    # Fehlermeldungen der API direkt weitergeben
     if isinstance(temp_raw, str) and temp_raw.startswith(("Fehler", "Verbindungsfehler")):
         return None, None, temp_raw
     if isinstance(hum_raw, str) and hum_raw.startswith(("Fehler", "Verbindungsfehler")):
         return None, None, hum_raw
 
-    # In float wandeln und von 0.01-Einheiten auf "normale" Werte skalieren
-    temp_val = _to_float_or_none(temp_raw)
-    hum_val = _to_float_or_none(hum_raw)
+    try:
+        temp_val = float(temp_raw)
+    except Exception:
+        temp_val = None
+
+    try:
+        hum_val = float(hum_raw)
+    except Exception:
+        hum_val = None
 
     temp = temp_val / 100.0 if temp_val is not None else None
     hum = hum_val / 100.0 if hum_val is not None else None
@@ -186,40 +193,31 @@ def get_environment_values():
     return temp, hum, None
 
 
-# --- KONFIGURATION GLOBAL -----------------------------------------------------
+# --------------------------------------------------------------------
+# GLOBAL KONFIG
+# --------------------------------------------------------------------
 PAGE_TITLE = "Fotobox Drucker Status"
 PAGE_ICON = "🖨️"
 
-# Mehrere Boxen vorbereitet – aktuell eine befüllt.
 PRINTERS = {
     "Standard Fotobox": {
         "sheet_id": "10uLjotNMT3AewBHdkuYyOudbbOCEuquDqGbwr2Wu7ig",
         "ntfy_topic": "fotobox_status_secret_4566",
         "warning_threshold": 20,
         "default_max_prints": 400,
-        # Wenn du Kosten anzeigen willst, hier Preis pro Rolle eintragen (z.B. 35.0)
         "cost_per_roll_eur": 46.59,
     },
-    # Weitere Boxen kannst du einfach ergänzen:
-    # "Zweite Box": {
-    #     "sheet_id": "...",
-    #     "ntfy_topic": "...",
-    #     "warning_threshold": 20,
-    #     "default_max_prints": 400,
-    #     "cost_per_roll_eur": 35.0,
-    # },
 }
 
-HEARTBEAT_WARN_MINUTES = 5  # ab wann "keine aktuellen Daten" gewarnt wird
+HEARTBEAT_WARN_MINUTES = 5
 NTFY_ACTIVE_DEFAULT = True
-ALERT_SOUND_URL = (
-    "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
-)  # optionaler Warnton
+ALERT_SOUND_URL = "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
 
-# --- SEITEN LAYOUT ------------------------------------------------------------
+# --------------------------------------------------------------------
+# LAYOUT & SESSION STATE
+# --------------------------------------------------------------------
 st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="centered")
 
-# --- SESSION STATE INIT -------------------------------------------------------
 if "confirm_reset" not in st.session_state:
     st.session_state.confirm_reset = False
 if "ntfy_active" not in st.session_state:
@@ -229,21 +227,18 @@ if "last_warn_status" not in st.session_state:
 if "last_sound_status" not in st.session_state:
     st.session_state.last_sound_status = None
 if "max_prints" not in st.session_state:
-    st.session_state.max_prints = None  # wird nach Box-Auswahl gesetzt
+    st.session_state.max_prints = None
 if "selected_printer" not in st.session_state:
     st.session_state.selected_printer = None
 
-# --- SIDEBAR: BOX & ANSICHT ---------------------------------------------------
 st.sidebar.header("Einstellungen")
 printer_name = st.sidebar.selectbox("Fotobox auswählen", list(PRINTERS.keys()))
 event_mode = st.sidebar.toggle("Event-Ansicht (nur Status)", value=False)
 sound_enabled = st.sidebar.toggle("Sound bei Warnungen", value=False)
 
-# Konfiguration der gewählten Box in Session übernehmen
 printer_cfg = PRINTERS[printer_name]
 
 if st.session_state.selected_printer != printer_name:
-    # Beim Box-Wechsel Status zurücksetzen
     st.session_state.selected_printer = printer_name
     st.session_state.last_warn_status = None
     st.session_state.last_sound_status = None
@@ -254,7 +249,10 @@ st.session_state.ntfy_topic = printer_cfg["ntfy_topic"]
 WARNING_THRESHOLD = printer_cfg["warning_threshold"]
 COST_PER_ROLL_EUR = printer_cfg["cost_per_roll_eur"]
 
-# --- FUNKTIONEN: PUSH ---------------------------------------------------------
+
+# --------------------------------------------------------------------
+# PUSH FUNKTION
+# --------------------------------------------------------------------
 def send_ntfy_push(title, message, tags="warning", priority="default"):
     if not st.session_state.ntfy_active:
         return
@@ -274,11 +272,12 @@ def send_ntfy_push(title, message, tags="warning", priority="default"):
             timeout=5,
         )
     except Exception:
-        # bewusst leise – Dashboard soll nicht crashen, wenn ntfy nicht geht
-        pass
+        pass  # Dashboard soll nicht crashen
 
 
-# --- FUNKTIONEN: GOOGLE SHEETS -----------------------------------------------
+# --------------------------------------------------------------------
+# GOOGLE SHEETS
+# --------------------------------------------------------------------
 def get_gspread_client():
     secrets = st.secrets["gcp_service_account"]
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -294,7 +293,6 @@ def get_spreadsheet():
 
 
 def get_main_worksheet():
-    # Annahme: erste Tabelle = Log vom Drucker
     return get_spreadsheet().sheet1
 
 
@@ -308,7 +306,6 @@ def get_data(sheet_id: str):
 
 
 def clear_google_sheet():
-    """Log (A2:Z) der Haupt-Tabelle leeren."""
     try:
         ws = get_main_worksheet()
         ws.batch_clear(["A2:Z10000"])
@@ -319,7 +316,6 @@ def clear_google_sheet():
 
 
 def log_reset_event(package_size: int, note: str = ""):
-    """Papierwechsel in separater 'Meta'-Tabelle protokollieren."""
     try:
         sh = get_spreadsheet()
         try:
@@ -334,18 +330,14 @@ def log_reset_event(package_size: int, note: str = ""):
         st.warning(f"Reset konnte nicht im Meta-Log gespeichert werden: {e}")
 
 
-# --- STATUS-LOGIK -------------------------------------------------------------
+# --------------------------------------------------------------------
+# STATUS-LOGIK
+# --------------------------------------------------------------------
 def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
-    """Ermittelt Status-Modus, Anzeige-Text/Farbe und ggf. Push-Meldung."""
     prev_status = st.session_state.last_warn_status
-
     raw_status_l = (raw_status or "").lower()
 
-    # Grund-Status anhand Status-Text & Papier
-    if any(
-        w in raw_status_l
-        for w in ["error", "fehler", "stau", "failure", "unknown"]
-    ):
+    if any(w in raw_status_l for w in ["error", "fehler", "stau", "failure", "unknown"]):
         status_mode = "error"
         display_text = f"⚠️ STÖRUNG: {raw_status}"
         display_color = "red"
@@ -362,7 +354,6 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
         display_text = "✅ Bereit"
         display_color = "green"
 
-    # Heartbeat / keine aktuellen Daten
     minutes_diff = None
     ts_parsed = pd.to_datetime(timestamp, errors="coerce")
     if pd.notna(ts_parsed):
@@ -373,7 +364,6 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
             display_text = "⚠️ Keine aktuellen Daten"
             display_color = "orange"
 
-    # Push-Entscheidung
     push = None
     if status_mode == "error" and prev_status != "error":
         push = ("🔴 Fehler", f"Druckerfehler: {raw_status}", "rotating_light")
@@ -389,9 +379,7 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
     elif prev_status == "error" and status_mode not in ["error", None]:
         push = ("✅ Störung behoben", "Drucker läuft wieder.", "white_check_mark")
 
-    # Session-Status aktualisieren
     st.session_state.last_warn_status = status_mode
-
     return status_mode, display_text, display_color, push, minutes_diff
 
 
@@ -413,7 +401,9 @@ def maybe_play_sound(status_mode: str, sound_enabled: bool):
         st.session_state.last_sound_status = None
 
 
-# --- START DES UI -------------------------------------------------------------
+# --------------------------------------------------------------------
+# UI START
+# --------------------------------------------------------------------
 st.title(f"{PAGE_ICON} {PAGE_TITLE}")
 
 
@@ -445,7 +435,6 @@ def show_live_status(sound_enabled: bool = False):
 
         maybe_play_sound(status_mode, sound_enabled)
 
-        # --- HEADER ---
         heartbeat_info = ""
         if minutes_diff is not None:
             heartbeat_info = f" (vor {minutes_diff} Min)"
@@ -460,17 +449,14 @@ def show_live_status(sound_enabled: bool = False):
             </div>
         </div>
         """
-
         st.markdown(header_html, unsafe_allow_html=True)
 
         if status_mode == "error":
             st.error("Bitte Drucker prüfen (Störung aktiv).")
         elif status_mode == "stale":
-            st.warning(
-                "Seit einigen Minuten keine Daten – Verbindung / Script prüfen."
-            )
+            st.warning("Seit einigen Minuten keine Daten – Verbindung / Script prüfen.")
 
-        # --- PAPIERSTATUS ----------------------------------------------------
+        # Papierstatus
         st.markdown("### Papierstatus")
 
         if status_mode == "error":
@@ -480,29 +466,18 @@ def show_live_status(sound_enabled: bool = False):
             remaining_text = f"{media_remaining} Stk"
             if media_remaining > 0:
                 m = int(media_remaining * 1.5)
-                forecast = (
-                    f"{m} Min." if m < 60 else f"{m//60} Std. {m%60} Min."
-                )
+                forecast = f"{m} Min." if m < 60 else f"{m//60} Std. {m%60} Min."
             else:
                 forecast = "0 Min."
 
         colA, colB, colC = st.columns(3)
-        colA.metric(
-            "Verbleibend",
-            remaining_text,
-            f"von {st.session_state.max_prints}",
-        )
+        colA.metric("Verbleibend", remaining_text, f"von {st.session_state.max_prints}")
         colB.metric("Restlaufzeit (geschätzt)", forecast)
 
-        # Kosten-Anzeige, falls konfiguriert
         if COST_PER_ROLL_EUR:
             try:
-                used = max(
-                    0, st.session_state.max_prints - media_remaining
-                )
-                cost_per_print = (
-                    COST_PER_ROLL_EUR / st.session_state.max_prints
-                )
+                used = max(0, st.session_state.max_prints - media_remaining)
+                cost_per_print = COST_PER_ROLL_EUR / st.session_state.max_prints
                 cost_used = used * cost_per_print
                 colC.metric("Kosten seit Reset", f"{cost_used:0.2f} €")
             except Exception:
@@ -510,14 +485,12 @@ def show_live_status(sound_enabled: bool = False):
         else:
             colC.metric("Kosten seit Reset", "–")
 
-        # Farbbalken
+        # Progress-Bar
         if status_mode == "error":
             bar_color = "red"
             progress_val = 0
         else:
-            progress_val = max(
-                0, min(1, media_remaining / st.session_state.max_prints)
-            )
+            progress_val = max(0, min(1, media_remaining / st.session_state.max_prints))
             if progress_val < 0.1:
                 bar_color = "red"
             elif progress_val < 0.25:
@@ -537,28 +510,6 @@ def show_live_status(sound_enabled: bool = False):
         )
         st.progress(progress_val)
 
-        # --- UMGEBUNG (AQARA SENSOR) ----------------------------------------
-        st.markdown("### Umgebung (Aqara)")
-
-        if not (AQARA_ENABLED and AQARA_SENSOR_DEVICE_ID):
-            st.caption("Aqara-Sensor ist nicht konfiguriert.")
-        else:
-            temp, hum, err = get_environment_values()
-            cT, cH = st.columns(2)
-            if err:
-                cT.error(err)
-            else:
-                temp_str = "–"
-                hum_str = "–"
-                if temp is not None:
-                    # Falls deine Werte z.B. in 0.1°C kommen, kannst du hier anpassen
-                    temp_str = f"{temp:.1f} °C"
-                if hum is not None:
-                    hum_str = f"{hum:.1f} %"
-
-                cT.metric("Temperatur", temp_str)
-                cH.metric("Luftfeuchtigkeit", hum_str)
-
     except Exception as e:
         st.error(f"Fehler bei der Datenverarbeitung: {e}")
 
@@ -571,16 +522,12 @@ def show_history():
 
     st.subheader("Verlauf & Analyse")
 
-    # Zeitreihe vorbereiten
     if "Timestamp" in df.columns and "Media_Remaining" in df.columns:
         df_plot = df.copy()
-        df_plot["Timestamp"] = pd.to_datetime(
-            df_plot["Timestamp"], errors="coerce"
-        )
+        df_plot["Timestamp"] = pd.to_datetime(df_plot["Timestamp"], errors="coerce")
         df_plot = df_plot.dropna(subset=["Timestamp"]).set_index("Timestamp")
         st.line_chart(df_plot["Media_Remaining"], use_container_width=True)
 
-    # Kennzahlen
     last = df.iloc[-1]
     try:
         media_remaining = int(last.get("Media_Remaining", 0))
@@ -588,9 +535,7 @@ def show_history():
         media_remaining = 0
 
     total_rows = len(df)
-    prints_since_reset = max(
-        0, st.session_state.max_prints - media_remaining
-    )
+    prints_since_reset = max(0, st.session_state.max_prints - media_remaining)
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Log-Einträge", total_rows)
@@ -609,9 +554,10 @@ def show_history():
     st.dataframe(df.tail(200), use_container_width=True)
 
 
-# --- INHALT RENDERN -----------------------------------------------------------
+# --------------------------------------------------------------------
+# RENDER
+# --------------------------------------------------------------------
 if event_mode:
-    # Nur Live-Status anzeigen – ideal für Monitor/Kiosk
     show_live_status(sound_enabled)
 else:
     tab_live, tab_hist = st.tabs(["Live-Status", "Historie & Analyse"])
@@ -622,11 +568,14 @@ else:
 
 st.markdown("---")
 
-# --- ADMIN --------------------------------------------------------------------
+# --------------------------------------------------------------------
+# ADMIN
+# --------------------------------------------------------------------
 if not event_mode:
     with st.expander("🛠️ Admin & Einstellungen"):
         col1, col2 = st.columns(2)
 
+        # LINKS & BENACHRICHTIGUNGEN
         with col1:
             st.write("### Externe Links")
             st.link_button(
@@ -636,9 +585,7 @@ if not event_mode:
             )
 
             st.write("### Benachrichtigungen")
-            st.code(
-                st.session_state.ntfy_topic or "(kein Topic konfiguriert)"
-            )
+            st.code(st.session_state.ntfy_topic or "(kein Topic konfiguriert)")
             st.session_state.ntfy_active = st.checkbox(
                 "Push aktiv", st.session_state.ntfy_active
             )
@@ -647,6 +594,7 @@ if not event_mode:
                 send_ntfy_push("Test", "Test erfolgreich", tags="tada")
                 st.toast("Test gesendet!")
 
+        # PAPIER / RESET
         with col2:
             st.write("### Neuer Auftrag / Papierwechsel")
             size = st.radio(
@@ -675,9 +623,7 @@ if not event_mode:
                 )
                 y, n = st.columns(2)
                 if y.button("Ja", use_container_width=True):
-                    st.session_state.max_prints = (
-                        st.session_state.temp_package_size
-                    )
+                    st.session_state.max_prints = st.session_state.temp_package_size
                     clear_google_sheet()
                     log_reset_event(
                         st.session_state.temp_package_size,
@@ -690,36 +636,72 @@ if not event_mode:
                     st.session_state.confirm_reset = False
                     st.rerun()
 
-            st.markdown("---")
-            st.write("### Aqara Steckdose Fotobox")
+        st.markdown("---")
 
-            if not AQARA_ENABLED:
-                st.info(
-                    "Aqara ist nicht konfiguriert. "
-                    "Bitte [aqara] in secrets.toml setzen."
-                )
+        # BOX-OBERTEIL (Temperatur / Luftfeuchte)
+        st.write("### Box-Oberteil (Temperatur & Luftfeuchtigkeit)")
+        if not (AQARA_ENABLED and AQARA_SENSOR_DEVICE_ID):
+            st.caption("Aqara-Sensor ist nicht konfiguriert.")
+        else:
+            temp, hum, err = get_environment_values()
+            if err:
+                st.error(f"Fehler: {err}")
             else:
-                c_on, c_off = st.columns(2)
-                if c_on.button("Steckdose AN 🔌", use_container_width=True):
-                    res = aqara_client.switch_socket(
-                        AQARA_ACCESS_TOKEN, AQARA_SOCKET_DEVICE_ID, True
-                    )
-                    if res.get("code") == 0:
-                        st.success("Steckdose eingeschaltet.")
-                    else:
-                        st.error(
-                            f"Fehler beim Einschalten: "
-                            f"{res.get('message', res)}"
-                        )
+                cT, cH = st.columns(2)
+                temp_str = f"{temp:.1f} °C" if temp is not None else "–"
+                hum_str = f"{hum:.1f} %" if hum is not None else "–"
+                cT.metric("Temperatur", temp_str)
+                cH.metric("Luftfeuchtigkeit", hum_str)
 
-                if c_off.button("Steckdose AUS ⛔", use_container_width=True):
-                    res = aqara_client.switch_socket(
-                        AQARA_ACCESS_TOKEN, AQARA_SOCKET_DEVICE_ID, False
-                    )
-                    if res.get("code") == 0:
-                        st.success("Steckdose ausgeschaltet.")
-                    else:
-                        st.error(
-                            f"Fehler beim Ausschalten: "
-                            f"{res.get('message', res)}"
-                        )
+        st.markdown("---")
+
+        # AQARA STECKDOSE
+        st.write("### Aqara Steckdose Fotobox")
+        if not AQARA_ENABLED:
+            st.info(
+                "Aqara ist nicht konfiguriert. Bitte [aqara] in secrets.toml setzen."
+            )
+        else:
+            col_toggle, col_on, col_off = st.columns(3)
+
+            if col_toggle.button("Toggle 🔁", use_container_width=True):
+                res = aqara_client.switch_socket(
+                    AQARA_ACCESS_TOKEN,
+                    AQARA_SOCKET_DEVICE_ID,
+                    turn_on=True,
+                    resource_id=AQARA_SOCKET_RESOURCE_ID,
+                    mode="toggle",
+                )
+                if res.get("code") == 0:
+                    st.success("Steckdose getoggelt.")
+                else:
+                    st.error("Fehler beim Toggle:")
+                    st.code(json.dumps(res, indent=2))
+
+            if col_on.button("Steckdose AN 🔌", use_container_width=True):
+                res = aqara_client.switch_socket(
+                    AQARA_ACCESS_TOKEN,
+                    AQARA_SOCKET_DEVICE_ID,
+                    turn_on=True,
+                    resource_id=AQARA_SOCKET_RESOURCE_ID,
+                    mode="state",
+                )
+                if res.get("code") == 0:
+                    st.success("Steckdose eingeschaltet.")
+                else:
+                    st.error("Fehler beim Einschalten:")
+                    st.code(json.dumps(res, indent=2))
+
+            if col_off.button("Steckdose AUS ⛔", use_container_width=True):
+                res = aqara_client.switch_socket(
+                    AQARA_ACCESS_TOKEN,
+                    AQARA_SOCKET_DEVICE_ID,
+                    turn_on=False,
+                    resource_id=AQARA_SOCKET_RESOURCE_ID,
+                    mode="state",
+                )
+                if res.get("code") == 0:
+                    st.success("Steckdose ausgeschaltet.")
+                else:
+                    st.error("Fehler beim Ausschalten:")
+                    st.code(json.dumps(res, indent=2))
