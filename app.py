@@ -146,7 +146,8 @@ class AqaraClient:
 # AQARA Farbsettings
 # --------------------------------------------------------------------
 
-    def temp_color_and_label(temp: float | None):
+
+def temp_color_and_label(temp: float | None):
     """
     Gibt (Farbe, Zusatzlabel) für eine Temperatur zurück.
     """
