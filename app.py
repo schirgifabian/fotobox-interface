@@ -69,63 +69,64 @@ class AqaraClient:
             headers["Accesstoken"] = access_token
         return headers
 
-    def get_device_value(self, access_token, device_id, resource_id: str):
+    # ---------- NEU: gemeinsame Low-Level-Methode für query.resource.value ----------
+    def _query_resource_value(self, access_token, device_id, resource_ids):
         """
-        Liest einen Sensorwert über Aqara V3.
+        Low-Level Call für query.resource.value.
+        Gibt IMMER die rohe JSON-Response (dict) zurück.
+        """
+        if isinstance(resource_ids, str):
+            resource_ids = [resource_ids]
 
-        intent: query.resource.value
-        Hinweis:
-        - data ist (wie bei write.resource.device) ein Array
-        - pro Eintrag können mehrere Ressourcen angefragt werden
-        """
         url = self.base_url
         headers = self._generate_headers(access_token)
 
         payload = {
             "intent": "query.resource.value",
-            "data": [
-                {
-                    "subjectId": device_id,
-                    "resources": [
-                        {
-                            "resourceId": resource_id
-                        }
-                    ],
-                }
-            ],
+            "data": {
+                "resources": [
+                    {
+                        "subjectId": device_id,
+                        "resourceIds": resource_ids,
+                    }
+                ]
+            },
         }
 
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=5)
-            data = response.json()
-
-            # DEBUG (kannst du wieder rausnehmen, wenn alles läuft)
-            # print("AQARA SENSOR RESPONSE:", json.dumps(data, indent=2, ensure_ascii=False))
-
-            if data.get("code") == 0 and data.get("result"):
-                first = data["result"][0]
-
-                # Variante 1: value direkt im ersten Element
-                if "value" in first:
-                    return first["value"]
-
-                # Variante 2: value innerhalb von resources[]
-                resources = first.get("resources") or []
-                if resources and isinstance(resources, list):
-                    return resources[0].get("value")
-
-                return "Fehler: Kein Wert im Ergebnis gefunden."
-
-            # Fehlertext möglichst klar extrahieren
-            msg = (
-                data.get("message")
-                or data.get("msgDetails")
-                or f"Code {data.get('code', 'unbekannt')}"
-            )
-            return f"Fehler: {msg}"
-
+            return response.json()
         except Exception as e:
-            return f"Verbindungsfehler: {str(e)}"
+            return {"code": -1, "message": str(e)}
+
+    def get_device_value(self, access_token, device_id, resource_id: str):
+        """
+        High-Level Wrapper: gibt entweder den Wert (String) oder eine
+        Fehlerbeschreibung ("Fehler: ...") zurück.
+        """
+        data = self._query_resource_value(access_token, device_id, resource_id)
+
+        # Erfolg
+        if data.get("code") == 0 and data.get("result"):
+            first = data["result"][0]
+            # typischer Response: { timeStamp, resourceId, value, subjectId }
+            if "value" in first:
+                return first["value"]
+            return "Fehler: Kein Wert im Ergebnis gefunden."
+
+        # Fehlertext möglichst klar extrahieren
+        msg = (
+            data.get("message")
+            or data.get("msgDetails")
+            or f"Code {data.get('code', 'unbekannt')}"
+        )
+        return f"Fehler: {msg}"
+
+    def get_device_value_debug(self, access_token, device_id, resource_id: str):
+        """
+        Für Debug-Zwecke: rohe JSON-Response zurückgeben.
+        """
+        return self._query_resource_value(access_token, device_id, resource_id)
 
     def switch_socket(
         self,
@@ -795,20 +796,36 @@ if not event_mode:
                 """
                 colH.markdown(hum_html, unsafe_allow_html=True)
 
-            # Optional kleines Debug, falls wir weiter graben müssen
+            # --------- NEUER DEBUG-BLOCK MIT ROHER JSON-ANTWORT ----------
             if st.checkbox("Aqara Sensor Debug anzeigen", value=False):
-                temp_raw = aqara_client.get_device_value(
+                st.write("Temp raw:", aqara_client.get_device_value(
+                    AQARA_ACCESS_TOKEN,
+                    AQARA_SENSOR_DEVICE_ID,
+                    AQARA_TEMP_RESOURCE,
+                ))
+                st.write("Hum raw:", aqara_client.get_device_value(
+                    AQARA_ACCESS_TOKEN,
+                    AQARA_SENSOR_DEVICE_ID,
+                    AQARA_HUM_RESOURCE,
+                ))
+
+                st.markdown("**Aqara API Debug (rohe JSON-Response)**")
+
+                temp_debug = aqara_client.get_device_value_debug(
                     AQARA_ACCESS_TOKEN,
                     AQARA_SENSOR_DEVICE_ID,
                     AQARA_TEMP_RESOURCE,
                 )
-                hum_raw = aqara_client.get_device_value(
+                hum_debug = aqara_client.get_device_value_debug(
                     AQARA_ACCESS_TOKEN,
                     AQARA_SENSOR_DEVICE_ID,
                     AQARA_HUM_RESOURCE,
                 )
-                st.write("Temp raw:", temp_raw)
-                st.write("Hum raw:", hum_raw)
+
+                st.text("Temp API Response:")
+                st.code(json.dumps(temp_debug, indent=2, ensure_ascii=False))
+                st.text("Hum API Response:")
+                st.code(json.dumps(hum_debug, indent=2, ensure_ascii=False))
 
         st.markdown("---")
 
