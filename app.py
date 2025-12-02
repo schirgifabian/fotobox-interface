@@ -11,7 +11,7 @@ import hashlib
 import json
 
 # --------------------------------------------------------------------
-# AQARA CLIENT
+# AQARA CLIENT (nur Steckdose)
 # --------------------------------------------------------------------
 
 
@@ -65,19 +65,12 @@ class AqaraClient:
             headers["Accesstoken"] = access_token
         return headers
 
-    # ---------- Sensorwerte: query.device.info ----------
-    def _query_device_info(self, access_token, device_id, resource_ids):
-        """
-        Low-Level Call für query.device.info (z.B. Temperatur/Luftfeuchte).
+    # ---------- Status lesen (query.resource.value) ----------
 
-        Beispiel laut Console:
-        {
-          "intent": "query.device.info",
-          "data": {
-            "subjectId": "lumi.158d008b861ba9",
-            "resources": ["0.1.85"]
-          }
-        }
+    def _query_resource_value(self, access_token, device_id, resource_ids):
+        """
+        Low-Level Call für query.resource.value.
+        Liefert die rohe JSON-Response zurück.
         """
         if isinstance(resource_ids, str):
             resource_ids = [resource_ids]
@@ -86,10 +79,14 @@ class AqaraClient:
         headers = self._generate_headers(access_token)
 
         payload = {
-            "intent": "query.device.info",
+            "intent": "query.resource.value",
             "data": {
-                "subjectId": device_id,
-                "resources": resource_ids,
+                "resources": [
+                    {
+                        "subjectId": device_id,
+                        "resourceIds": resource_ids,
+                    }
+                ]
             },
         }
 
@@ -99,31 +96,54 @@ class AqaraClient:
         except Exception as e:
             return {"code": -1, "message": str(e)}
 
-    def get_device_value(self, access_token, device_id, resource_id):
+    def get_socket_state(self, access_token, device_id, resource_id="4.1.85"):
         """
-        High-Level Wrapper: liest einen Sensorwert und gibt entweder
-        den Wert (String) oder eine Fehlermeldung "Fehler: ..." zurück.
+        Versucht den Status der Steckdose abzufragen.
+
+        Rückgabe:
+            ("on" | "off" | "unknown", raw_response_dict)
         """
-        data = self._query_device_info(access_token, device_id, resource_id)
+        data = self._query_resource_value(access_token, device_id, resource_id)
 
-        if data.get("code") == 0:
-            result = data.get("result") or []
-            if result and isinstance(result, list):
-                first = result[0]
-                if "value" in first:
-                    return first["value"]
-            return "Fehler: Kein Wert gefunden."
+        if data.get("code") != 0:
+            return "unknown", data
 
-        msg = data.get("message") or data.get("msgDetails") or f"Code {data.get('code')}"
-        return f"Fehler: {msg}"
+        result = data.get("result")
+        value = None
 
-    def get_device_value_debug(self, access_token, device_id, resource_id):
-        """
-        Für Debug-Zwecke: rohe JSON-Response von query.device.info.
-        """
-        return self._query_device_info(access_token, device_id, resource_id)
+        # Häufiges Muster: result ist eine Liste mit Einträgen {resourceId, value, ...}
+        if isinstance(result, list):
+            for item in result:
+                if item.get("resourceId") == resource_id and "value" in item:
+                    value = item["value"]
+                    break
+        # Alternativ: result als Dict mit "data" usw. – generisch durchsuchen
+        elif isinstance(result, dict):
+            for item in result.get("data", []):
+                if (
+                    item.get("resourceId") == resource_id
+                    and "value" in item
+                ):
+                    value = item["value"]
+                    break
+                for r in item.get("resources", []):
+                    if r.get("resourceId") == resource_id and "value" in r:
+                        value = r["value"]
+                        break
 
-    # ---------- Steckdose: write.resource.device ----------
+        if value is None:
+            return "unknown", data
+
+        value_str = str(value).lower()
+        if value_str in ("1", "true", "on"):
+            return "on", data
+        if value_str in ("0", "false", "off"):
+            return "off", data
+
+        return "unknown", data
+
+    # ---------- Steckdose schalten (write.resource.device) ----------
+
     def switch_socket(
         self,
         access_token,
@@ -173,55 +193,13 @@ class AqaraClient:
 
 
 # --------------------------------------------------------------------
-# AQARA Farbsettings
-# --------------------------------------------------------------------
-
-
-def temp_color_and_label(temp: float | None):
-    """
-    Gibt (Farbe, Zusatzlabel) für eine Temperatur zurück.
-    """
-    if temp is None:
-        return "#e5e7eb", ""  # grau
-
-    if temp < 10:
-        return "#bfdbfe", "kalt"
-    if temp < 18:
-        return "#93c5fd", "frisch"
-    if temp <= 27:
-        return "#bbf7d0", "ideal"
-    if temp <= 32:
-        return "#fed7aa", "warm"
-    return "#fecaca", "heiß"
-
-
-def hum_color_and_label(hum: float | None):
-    """
-    Gibt (Farbe, Zusatzlabel) für relative Luftfeuchte zurück.
-    """
-    if hum is None:
-        return "#e5e7eb", ""
-
-    if hum < 30:
-        return "#fed7aa", "sehr trocken"
-    if hum <= 60:
-        return "#bbf7d0", "ok"
-    if hum <= 75:
-        return "#bfdbfe", "feucht"
-    return "#fecaca", "sehr feucht"
-
-
-# --------------------------------------------------------------------
-# AQARA KONFIG AUS SECRETS
+# AQARA KONFIG AUS SECRETS (nur Steckdose)
 # --------------------------------------------------------------------
 AQARA_ENABLED = False
 aqara_client = None
 AQARA_ACCESS_TOKEN = None
 AQARA_SOCKET_DEVICE_ID = None
 AQARA_SOCKET_RESOURCE_ID = "4.1.85"
-AQARA_SENSOR_DEVICE_ID = None
-AQARA_TEMP_RESOURCE = "0.1.85"
-AQARA_HUM_RESOURCE = "0.2.85"
 
 try:
     aqara_cfg = st.secrets["aqara"]
@@ -233,10 +211,6 @@ try:
     AQARA_SOCKET_DEVICE_ID = aqara_cfg["socket_device_id"]
     AQARA_SOCKET_RESOURCE_ID = aqara_cfg.get("socket_resource_id", "4.1.85")
 
-    AQARA_SENSOR_DEVICE_ID = aqara_cfg.get("sensor_device_id")
-    AQARA_TEMP_RESOURCE = aqara_cfg.get("temperature_resource", "0.1.85")
-    AQARA_HUM_RESOURCE = aqara_cfg.get("humidity_resource", "0.2.85")
-
     aqara_client = AqaraClient(
         app_id=AQARA_APP_ID,
         key_id=AQARA_KEY_ID,
@@ -246,49 +220,6 @@ try:
     AQARA_ENABLED = True
 except Exception:
     AQARA_ENABLED = False
-
-
-def get_environment_values():
-    """
-    Holt Temperatur & Luftfeuchte vom Aqara-Sensor.
-    Gibt (temp, hum, error_msg) zurück.
-
-    Aqara liefert 0.01-Einheiten, z.B. 3203 = 32.03.
-    """
-    if not (AQARA_ENABLED and AQARA_SENSOR_DEVICE_ID and aqara_client):
-        return None, None, "Aqara-Sensor nicht konfiguriert."
-
-    temp_raw = aqara_client.get_device_value(
-        AQARA_ACCESS_TOKEN,
-        AQARA_SENSOR_DEVICE_ID,
-        AQARA_TEMP_RESOURCE,
-    )
-    hum_raw = aqara_client.get_device_value(
-        AQARA_ACCESS_TOKEN,
-        AQARA_SENSOR_DEVICE_ID,
-        AQARA_HUM_RESOURCE,
-    )
-
-    # Fehlermeldungen der API direkt weitergeben
-    if isinstance(temp_raw, str) and temp_raw.startswith(("Fehler", "Verbindungsfehler")):
-        return None, None, temp_raw
-    if isinstance(hum_raw, str) and hum_raw.startswith(("Fehler", "Verbindungsfehler")):
-        return None, None, hum_raw
-
-    try:
-        temp_val = float(temp_raw)
-    except Exception:
-        temp_val = None
-
-    try:
-        hum_val = float(hum_raw)
-    except Exception:
-        hum_val = None
-
-    temp = temp_val / 100.0 if temp_val is not None else None
-    hum = hum_val / 100.0 if hum_val is not None else None
-
-    return temp, hum, None
 
 
 # --------------------------------------------------------------------
@@ -328,6 +259,10 @@ if "max_prints" not in st.session_state:
     st.session_state.max_prints = None
 if "selected_printer" not in st.session_state:
     st.session_state.selected_printer = None
+if "socket_state" not in st.session_state:
+    st.session_state.socket_state = "unknown"
+if "socket_debug" not in st.session_state:
+    st.session_state.socket_debug = None
 
 st.sidebar.header("Einstellungen")
 printer_name = st.sidebar.selectbox("Fotobox auswählen", list(PRINTERS.keys()))
@@ -736,148 +671,108 @@ if not event_mode:
 
         st.markdown("---")
 
-        # BOX-OBERTEIL (Temperatur / Luftfeuchte)
-        st.write("### Box-Oberteil (Temperatur & Luftfeuchtigkeit)")
-        if not (AQARA_ENABLED and AQARA_SENSOR_DEVICE_ID):
-            st.caption("Aqara-Sensor ist nicht konfiguriert.")
-        else:
-            temp, hum, err = get_environment_values()
-
-            if err:
-                st.error(f"Fehler: {err}")
-            else:
-                colT, colH = st.columns(2)
-
-                # --- Temperatur-Anzeige mit Farbe ---
-                temp_color, temp_label = temp_color_and_label(temp)
-                temp_html = f"""
-                <div style="
-                    background-color:{temp_color};
-                    padding:10px 14px;
-                    border-radius:8px;
-                    border:1px solid #d1d5db;
-                ">
-                    <div style="font-size:13px; color:#374151; margin-bottom:2px;">
-                        Temperatur
-                    </div>
-                    <div style="font-size:22px; font-weight:600; color:#111827;">
-                        {temp if temp is not None else "–"} °C
-                    </div>
-                    <div style="font-size:12px; color:#4b5563; margin-top:2px;">
-                        {temp_label}
-                    </div>
-                </div>
-                """
-                colT.markdown(temp_html, unsafe_allow_html=True)
-
-                # --- Luftfeuchte-Anzeige mit Farbe ---
-                hum_color, hum_label = hum_color_and_label(hum)
-                hum_html = f"""
-                <div style="
-                    background-color:{hum_color};
-                    padding:10px 14px;
-                    border-radius:8px;
-                    border:1px solid #d1d5db;
-                ">
-                    <div style="font-size:13px; color:#374151; margin-bottom:2px;">
-                        Luftfeuchtigkeit
-                    </div>
-                    <div style="font-size:22px; font-weight:600; color:#111827;">
-                        {hum if hum is not None else "–"} %
-                    </div>
-                    <div style="font-size:12px; color:#4b5563; margin-top:2px;">
-                        {hum_label}
-                    </div>
-                </div>
-                """
-                colH.markdown(hum_html, unsafe_allow_html=True)
-
-            # Debug-Block
-            if st.checkbox("Aqara Sensor Debug anzeigen", value=False):
-                st.write(
-                    "Temp raw:",
-                    aqara_client.get_device_value(
-                        AQARA_ACCESS_TOKEN,
-                        AQARA_SENSOR_DEVICE_ID,
-                        AQARA_TEMP_RESOURCE,
-                    ),
-                )
-                st.write(
-                    "Hum raw:",
-                    aqara_client.get_device_value(
-                        AQARA_ACCESS_TOKEN,
-                        AQARA_SENSOR_DEVICE_ID,
-                        AQARA_HUM_RESOURCE,
-                    ),
-                )
-
-                st.markdown("**Aqara API Debug (rohe JSON-Response)**")
-
-                temp_debug = aqara_client.get_device_value_debug(
-                    AQARA_ACCESS_TOKEN,
-                    AQARA_SENSOR_DEVICE_ID,
-                    AQARA_TEMP_RESOURCE,
-                )
-                hum_debug = aqara_client.get_device_value_debug(
-                    AQARA_ACCESS_TOKEN,
-                    AQARA_SENSOR_DEVICE_ID,
-                    AQARA_HUM_RESOURCE,
-                )
-
-                st.text("Temp API Response:")
-                st.code(json.dumps(temp_debug, indent=2, ensure_ascii=False))
-                st.text("Hum API Response:")
-                st.code(json.dumps(hum_debug, indent=2, ensure_ascii=False))
-
-        st.markdown("---")
-
-        # AQARA STECKDOSE
+        # AQARA STECKDOSE – neues Design mit Status + Toggle
         st.write("### Aqara Steckdose Fotobox")
+
         if not AQARA_ENABLED:
             st.info(
                 "Aqara ist nicht konfiguriert. Bitte [aqara] in secrets.toml setzen."
             )
         else:
-            col_toggle, col_on, col_off = st.columns(3)
+            # Aktuellen Status versuchen abzufragen
+            current_state, debug_data = aqara_client.get_socket_state(
+                AQARA_ACCESS_TOKEN,
+                AQARA_SOCKET_DEVICE_ID,
+                AQARA_SOCKET_RESOURCE_ID,
+            )
+            st.session_state.socket_debug = debug_data
 
-            if col_toggle.button("Toggle 🔁", use_container_width=True):
+            if current_state in ("on", "off"):
+                st.session_state.socket_state = current_state
+            else:
+                # nur wenn wir noch nichts sinnvolles wissen, lassen wir "unknown"
+                if st.session_state.socket_state not in ("on", "off"):
+                    st.session_state.socket_state = "unknown"
+
+            # Status-Optik
+            state = st.session_state.socket_state
+            if state == "on":
+                badge_color = "#16a34a"
+                badge_text = "EINGESCHALTET"
+                badge_icon = "🟢"
+            elif state == "off":
+                badge_color = "#6b7280"
+                badge_text = "AUSGESCHALTET"
+                badge_icon = "⚪️"
+            else:
+                badge_color = "#f97316"
+                badge_text = "STATUS UNBEKANNT"
+                badge_icon = "⚠️"
+
+            status_html = f"""
+            <div style="
+                border:1px solid #e5e7eb;
+                border-radius:12px;
+                padding:12px 16px;
+                margin-bottom:12px;
+                display:flex;
+                justify-content:space-between;
+                align-items:center;
+            ">
+                <div>
+                    <div style="font-size:13px; color:#6b7280;">Fotobox-Steckdose</div>
+                    <div style="font-size:20px; font-weight:600; color:#111827;">
+                        {badge_icon} {badge_text}
+                    </div>
+                </div>
+                <div style="
+                    padding:6px 10px;
+                    border-radius:999px;
+                    background:{badge_color}20;
+                    color:{badge_color};
+                    font-size:12px;
+                    font-weight:600;
+                ">
+                    Zustand: {state}
+                </div>
+            </div>
+            """
+            st.markdown(status_html, unsafe_allow_html=True)
+
+            # Toggle UI
+            desired_on_default = state == "on"
+            toggle_val = st.toggle(
+                "Steckdose Fotobox",
+                value=desired_on_default,
+                help="Schaltet die Aqara-Steckdose ein oder aus.",
+            )
+
+            # Nur reagieren, wenn sich der Toggle-Wert geändert hat
+            if toggle_val != desired_on_default:
+                desired_on = toggle_val
                 res = aqara_client.switch_socket(
                     AQARA_ACCESS_TOKEN,
                     AQARA_SOCKET_DEVICE_ID,
-                    turn_on=True,
-                    resource_id=AQARA_SOCKET_RESOURCE_ID,
-                    mode="toggle",
-                )
-                if res.get("code") == 0:
-                    st.success("Steckdose getoggelt.")
-                else:
-                    st.error("Fehler beim Toggle:")
-                    st.code(json.dumps(res, indent=2))
-
-            if col_on.button("Steckdose AN 🔌", use_container_width=True):
-                res = aqara_client.switch_socket(
-                    AQARA_ACCESS_TOKEN,
-                    AQARA_SOCKET_DEVICE_ID,
-                    turn_on=True,
+                    turn_on=desired_on,
                     resource_id=AQARA_SOCKET_RESOURCE_ID,
                     mode="state",
                 )
                 if res.get("code") == 0:
-                    st.success("Steckdose eingeschaltet.")
+                    st.session_state.socket_state = "on" if desired_on else "off"
+                    st.success(
+                        "Steckdose eingeschaltet."
+                        if desired_on
+                        else "Steckdose ausgeschaltet."
+                    )
                 else:
-                    st.error("Fehler beim Einschalten:")
+                    st.error("Fehler beim Schalten der Steckdose:")
                     st.code(json.dumps(res, indent=2))
 
-            if col_off.button("Steckdose AUS ⛔", use_container_width=True):
-                res = aqara_client.switch_socket(
-                    AQARA_ACCESS_TOKEN,
-                    AQARA_SOCKET_DEVICE_ID,
-                    turn_on=False,
-                    resource_id=AQARA_SOCKET_RESOURCE_ID,
-                    mode="state",
+            # Optionaler Debug
+            if st.checkbox("Aqara Steckdose Debug anzeigen", value=False):
+                st.text("Letzte Status-Response:")
+                st.code(
+                    json.dumps(st.session_state.socket_debug, indent=2, ensure_ascii=False)
+                    if st.session_state.socket_debug is not None
+                    else "(keine Daten)",
                 )
-                if res.get("code") == 0:
-                    st.success("Steckdose ausgeschaltet.")
-                else:
-                    st.error("Fehler beim Ausschalten:")
-                    st.code(json.dumps(res, indent=2))
