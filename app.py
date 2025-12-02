@@ -70,22 +70,22 @@ class AqaraClient:
                 "resources": [
                     {
                         "subjectId": device_id,
-                        "resourceIds": [resource_name],
+                        "resourceIds": [resource_name]
                     }
                 ]
-            },
+            }
         }
 
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=5)
             data = response.json()
 
-            # Erfolgsfall
+            # Erfolg
             if data.get("code") == 0 and data.get("result"):
                 first = data["result"][0]
                 return first.get("value")
 
-            # Fehlerfall – möglichst klare Meldung bauen
+            # Fehlertext möglichst klar extrahieren
             msg = (
                 data.get("message")
                 or data.get("msgDetails")
