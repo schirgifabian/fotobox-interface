@@ -56,26 +56,36 @@ class AqaraClient:
     # ---------- SENSORWERTE LESEN (query.resource.value) ----------
     def get_device_value(self, access_token, device_id, resource_name: str):
         """
-        Liest Sensorwerte aus.
+        Liest einen Sensorwert aus.
 
-        Nutzt das Aqara-API-Intent:
-          intent: "query.resource.value"
-
+        Intent: query.resource.value
         resource_name z.B.: "0.1.85" (Temp), "0.2.85" (Feuchte)
         """
         url = self.base_url
         headers = self._generate_headers(access_token)
 
+        # Laut V3-Schema:
+        # {
+        #   "intent": "query.resource.value",
+        #   "data": [
+        #     {
+        #       "subjectId": "...",
+        #       "resources": [
+        #         { "resourceId": "0.1.85" }
+        #       ]
+        #     }
+        #   ]
+        # }
         payload = {
             "intent": "query.resource.value",
-            "data": {
-                "resources": [
-                    {
-                        "subjectId": device_id,
-                        "resourceIds": [resource_name],
-                    }
-                ]
-            },
+            "data": [
+                {
+                    "subjectId": device_id,
+                    "resources": [
+                        {"resourceId": resource_name}
+                    ],
+                }
+            ],
         }
 
         try:
@@ -83,8 +93,17 @@ class AqaraClient:
             data = response.json()
 
             if data.get("code") == 0 and data.get("result"):
-                # result ist eine Liste, erstes Element nehmen
-                value = data["result"][0]["value"]
+                # result-Format typischerweise:
+                # [
+                #   {
+                #     "subjectId": "...",
+                #     "resourceId": "0.1.85",
+                #     "value": "3035",
+                #     "timeStamp": ...
+                #   }
+                # ]
+                first = data["result"][0]
+                value = first.get("value")
                 return value
             else:
                 msg = data.get("message") or data.get("msgDetails") or "Unbekannter Fehler"
@@ -673,14 +692,30 @@ if not event_mode:
             st.caption("Aqara-Sensor ist nicht konfiguriert.")
         else:
             temp, hum, err = get_environment_values()
+
             if err:
-                st.error(err)  # kein doppeltes "Fehler: Fehler"
+                st.error(f"Fehler: {err}")
             else:
                 cT, cH = st.columns(2)
                 temp_str = f"{temp:.1f} °C" if temp is not None else "–"
                 hum_str = f"{hum:.1f} %" if hum is not None else "–"
                 cT.metric("Temperatur", temp_str)
                 cH.metric("Luftfeuchtigkeit", hum_str)
+
+            # Optional kleines Debug, falls wir weiter graben müssen
+            if st.checkbox("Aqara Sensor Debug anzeigen", value=False):
+                temp_raw = aqara_client.get_device_value(
+                    AQARA_ACCESS_TOKEN,
+                    AQARA_SENSOR_DEVICE_ID,
+                    AQARA_TEMP_RESOURCE,
+                )
+                hum_raw = aqara_client.get_device_value(
+                    AQARA_ACCESS_TOKEN,
+                    AQARA_SENSOR_DEVICE_ID,
+                    AQARA_HUM_RESOURCE,
+                )
+                st.write("Temp raw:", temp_raw)
+                st.write("Hum raw:", hum_raw)
 
         st.markdown("---")
 
