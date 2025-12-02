@@ -37,7 +37,6 @@ class AqaraClient:
         nonce = uuid.uuid4().hex
         timestamp = str(int(time.time() * 1000))
 
-        # Parameter, die in die Signatur gehören
         sign_params = {
             "Appid": self.app_id,
             "Keyid": self.key_id,
@@ -47,13 +46,10 @@ class AqaraClient:
         if access_token:
             sign_params["Accesstoken"] = access_token
 
-        # ASCII-sortiert zusammensetzen
         sign_str = "&".join(
             f"{k}={sign_params[k]}" for k in sorted(sign_params.keys())
         )
         sign_str += self.app_secret
-
-        # laut Beispielen: alles lowercase vor dem Hash
         sign = hashlib.md5(sign_str.lower().encode("utf-8")).hexdigest()
 
         headers = {
@@ -69,22 +65,17 @@ class AqaraClient:
             headers["Accesstoken"] = access_token
         return headers
 
-    # ---------- NEU: gemeinsame Low-Level-Methode für query.resource.value ----------
-    def _query_resource_value(self, access_token, device_id, resource_ids):
+    # ---------- Sensorwerte: query.device.info ----------
+    def _query_device_info(self, access_token, device_id, resource_ids):
         """
-        Low-Level Call für query.resource.value.
-        Gibt IMMER die rohe JSON-Response (dict) zurück.
+        Low-Level Call für query.device.info (z.B. Temperatur/Luftfeuchte).
 
-        Laut Doku:
+        Beispiel laut Console:
         {
-          "intent": "query.resource.value",
+          "intent": "query.device.info",
           "data": {
-            "resources": [
-              {
-                "subjectId": "...",
-                "resourceIds": ["0.1.85"]
-              }
-            ]
+            "subjectId": "lumi.158d008b861ba9",
+            "resources": ["0.1.85"]
           }
         }
         """
@@ -95,14 +86,10 @@ class AqaraClient:
         headers = self._generate_headers(access_token)
 
         payload = {
-            "intent": "query.resource.value",
+            "intent": "query.device.info",
             "data": {
-                "resources": [
-                    {
-                        "subjectId": device_id,
-                        "resourceIds": resource_ids,
-                    }
-                ]
+                "subjectId": device_id,
+                "resources": resource_ids,
             },
         }
 
@@ -112,35 +99,31 @@ class AqaraClient:
         except Exception as e:
             return {"code": -1, "message": str(e)}
 
-    def get_device_value(self, access_token, device_id, resource_id: str):
+    def get_device_value(self, access_token, device_id, resource_id):
         """
-        High-Level Wrapper: gibt entweder den Wert (String) oder eine
-        Fehlerbeschreibung ("Fehler: ...") zurück.
+        High-Level Wrapper: liest einen Sensorwert und gibt entweder
+        den Wert (String) oder eine Fehlermeldung "Fehler: ..." zurück.
         """
-        data = self._query_resource_value(access_token, device_id, resource_id)
+        data = self._query_device_info(access_token, device_id, resource_id)
 
-        # Erfolg
-        if data.get("code") == 0 and data.get("result"):
-            first = data["result"][0]
-            # typischer Response: { timeStamp, resourceId, value, subjectId }
-            if "value" in first:
-                return first["value"]
-            return "Fehler: Kein Wert im Ergebnis gefunden."
+        if data.get("code") == 0:
+            result = data.get("result") or []
+            if result and isinstance(result, list):
+                first = result[0]
+                if "value" in first:
+                    return first["value"]
+            return "Fehler: Kein Wert gefunden."
 
-        # Fehlertext möglichst klar extrahieren
-        msg = (
-            data.get("message")
-            or data.get("msgDetails")
-            or f"Code {data.get('code', 'unbekannt')}"
-        )
+        msg = data.get("message") or data.get("msgDetails") or f"Code {data.get('code')}"
         return f"Fehler: {msg}"
 
-    def get_device_value_debug(self, access_token, device_id, resource_id: str):
+    def get_device_value_debug(self, access_token, device_id, resource_id):
         """
-        Für Debug-Zwecke: rohe JSON-Response zurückgeben.
+        Für Debug-Zwecke: rohe JSON-Response von query.device.info.
         """
-        return self._query_resource_value(access_token, device_id, resource_id)
+        return self._query_device_info(access_token, device_id, resource_id)
 
+    # ---------- Steckdose: write.resource.device ----------
     def switch_socket(
         self,
         access_token,
@@ -809,18 +792,24 @@ if not event_mode:
                 """
                 colH.markdown(hum_html, unsafe_allow_html=True)
 
-            # --------- NEUER DEBUG-BLOCK MIT ROHER JSON-ANTWORT ----------
+            # Debug-Block
             if st.checkbox("Aqara Sensor Debug anzeigen", value=False):
-                st.write("Temp raw:", aqara_client.get_device_value(
-                    AQARA_ACCESS_TOKEN,
-                    AQARA_SENSOR_DEVICE_ID,
-                    AQARA_TEMP_RESOURCE,
-                ))
-                st.write("Hum raw:", aqara_client.get_device_value(
-                    AQARA_ACCESS_TOKEN,
-                    AQARA_SENSOR_DEVICE_ID,
-                    AQARA_HUM_RESOURCE,
-                ))
+                st.write(
+                    "Temp raw:",
+                    aqara_client.get_device_value(
+                        AQARA_ACCESS_TOKEN,
+                        AQARA_SENSOR_DEVICE_ID,
+                        AQARA_TEMP_RESOURCE,
+                    ),
+                )
+                st.write(
+                    "Hum raw:",
+                    aqara_client.get_device_value(
+                        AQARA_ACCESS_TOKEN,
+                        AQARA_SENSOR_DEVICE_ID,
+                        AQARA_HUM_RESOURCE,
+                    ),
+                )
 
                 st.markdown("**Aqara API Debug (rohe JSON-Response)**")
 
