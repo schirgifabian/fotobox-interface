@@ -18,6 +18,7 @@ class AqaraClient:
         self.app_id = app_id
         self.key_id = key_id
         self.app_secret = app_secret
+        # laut Doku: https://${domain}/v3.0/open/api
         self.base_url = f"https://open-{region}.aqara.com/v3.0/open/api"
 
     def _generate_headers(self, access_token=None):
@@ -44,21 +45,29 @@ class AqaraClient:
             headers["Accesstoken"] = access_token
         return headers
 
-    def get_device_value(self, access_token, device_id, resource_name="temperature"):
+    # ---------- SENSORWERTE LESEN (query.resource.value) ----------
+    def get_device_value(self, access_token, device_id, resource_name: str):
         """
         Liest Sensorwerte aus.
-        resource_name z.B. '0.1.85' (Temperatur) oder '0.2.85' (Feuchte).
+
+        Nutzt das Aqara-API-Intent:
+          intent: "query.resource.value"
+
+        resource_name z.B.: "0.1.85" (Temp), "0.2.85" (Feuchte)
         """
-        url = f"{self.base_url}/resource/query"
+        url = self.base_url
         headers = self._generate_headers(access_token)
 
         payload = {
-            "resources": [
-                {
-                    "subjectId": device_id,
-                    "resourceId": resource_name,
-                }
-            ]
+            "intent": "query.resource.value",
+            "data": {
+                "resources": [
+                    {
+                        "subjectId": device_id,
+                        "resourceIds": [resource_name],
+                    }
+                ]
+            },
         }
 
         try:
@@ -66,12 +75,16 @@ class AqaraClient:
             data = response.json()
 
             if data.get("code") == 0 and data.get("result"):
-                return data["result"][0]["value"]
+                # result ist eine Liste, erstes Element nehmen
+                value = data["result"][0]["value"]
+                return value
             else:
-                return f"Fehler: {data.get('message', 'Unbekannt')}"
+                msg = data.get("message") or data.get("msgDetails") or "Unbekannter Fehler"
+                return f"Fehler: {msg}"
         except Exception as e:
             return f"Verbindungsfehler: {str(e)}"
 
+    # ---------- STECKDOSE SCHALTEN (write.resource.device) ----------
     def switch_socket(
         self,
         access_token,
@@ -83,27 +96,35 @@ class AqaraClient:
         """
         Schaltet eine Steckdose.
 
+        API-Intent:
+          intent: "write.resource.device"
+
         mode="state":
             0 = AUS, 1 = EIN (turn_on steuert den Zustand)
         mode="toggle":
             2 = TOGGLE (unabhängig von turn_on)
         """
-        url = f"{self.base_url}/resource/update"
+        url = self.base_url
         headers = self._generate_headers(access_token)
 
         if mode == "toggle":
-            value = 2
+            value = "2"
         else:
-            value = 1 if turn_on else 0  # ganz sicher 0/1
+            value = "1" if turn_on else "0"  # 0/1 als String laut Doku
 
         payload = {
-            "resources": [
+            "intent": "write.resource.device",
+            "data": [
                 {
                     "subjectId": device_id,
-                    "resourceId": resource_id,
-                    "value": value,
+                    "resources": [
+                        {
+                            "resourceId": resource_id,
+                            "value": value,
+                        }
+                    ],
                 }
-            ]
+            ],
         }
 
         try:
@@ -645,7 +666,7 @@ if not event_mode:
         else:
             temp, hum, err = get_environment_values()
             if err:
-                st.error(f"Fehler: {err}")
+                st.error(err)  # kein doppeltes "Fehler: Fehler"
             else:
                 cT, cH = st.columns(2)
                 temp_str = f"{temp:.1f} °C" if temp is not None else "–"
