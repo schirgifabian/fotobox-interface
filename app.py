@@ -56,34 +56,79 @@ class AqaraClient:
     # ---------- SENSORWERTE LESEN (query.resource.value) ----------
     def get_device_value(self, access_token, device_id, resource_name: str):
         """
-        Liest Sensorwerte über Aqara V3.
-        Sensoren verwenden laut Debugger KEIN 'resourceId',
-        sondern 'options': ["0.1.85"].
+        Liest einen Sensorwert über Aqara V3.
+
+        intent: query.resource.value
+        data.resources[].resourceIds -> laut offizieller Doku
         """
         url = self.base_url
         headers = self._generate_headers(access_token)
 
         payload = {
             "intent": "query.resource.value",
-            "data": [
-                {
-                    "subjectId": device_id,
-                    "options": [resource_name]   # <- WICHTIG!
-                }
-            ]
+            "data": {
+                "resources": [
+                    {
+                        "subjectId": device_id,
+                        "resourceIds": [resource_name],
+                    }
+                ]
+            },
         }
 
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=5)
             data = response.json()
 
+            # Erfolgsfall
             if data.get("code") == 0 and data.get("result"):
                 first = data["result"][0]
                 return first.get("value")
-            else:
-                return f"Fehler: {data.get('message', 'Unbekannt')}"
+
+            # Fehlerfall – möglichst klare Meldung bauen
+            msg = (
+                data.get("message")
+                or data.get("msgDetails")
+                or f"Code {data.get('code', 'unbekannt')}"
+            )
+            return f"Fehler: {msg}"
+
         except Exception as e:
             return f"Verbindungsfehler: {str(e)}"
+
+
+    def temp_color_and_label(temp: float | None):
+    """
+    Gibt (Farbe, Zusatzlabel) für eine Temperatur zurück.
+    """
+    if temp is None:
+        return "#e5e7eb", ""  # grau
+
+    if temp < 10:
+        return "#bfdbfe", "kalt"
+    if temp < 18:
+        return "#93c5fd", "frisch"
+    if temp <= 27:
+        return "#bbf7d0", "ideal"
+    if temp <= 32:
+        return "#fed7aa", "warm"
+    return "#fecaca", "heiß"
+
+
+def hum_color_and_label(hum: float | None):
+    """
+    Gibt (Farbe, Zusatzlabel) für relative Luftfeuchte zurück.
+    """
+    if hum is None:
+        return "#e5e7eb", ""
+
+    if hum < 30:
+        return "#fed7aa", "sehr trocken"
+    if hum <= 60:
+        return "#bbf7d0", "ok"
+    if hum <= 75:
+        return "#bfdbfe", "feucht"
+    return "#fecaca", "sehr feucht"
 
     # ---------- STECKDOSE SCHALTEN (write.resource.device) ----------
     def switch_socket(
@@ -670,11 +715,51 @@ if not event_mode:
             if err:
                 st.error(f"Fehler: {err}")
             else:
-                cT, cH = st.columns(2)
-                temp_str = f"{temp:.1f} °C" if temp is not None else "–"
-                hum_str = f"{hum:.1f} %" if hum is not None else "–"
-                cT.metric("Temperatur", temp_str)
-                cH.metric("Luftfeuchtigkeit", hum_str)
+                colT, colH = st.columns(2)
+
+                # --- Temperatur-Anzeige mit Farbe ---
+                temp_color, temp_label = temp_color_and_label(temp)
+                temp_html = f"""
+                <div style="
+                    background-color:{temp_color};
+                    padding:10px 14px;
+                    border-radius:8px;
+                    border:1px solid #d1d5db;
+                ">
+                    <div style="font-size:13px; color:#374151; margin-bottom:2px;">
+                        Temperatur
+                    </div>
+                    <div style="font-size:22px; font-weight:600; color:#111827;">
+                        {temp if temp is not None else "–"} °C
+                    </div>
+                    <div style="font-size:12px; color:#4b5563; margin-top:2px;">
+                        {temp_label}
+                    </div>
+                </div>
+                """
+                colT.markdown(temp_html, unsafe_allow_html=True)
+
+                # --- Luftfeuchte-Anzeige mit Farbe ---
+                hum_color, hum_label = hum_color_and_label(hum)
+                hum_html = f"""
+                <div style="
+                    background-color:{hum_color};
+                    padding:10px 14px;
+                    border-radius:8px;
+                    border:1px solid #d1d5db;
+                ">
+                    <div style="font-size:13px; color:#374151; margin-bottom:2px;">
+                        Luftfeuchtigkeit
+                    </div>
+                    <div style="font-size:22px; font-weight:600; color:#111827;">
+                        {hum if hum is not None else "–"} %
+                    </div>
+                    <div style="font-size:12px; color:#4b5563; margin-top:2px;">
+                        {hum_label}
+                    </div>
+                </div>
+                """
+                colH.markdown(hum_html, unsafe_allow_html=True)
 
             # Optional kleines Debug, falls wir weiter graben müssen
             if st.checkbox("Aqara Sensor Debug anzeigen", value=False):
