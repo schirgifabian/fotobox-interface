@@ -26,11 +26,18 @@ class AqaraClient:
         nonce = uuid.uuid4().hex
         timestamp = str(int(time.time() * 1000))
 
-        sign_str = (
-            f"Appid={self.app_id}&Keyid={self.key_id}"
-            f"&Nonce={nonce}&Time={timestamp}{self.app_secret}"
-        )
-        sign = hashlib.md5(sign_str.encode("utf-8")).hexdigest().lower()
+        # Sign laut offizieller Doku:
+        # Accesstoken=...&Appid=...&Keyid=...&Nonce=...&Time=... + app_secret
+        parts = []
+        if access_token:
+            parts.append(f"Accesstoken={access_token}")
+        parts.append(f"Appid={self.app_id}")
+        parts.append(f"Keyid={self.key_id}")
+        parts.append(f"Nonce={nonce}")
+        parts.append(f"Time={timestamp}")
+
+        sign_src = "&".join(parts) + self.app_secret
+        sign = hashlib.md5(sign_src.lower().encode("utf-8")).hexdigest()
 
         headers = {
             "Content-Type": "application/json",
@@ -43,6 +50,7 @@ class AqaraClient:
         }
         if access_token:
             headers["Accesstoken"] = access_token
+
         return headers
 
     # ---------- SENSORWERTE LESEN (query.resource.value) ----------
