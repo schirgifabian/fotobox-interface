@@ -13,6 +13,7 @@ import json
 # --------------------------------------------------------------------
 # AQARA CLIENT
 # --------------------------------------------------------------------
+
 class AqaraClient:
     def __init__(self, app_id, key_id, app_secret, region="ger"):
         self.app_id = app_id
@@ -26,8 +27,7 @@ class AqaraClient:
         nonce = uuid.uuid4().hex
         timestamp = str(int(time.time() * 1000))
 
-        # Sign laut offizieller Doku:
-        # Accesstoken=...&Appid=...&Keyid=...&Nonce=...&Time=... + app_secret
+        # Sign-String aufbauen
         parts = []
         if access_token:
             parts.append(f"Accesstoken={access_token}")
@@ -37,7 +37,7 @@ class AqaraClient:
         parts.append(f"Time={timestamp}")
 
         sign_src = "&".join(parts) + self.app_secret
-        sign = hashlib.md5(sign_src.lower().encode("utf-8")).hexdigest()
+        sign = hashlib.md5(sign_src.encode("utf-8")).hexdigest().lower()
 
         headers = {
             "Content-Type": "application/json",
@@ -50,10 +50,8 @@ class AqaraClient:
         }
         if access_token:
             headers["Accesstoken"] = access_token
-
         return headers
 
-    # ---------- SENSORWERTE LESEN (query.resource.value) ----------
     def get_device_value(self, access_token, device_id, resource_name: str):
         """
         Liest einen Sensorwert über Aqara V3.
@@ -70,10 +68,10 @@ class AqaraClient:
                 "resources": [
                     {
                         "subjectId": device_id,
-                        "resourceIds": [resource_name]
+                        "resourceIds": [resource_name],
                     }
                 ]
-            }
+            },
         }
 
         try:
@@ -96,6 +94,57 @@ class AqaraClient:
         except Exception as e:
             return f"Verbindungsfehler: {str(e)}"
 
+    def switch_socket(
+        self,
+        access_token,
+        device_id,
+        turn_on: bool,
+        resource_id="4.1.85",
+        mode: str = "state",
+    ):
+        """
+        Schaltet eine Steckdose.
+
+        intent: write.resource.device
+
+        mode="state":
+            0 = AUS, 1 = EIN (turn_on steuert den Zustand)
+        mode="toggle":
+            2 = TOGGLE (unabhängig von turn_on)
+        """
+        url = self.base_url
+        headers = self._generate_headers(access_token)
+
+        if mode == "toggle":
+            value = "2"
+        else:
+            value = "1" if turn_on else "0"  # 0/1 als String
+
+        payload = {
+            "intent": "write.resource.device",
+            "data": [
+                {
+                    "subjectId": device_id,
+                    "resources": [
+                        {
+                            "resourceId": resource_id,
+                            "value": value,
+                        }
+                    ],
+                }
+            ],
+        }
+
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=5)
+            return response.json()
+        except Exception as e:
+            return {"code": -1, "message": str(e)}
+
+
+# --------------------------------------------------------------------
+# AQARA Farbsettings
+# --------------------------------------------------------------------
 
     def temp_color_and_label(temp: float | None):
     """
@@ -129,56 +178,6 @@ def hum_color_and_label(hum: float | None):
     if hum <= 75:
         return "#bfdbfe", "feucht"
     return "#fecaca", "sehr feucht"
-
-    # ---------- STECKDOSE SCHALTEN (write.resource.device) ----------
-    def switch_socket(
-        self,
-        access_token,
-        device_id,
-        turn_on: bool,
-        resource_id="4.1.85",
-        mode: str = "state",
-    ):
-        """
-        Schaltet eine Steckdose.
-
-        API-Intent:
-          intent: "write.resource.device"
-
-        mode="state":
-            0 = AUS, 1 = EIN (turn_on steuert den Zustand)
-        mode="toggle":
-            2 = TOGGLE (unabhängig von turn_on)
-        """
-        url = self.base_url
-        headers = self._generate_headers(access_token)
-
-        if mode == "toggle":
-            value = "2"
-        else:
-            value = "1" if turn_on else "0"  # 0/1 als String laut Doku
-
-        payload = {
-            "intent": "write.resource.device",
-            "data": [
-                {
-                    "subjectId": device_id,
-                    "resources": [
-                        {
-                            "resourceId": resource_id,
-                            "value": value,
-                        }
-                    ],
-                }
-            ],
-        }
-
-        try:
-            response = requests.post(url, headers=headers, json=payload, timeout=5)
-            return response.json()
-        except Exception as e:
-            return {"code": -1, "message": str(e)}
-
 
 # --------------------------------------------------------------------
 # AQARA KONFIG AUS SECRETS
