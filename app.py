@@ -24,16 +24,37 @@ class AqaraClient:
         self.base_url = f"https://open-{region}.aqara.com/v3.0/open/api"
 
     def _generate_headers(self, access_token=None):
-        """Erstellt die nötige Signatur für Aqara V3."""
+        """
+        Erstellt die nötige Signatur für Aqara V3.
+
+        Sign-Regel:
+        - Nimm alle Header-Parameter aus {Accesstoken, Appid, Keyid, Nonce, Time},
+          die im Request verwendet werden.
+        - Sortiere sie nach ASCII des Keys.
+        - Verketten: key1=val1&key2=val2&... + app_secret
+        - alles zu lowercase() und dann md5 -> hex.
+        """
         nonce = uuid.uuid4().hex
         timestamp = str(int(time.time() * 1000))
 
-        # WICHTIG: alte, funktionierende Variante (ohne Accesstoken im Sign)
-        sign_str = (
-            f"Appid={self.app_id}&Keyid={self.key_id}"
-            f"&Nonce={nonce}&Time={timestamp}{self.app_secret}"
+        # Parameter, die in die Signatur gehören
+        sign_params = {
+            "Appid": self.app_id,
+            "Keyid": self.key_id,
+            "Nonce": nonce,
+            "Time": timestamp,
+        }
+        if access_token:
+            sign_params["Accesstoken"] = access_token
+
+        # ASCII-sortiert zusammensetzen
+        sign_str = "&".join(
+            f"{k}={sign_params[k]}" for k in sorted(sign_params.keys())
         )
-        sign = hashlib.md5(sign_str.encode("utf-8")).hexdigest().lower()
+        sign_str += self.app_secret
+
+        # laut Beispielen: alles lowercase vor dem Hash
+        sign = hashlib.md5(sign_str.lower().encode("utf-8")).hexdigest()
 
         headers = {
             "Content-Type": "application/json",
@@ -255,6 +276,8 @@ def get_environment_values():
     hum = hum_val / 100.0 if hum_val is not None else None
 
     return temp, hum, None
+
+
 # --------------------------------------------------------------------
 # GLOBAL KONFIG
 # --------------------------------------------------------------------
