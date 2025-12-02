@@ -74,6 +74,19 @@ class AqaraClient:
         """
         Low-Level Call für query.resource.value.
         Gibt IMMER die rohe JSON-Response (dict) zurück.
+
+        Laut Doku:
+        {
+          "intent": "query.resource.value",
+          "data": {
+            "resources": [
+              {
+                "subjectId": "...",
+                "resourceIds": ["0.1.85"]
+              }
+            ]
+          }
+        }
         """
         if isinstance(resource_ids, str):
             resource_ids = [resource_ids]
@@ -81,17 +94,16 @@ class AqaraClient:
         url = self.base_url
         headers = self._generate_headers(access_token)
 
-        # laut Praxis: data ist ein ARRAY, genau wie bei write.resource.device
-        resources = [{"resourceId": rid} for rid in resource_ids]
-
         payload = {
             "intent": "query.resource.value",
-            "data": [
-                {
-                    "subjectId": device_id,
-                    "resources": resources,
-                }
-            ],
+            "data": {
+                "resources": [
+                    {
+                        "subjectId": device_id,
+                        "resourceIds": resource_ids,
+                    }
+                ]
+            },
         }
 
         try:
