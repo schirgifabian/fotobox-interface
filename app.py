@@ -150,16 +150,25 @@ def get_environment_values():
     """
     Holt Temperatur & Luftfeuchte vom Aqara-Sensor.
     Gibt (temp, hum, error_msg) zurück.
+
+    Hinweis:
+    - Aqara liefert Werte in 0.01-Einheiten (z.B. 3203 = 32.03 °C),
+      deshalb werden die Rohwerte hier durch 100 geteilt.
     """
     if not (AQARA_ENABLED and AQARA_SENSOR_DEVICE_ID and aqara_client):
         return None, None, "Aqara-Sensor nicht konfiguriert."
 
+    # Rohwerte von der API holen
     temp_raw = aqara_client.get_device_value(
-        AQARA_ACCESS_TOKEN, AQARA_SENSOR_DEVICE_ID, AQARA_TEMP_RESOURCE
-        )
+        AQARA_ACCESS_TOKEN,
+        AQARA_SENSOR_DEVICE_ID,
+        AQARA_TEMP_RESOURCE,
+    )
     hum_raw = aqara_client.get_device_value(
-        AQARA_ACCESS_TOKEN, AQARA_SENSOR_DEVICE_ID, AQARA_HUM_RESOURCE
-        )
+        AQARA_ACCESS_TOKEN,
+        AQARA_SENSOR_DEVICE_ID,
+        AQARA_HUM_RESOURCE,
+    )
 
     # Wenn die API schon eine Fehlermeldung als String liefert
     if isinstance(temp_raw, str) and temp_raw.startswith(("Fehler", "Verbindungsfehler")):
@@ -167,8 +176,12 @@ def get_environment_values():
     if isinstance(hum_raw, str) and hum_raw.startswith(("Fehler", "Verbindungsfehler")):
         return None, None, hum_raw
 
-    temp = _to_float_or_none(temp_raw)
-    hum = _to_float_or_none(hum_raw)
+    # In float wandeln und von 0.01-Einheiten auf "normale" Werte skalieren
+    temp_val = _to_float_or_none(temp_raw)
+    hum_val = _to_float_or_none(hum_raw)
+
+    temp = temp_val / 100.0 if temp_val is not None else None
+    hum = hum_val / 100.0 if hum_val is not None else None
 
     return temp, hum, None
 
