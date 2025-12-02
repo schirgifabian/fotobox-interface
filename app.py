@@ -81,16 +81,17 @@ class AqaraClient:
         url = self.base_url
         headers = self._generate_headers(access_token)
 
+        # laut Praxis: data ist ein ARRAY, genau wie bei write.resource.device
+        resources = [{"resourceId": rid} for rid in resource_ids]
+
         payload = {
             "intent": "query.resource.value",
-            "data": {
-                "resources": [
-                    {
-                        "subjectId": device_id,
-                        "resourceIds": resource_ids,
-                    }
-                ]
-            },
+            "data": [
+                {
+                    "subjectId": device_id,
+                    "resources": resources,
+                }
+            ],
         }
 
         try:
