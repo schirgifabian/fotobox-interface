@@ -69,36 +69,52 @@ class AqaraClient:
             headers["Accesstoken"] = access_token
         return headers
 
-    def get_device_value(self, access_token, device_id, resource_name: str):
+    def get_device_value(self, access_token, device_id, resource_id: str):
         """
         Liest einen Sensorwert über Aqara V3.
 
         intent: query.resource.value
-        data.resources[].resourceIds -> laut offizieller Doku
+        Hinweis:
+        - data ist (wie bei write.resource.device) ein Array
+        - pro Eintrag können mehrere Ressourcen angefragt werden
         """
         url = self.base_url
         headers = self._generate_headers(access_token)
 
         payload = {
             "intent": "query.resource.value",
-            "data": {
-                "resources": [
-                    {
-                        "subjectId": device_id,
-                        "resourceIds": [resource_name],
-                    }
-                ]
-            },
+            "data": [
+                {
+                    "subjectId": device_id,
+                    "resources": [
+                        {
+                            "resourceId": resource_id
+                        }
+                    ],
+                }
+            ],
         }
 
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=5)
             data = response.json()
 
-            # Erfolg
+            # DEBUG (kannst du wieder rausnehmen, wenn alles läuft)
+            # print("AQARA SENSOR RESPONSE:", json.dumps(data, indent=2, ensure_ascii=False))
+
             if data.get("code") == 0 and data.get("result"):
                 first = data["result"][0]
-                return first.get("value")
+
+                # Variante 1: value direkt im ersten Element
+                if "value" in first:
+                    return first["value"]
+
+                # Variante 2: value innerhalb von resources[]
+                resources = first.get("resources") or []
+                if resources and isinstance(resources, list):
+                    return resources[0].get("value")
+
+                return "Fehler: Kein Wert im Ergebnis gefunden."
 
             # Fehlertext möglichst klar extrahieren
             msg = (
