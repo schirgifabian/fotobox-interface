@@ -56,36 +56,21 @@ class AqaraClient:
     # ---------- SENSORWERTE LESEN (query.resource.value) ----------
     def get_device_value(self, access_token, device_id, resource_name: str):
         """
-        Liest einen Sensorwert aus.
-
-        Intent: query.resource.value
-        resource_name z.B.: "0.1.85" (Temp), "0.2.85" (Feuchte)
+        Liest Sensorwerte über Aqara V3.
+        Sensoren verwenden laut Debugger KEIN 'resourceId',
+        sondern 'options': ["0.1.85"].
         """
         url = self.base_url
         headers = self._generate_headers(access_token)
 
-        # Laut V3-Schema:
-        # {
-        #   "intent": "query.resource.value",
-        #   "data": [
-        #     {
-        #       "subjectId": "...",
-        #       "resources": [
-        #         { "resourceId": "0.1.85" }
-        #       ]
-        #     }
-        #   ]
-        # }
         payload = {
             "intent": "query.resource.value",
             "data": [
                 {
                     "subjectId": device_id,
-                    "resources": [
-                        {"resourceId": resource_name}
-                    ],
+                    "options": [resource_name]   # <- WICHTIG!
                 }
-            ],
+            ]
         }
 
         try:
@@ -93,21 +78,10 @@ class AqaraClient:
             data = response.json()
 
             if data.get("code") == 0 and data.get("result"):
-                # result-Format typischerweise:
-                # [
-                #   {
-                #     "subjectId": "...",
-                #     "resourceId": "0.1.85",
-                #     "value": "3035",
-                #     "timeStamp": ...
-                #   }
-                # ]
                 first = data["result"][0]
-                value = first.get("value")
-                return value
+                return first.get("value")
             else:
-                msg = data.get("message") or data.get("msgDetails") or "Unbekannter Fehler"
-                return f"Fehler: {msg}"
+                return f"Fehler: {data.get('message', 'Unbekannt')}"
         except Exception as e:
             return f"Verbindungsfehler: {str(e)}"
 
