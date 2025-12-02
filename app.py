@@ -14,6 +14,7 @@ import json
 # AQARA CLIENT
 # --------------------------------------------------------------------
 
+
 class AqaraClient:
     def __init__(self, app_id, key_id, app_secret, region="ger"):
         self.app_id = app_id
@@ -27,17 +28,12 @@ class AqaraClient:
         nonce = uuid.uuid4().hex
         timestamp = str(int(time.time() * 1000))
 
-        # Sign-String aufbauen
-        parts = []
-        if access_token:
-            parts.append(f"Accesstoken={access_token}")
-        parts.append(f"Appid={self.app_id}")
-        parts.append(f"Keyid={self.key_id}")
-        parts.append(f"Nonce={nonce}")
-        parts.append(f"Time={timestamp}")
-
-        sign_src = "&".join(parts) + self.app_secret
-        sign = hashlib.md5(sign_src.encode("utf-8")).hexdigest().lower()
+        # WICHTIG: alte, funktionierende Variante (ohne Accesstoken im Sign)
+        sign_str = (
+            f"Appid={self.app_id}&Keyid={self.key_id}"
+            f"&Nonce={nonce}&Time={timestamp}{self.app_secret}"
+        )
+        sign = hashlib.md5(sign_str.encode("utf-8")).hexdigest().lower()
 
         headers = {
             "Content-Type": "application/json",
@@ -180,6 +176,7 @@ def hum_color_and_label(hum: float | None):
         return "#bfdbfe", "feucht"
     return "#fecaca", "sehr feucht"
 
+
 # --------------------------------------------------------------------
 # AQARA KONFIG AUS SECRETS
 # --------------------------------------------------------------------
@@ -258,8 +255,6 @@ def get_environment_values():
     hum = hum_val / 100.0 if hum_val is not None else None
 
     return temp, hum, None
-
-
 # --------------------------------------------------------------------
 # GLOBAL KONFIG
 # --------------------------------------------------------------------
