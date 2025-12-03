@@ -10,31 +10,52 @@ import uuid
 import hashlib
 import json
 
-# --- PIN ABFRAGE START ---
+# --- PIN ABFRAGE MIT COOKIE START ---
 
-# Wenn noch kein Login-Status da ist, auf False setzen
-if 'is_logged_in' not in st.session_state:
-    st.session_state['is_logged_in'] = False
-
-# Funktion zum Prüfen
-def check_pin():
-    # Wir holen den PIN aus den Secrets (nicht hardcodiert!)
-    # Falls du die Sektion [general] genannt hast:
-    secret_pin = st.secrets["general"]["app_pin"]
-    
-    if st.session_state.pin_input == secret_pin:
-        st.session_state['is_logged_in'] = True
-    else:
-        st.error("Falscher PIN!")
-
-# Wenn nicht eingeloggt -> Eingabefeld zeigen und ALLES andere stoppen
-if not st.session_state['is_logged_in']:
+def check_login():
     st.title("🔒 Zugriff geschützt")
-    st.text_input("Bitte PIN eingeben:", type="password", key="pin_input", on_change=check_pin)
-    st.stop() # WICHTIG: Das hier verhindert, dass der Rest der App lädt!
+    
+    # Cookie Manager initialisieren (benötigt einen Key, damit er eindeutig ist)
+    cookie_manager = stx.CookieManager(key="fotobox_auth")
+    
+    # 1. Versuchen, den PIN aus dem Cookie zu lesen
+    # Hinweis: Das Lesen passiert asynchron, manchmal braucht Streamlit einen Rerun
+    cookie_pin = cookie_manager.get(cookie="auth_pin")
+    
+    # Hole den echten PIN aus den Secrets
+    secret_pin = st.secrets["general"]["app_pin"]
+
+    # Wenn der Cookie gesetzt ist und stimmt:
+    if cookie_pin == secret_pin:
+        return True
+    
+    # Wenn kein gültiger Cookie da ist -> Eingabeformular
+    with st.form("login_form"):
+        user_input = st.text_input("Bitte PIN eingeben:", type="password")
+        submitted = st.form_submit_button("Login")
+        
+        if submitted:
+            if user_input == secret_pin:
+                # Cookie setzen (läuft in 1 Stunde ab)
+                expires = datetime.datetime.now() + datetime.timedelta(hours=1)
+                cookie_manager.set("auth_pin", user_input, expires_at=expires)
+                st.success("Login erfolgreich! Lade neu...")
+                time.sleep(1) # Kurze Pause für die UX
+                st.rerun()    # Seite neu laden, damit der Cookie oben erkannt wird
+            else:
+                st.error("Falscher PIN!")
+                
+    # Solange nicht eingeloggt, stoppt hier alles
+    st.stop()
+
+# Diese Funktion ganz oben aufrufen. 
+# WICHTIG: `import time` nicht vergessen oben bei den Imports!
+import time 
+
+# Prüfung ausführen
+check_login()
 
 # --- PIN ABFRAGE ENDE ---
-
 
 # --------------------------------------------------------------------
 # AQARA CLIENT (nur Steckdose)
