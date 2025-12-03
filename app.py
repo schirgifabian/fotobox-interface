@@ -14,49 +14,65 @@ import extra_streamlit_components as stx
 # --- PIN ABFRAGE MIT COOKIE START ---
 
 def check_login():
-    # Cookie Manager initialisieren (Key macht ihn einzigartig)
+    # Session State initialisieren, falls noch nicht vorhanden
+    if "is_logged_in" not in st.session_state:
+        st.session_state["is_logged_in"] = False
+
+    # Cookie Manager initialisieren
     cookie_manager = stx.CookieManager(key="fotobox_auth")
     
-    # 1. Versuchen, den PIN aus dem Cookie zu lesen
-    cookie_pin = cookie_manager.get(cookie="auth_pin")
+    # Echten PIN holen und sicherstellen, dass er ein String ist
+    secret_pin = str(st.secrets["general"]["app_pin"])
     
-    # Hole den echten PIN aus den Secrets
-    secret_pin = st.secrets["general"]["app_pin"]
+    # Versuchen, Cookie zu lesen
+    cookie_val = cookie_manager.get("auth_pin")
 
-    # --- FALL 1: Benutzer ist schon eingeloggt (Cookie stimmt) ---
-    if cookie_pin == secret_pin:
-        # Hier geben wir True zurück, damit der Rest der App geladen wird
-        return True
+    # --- PRÜFUNG 1: Ist der Nutzer laut Cookie schon eingeloggt? ---
+    if cookie_val is not None and str(cookie_val) == secret_pin:
+        st.session_state["is_logged_in"] = True
     
-    # --- FALL 2: Nicht eingeloggt -> Zeige Login-Feld ---
+    # --- PRÜFUNG 2: Ist der Nutzer laut Session State eingeloggt? ---
+    if st.session_state["is_logged_in"]:
+        return True
+
+    # --- FALL 3: Weder Cookie noch Session -> Login Formular zeigen ---
     st.title("🔒 Zugriff geschützt")
     
+    # Platzhalter für Nachrichten, damit sie nicht verschwinden
+    msg_placeholder = st.empty()
+
     with st.form("login_form"):
         user_input = st.text_input("Bitte PIN eingeben:", type="password")
         submitted = st.form_submit_button("Login")
         
         if submitted:
-            if user_input == secret_pin:
-                # Cookie setzen (läuft in 1 Stunde ab)
+            # Eingabe auch in String wandeln für sicheren Vergleich
+            if str(user_input) == secret_pin:
+                
+                # 1. Sofort für diese Sitzung freigeben (HEILMITTEL GEGEN HÄNGEN)
+                st.session_state["is_logged_in"] = True
+                
+                # 2. Cookie für die Zukunft setzen
                 expires = datetime.datetime.now() + datetime.timedelta(hours=1)
                 cookie_manager.set("auth_pin", user_input, expires_at=expires)
                 
-                st.success("Login erfolgreich! Lade neu...")
+                msg_placeholder.success("Login korrekt! Geht sofort los...")
                 
-                # WICHTIG: Warten und Rerun erzwingen
-                time.sleep(1.5)
+                # Kurze Pause, dann Reload
+                time.sleep(1)
                 st.rerun()
-            else:
-                st.error("Falscher PIN!")
                 
-    # Solange nicht eingeloggt, stoppt das Script hier. 
-    # Es wird nichts weiter unten ausgeführt.
+            else:
+                msg_placeholder.error(f"Falscher PIN! Eingegeben: {user_input}")
+
+    # Hier stoppt alles, solange man nicht eingeloggt ist
     st.stop()
 
 # Funktion ausführen
 check_login()
 
 # --- PIN ABFRAGE ENDE ---
+
 
 
 # --------------------------------------------------------------------
