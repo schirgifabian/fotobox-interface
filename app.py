@@ -9,6 +9,7 @@ import time
 import uuid
 import hashlib
 import json
+import extra_streamlit_components as stx
 
 # --- PIN ABFRAGE MIT COOKIE START ---
 
