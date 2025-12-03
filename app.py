@@ -4,27 +4,27 @@ from gspread.exceptions import WorksheetNotFound
 from google.oauth2.service_account import Credentials
 import requests
 import pandas as pd
-import datetime       # <--- Geändert! (Wichtig für den Fehlerfix)
+import datetime
 import time
 import uuid
 import hashlib
 import json
 import extra_streamlit_components as stx
 
-# --- PIN ABFRAGE MIT COOKIE START ---
+# --- PIN ABFRAGE START ---
 
 def check_login():
-    # Session State initialisieren, falls noch nicht vorhanden
+    # Session State initialisieren
     if "is_logged_in" not in st.session_state:
         st.session_state["is_logged_in"] = False
 
     # Cookie Manager initialisieren
     cookie_manager = stx.CookieManager(key="fotobox_auth")
     
-    # Echten PIN holen und sicherstellen, dass er ein String ist
+    # Echten PIN holen und als String casten
     secret_pin = str(st.secrets["general"]["app_pin"])
     
-    # Versuchen, Cookie zu lesen
+    # Cookie lesen
     cookie_val = cookie_manager.get("auth_pin")
 
     # --- PRÜFUNG 1: Ist der Nutzer laut Cookie schon eingeloggt? ---
@@ -35,10 +35,9 @@ def check_login():
     if st.session_state["is_logged_in"]:
         return True
 
-    # --- FALL 3: Weder Cookie noch Session -> Login Formular zeigen ---
+    # --- FALL 3: Login Formular zeigen ---
     st.title("🔒 Zugriff geschützt")
     
-    # Platzhalter für Nachrichten, damit sie nicht verschwinden
     msg_placeholder = st.empty()
 
     with st.form("login_form"):
@@ -46,13 +45,11 @@ def check_login():
         submitted = st.form_submit_button("Login")
         
         if submitted:
-            # Eingabe auch in String wandeln für sicheren Vergleich
             if str(user_input) == secret_pin:
-                
-                # 1. Sofort für diese Sitzung freigeben (HEILMITTEL GEGEN HÄNGEN)
+                # 1. Session freigeben
                 st.session_state["is_logged_in"] = True
                 
-                # 2. Cookie für die Zukunft setzen
+                # 2. Cookie setzen
                 expires = datetime.datetime.now() + datetime.timedelta(hours=1)
                 cookie_manager.set("auth_pin", user_input, expires_at=expires)
                 
@@ -61,44 +58,30 @@ def check_login():
                 # Kurze Pause, dann Reload
                 time.sleep(1)
                 st.rerun()
-                
             else:
-                msg_placeholder.error(f"Falscher PIN! Eingegeben: {user_input}")
+                msg_placeholder.error(f"Falscher PIN!")
 
-    # Hier stoppt alles, solange man nicht eingeloggt ist
+    # Hier stoppt alles, solange nicht eingeloggt
     st.stop()
 
-# Funktion ausführen
+# Login-Check ausführen, bevor irgendetwas anderes passiert
 check_login()
 
 # --- PIN ABFRAGE ENDE ---
 
 
-
 # --------------------------------------------------------------------
-# AQARA CLIENT (nur Steckdose)
+# AQARA CLIENT
 # --------------------------------------------------------------------
-
 
 class AqaraClient:
     def __init__(self, app_id, key_id, app_secret, region="ger"):
         self.app_id = app_id
         self.key_id = key_id
         self.app_secret = app_secret
-        # laut Doku: https://${domain}/v3.0/open/api
         self.base_url = f"https://open-{region}.aqara.com/v3.0/open/api"
 
     def _generate_headers(self, access_token=None):
-        """
-        Erstellt die nötige Signatur für Aqara V3.
-
-        Sign-Regel:
-        - Nimm alle Header-Parameter aus {Accesstoken, Appid, Keyid, Nonce, Time},
-          die im Request verwendet werden.
-        - Sortiere sie nach ASCII des Keys.
-        - Verketten: key1=val1&key2=val2&... + app_secret
-        - alles zu lowercase() und dann md5 -> hex.
-        """
         nonce = uuid.uuid4().hex
         timestamp = str(int(time.time() * 1000))
 
@@ -130,13 +113,7 @@ class AqaraClient:
             headers["Accesstoken"] = access_token
         return headers
 
-    # ---------- Status lesen (query.resource.value) ----------
-
     def _query_resource_value(self, access_token, device_id, resource_ids):
-        """
-        Low-Level Call für query.resource.value.
-        Liefert die rohe JSON-Response zurück.
-        """
         if isinstance(resource_ids, str):
             resource_ids = [resource_ids]
 
@@ -162,12 +139,6 @@ class AqaraClient:
             return {"code": -1, "message": str(e)}
 
     def get_socket_state(self, access_token, device_id, resource_id="4.1.85"):
-        """
-        Versucht den Status der Steckdose abzufragen.
-
-        Rückgabe:
-            ("on" | "off" | "unknown", raw_response_dict)
-        """
         data = self._query_resource_value(access_token, device_id, resource_id)
 
         if data.get("code") != 0:
@@ -176,19 +147,14 @@ class AqaraClient:
         result = data.get("result")
         value = None
 
-        # Häufiges Muster: result ist eine Liste mit Einträgen {resourceId, value, ...}
         if isinstance(result, list):
             for item in result:
                 if item.get("resourceId") == resource_id and "value" in item:
                     value = item["value"]
                     break
-        # Alternativ: result als Dict mit "data" usw. – generisch durchsuchen
         elif isinstance(result, dict):
             for item in result.get("data", []):
-                if (
-                    item.get("resourceId") == resource_id
-                    and "value" in item
-                ):
+                if item.get("resourceId") == resource_id and "value" in item:
                     value = item["value"]
                     break
                 for r in item.get("resources", []):
@@ -207,8 +173,6 @@ class AqaraClient:
 
         return "unknown", data
 
-    # ---------- Steckdose schalten (write.resource.device) ----------
-
     def switch_socket(
         self,
         access_token,
@@ -217,23 +181,13 @@ class AqaraClient:
         resource_id="4.1.85",
         mode: str = "state",
     ):
-        """
-        Schaltet eine Steckdose.
-
-        intent: write.resource.device
-
-        mode="state":
-            0 = AUS, 1 = EIN (turn_on steuert den Zustand)
-        mode="toggle":
-            2 = TOGGLE (unabhängig von turn_on)
-        """
         url = self.base_url
         headers = self._generate_headers(access_token)
 
         if mode == "toggle":
             value = "2"
         else:
-            value = "1" if turn_on else "0"  # 0/1 als String
+            value = "1" if turn_on else "0"
 
         payload = {
             "intent": "write.resource.device",
@@ -258,7 +212,7 @@ class AqaraClient:
 
 
 # --------------------------------------------------------------------
-# AQARA KONFIG AUS SECRETS (nur Steckdose)
+# AQARA KONFIG AUS SECRETS
 # --------------------------------------------------------------------
 AQARA_ENABLED = False
 aqara_client = None
@@ -370,7 +324,7 @@ def send_ntfy_push(title, message, tags="warning", priority="default"):
             timeout=5,
         )
     except Exception:
-        pass  # Dashboard soll nicht crashen
+        pass
 
 
 # --------------------------------------------------------------------
@@ -421,8 +375,10 @@ def log_reset_event(package_size: int, note: str = ""):
         except WorksheetNotFound:
             meta_ws = sh.add_worksheet(title="Meta", rows=1000, cols=10)
             meta_ws.append_row(["Timestamp", "PackageSize", "Note"])
+            
+        # FIX: datetime.datetime.now() verwenden
         meta_ws.append_row(
-            [datetime.now().isoformat(timespec="seconds"), package_size, note]
+            [datetime.datetime.now().isoformat(timespec="seconds"), package_size, note]
         )
     except Exception as e:
         st.warning(f"Reset konnte nicht im Meta-Log gespeichert werden: {e}")
@@ -455,7 +411,8 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
     minutes_diff = None
     ts_parsed = pd.to_datetime(timestamp, errors="coerce")
     if pd.notna(ts_parsed):
-        delta = datetime.now() - ts_parsed.to_pydatetime()
+        # FIX: datetime.datetime.now() verwenden
+        delta = datetime.datetime.now() - ts_parsed.to_pydatetime()
         minutes_diff = int(delta.total_seconds() // 60)
         if minutes_diff >= HEARTBEAT_WARN_MINUTES and status_mode != "error":
             status_mode = "stale"
@@ -736,7 +693,7 @@ if not event_mode:
 
         st.markdown("---")
 
-        # AQARA STECKDOSE – neues Design mit Status + Toggle
+        # AQARA STECKDOSE
         st.write("### Aqara Steckdose Fotobox")
 
         if not AQARA_ENABLED:
@@ -755,7 +712,6 @@ if not event_mode:
             if current_state in ("on", "off"):
                 st.session_state.socket_state = current_state
             else:
-                # nur wenn wir noch nichts sinnvolles wissen, lassen wir "unknown"
                 if st.session_state.socket_state not in ("on", "off"):
                     st.session_state.socket_state = "unknown"
 
@@ -829,11 +785,12 @@ if not event_mode:
                         if desired_on
                         else "Steckdose ausgeschaltet."
                     )
+                    time.sleep(0.5)
+                    st.rerun()
                 else:
                     st.error("Fehler beim Schalten der Steckdose:")
                     st.code(json.dumps(res, indent=2))
 
-            # Optionaler Debug
             if st.checkbox("Aqara Steckdose Debug anzeigen", value=False):
                 st.text("Letzte Status-Response:")
                 st.code(
