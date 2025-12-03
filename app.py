@@ -14,23 +14,23 @@ import extra_streamlit_components as stx
 # --- PIN ABFRAGE MIT COOKIE START ---
 
 def check_login():
-    st.title("🔒 Zugriff geschützt")
-    
-    # Cookie Manager initialisieren (benötigt einen Key, damit er eindeutig ist)
+    # Cookie Manager initialisieren (Key macht ihn einzigartig)
     cookie_manager = stx.CookieManager(key="fotobox_auth")
     
     # 1. Versuchen, den PIN aus dem Cookie zu lesen
-    # Hinweis: Das Lesen passiert asynchron, manchmal braucht Streamlit einen Rerun
     cookie_pin = cookie_manager.get(cookie="auth_pin")
     
     # Hole den echten PIN aus den Secrets
     secret_pin = st.secrets["general"]["app_pin"]
 
-    # Wenn der Cookie gesetzt ist und stimmt:
+    # --- FALL 1: Benutzer ist schon eingeloggt (Cookie stimmt) ---
     if cookie_pin == secret_pin:
+        # Hier geben wir True zurück, damit der Rest der App geladen wird
         return True
     
-    # Wenn kein gültiger Cookie da ist -> Eingabeformular
+    # --- FALL 2: Nicht eingeloggt -> Zeige Login-Feld ---
+    st.title("🔒 Zugriff geschützt")
+    
     with st.form("login_form"):
         user_input = st.text_input("Bitte PIN eingeben:", type="password")
         submitted = st.form_submit_button("Login")
@@ -40,23 +40,24 @@ def check_login():
                 # Cookie setzen (läuft in 1 Stunde ab)
                 expires = datetime.datetime.now() + datetime.timedelta(hours=1)
                 cookie_manager.set("auth_pin", user_input, expires_at=expires)
+                
                 st.success("Login erfolgreich! Lade neu...")
-                time.sleep(1) # Kurze Pause für die UX
-                st.rerun()    # Seite neu laden, damit der Cookie oben erkannt wird
+                
+                # WICHTIG: Warten und Rerun erzwingen
+                time.sleep(1.5)
+                st.rerun()
             else:
                 st.error("Falscher PIN!")
                 
-    # Solange nicht eingeloggt, stoppt hier alles
+    # Solange nicht eingeloggt, stoppt das Script hier. 
+    # Es wird nichts weiter unten ausgeführt.
     st.stop()
 
-# Diese Funktion ganz oben aufrufen. 
-# WICHTIG: `import time` nicht vergessen oben bei den Imports!
-import time 
-
-# Prüfung ausführen
+# Funktion ausführen
 check_login()
 
 # --- PIN ABFRAGE ENDE ---
+
 
 # --------------------------------------------------------------------
 # AQARA CLIENT (nur Steckdose)
