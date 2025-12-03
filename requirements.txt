@@ -4,3 +4,4 @@ google-auth
 requests
 streamlit-lottie
 streamlit-autorefresh
+extra-streamlit-components
