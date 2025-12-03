@@ -4,7 +4,7 @@ from gspread.exceptions import WorksheetNotFound
 from google.oauth2.service_account import Credentials
 import requests
 import pandas as pd
-from datetime import datetime
+import datetime       # <--- Geändert! (Wichtig für den Fehlerfix)
 import time
 import uuid
 import hashlib
