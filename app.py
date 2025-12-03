@@ -10,6 +10,32 @@ import uuid
 import hashlib
 import json
 
+# --- PIN ABFRAGE START ---
+
+# Wenn noch kein Login-Status da ist, auf False setzen
+if 'is_logged_in' not in st.session_state:
+    st.session_state['is_logged_in'] = False
+
+# Funktion zum Prüfen
+def check_pin():
+    # Wir holen den PIN aus den Secrets (nicht hardcodiert!)
+    # Falls du die Sektion [general] genannt hast:
+    secret_pin = st.secrets["general"]["app_pin"]
+    
+    if st.session_state.pin_input == secret_pin:
+        st.session_state['is_logged_in'] = True
+    else:
+        st.error("Falscher PIN!")
+
+# Wenn nicht eingeloggt -> Eingabefeld zeigen und ALLES andere stoppen
+if not st.session_state['is_logged_in']:
+    st.title("🔒 Zugriff geschützt")
+    st.text_input("Bitte PIN eingeben:", type="password", key="pin_input", on_change=check_pin)
+    st.stop() # WICHTIG: Das hier verhindert, dass der Rest der App lädt!
+
+# --- PIN ABFRAGE ENDE ---
+
+
 # --------------------------------------------------------------------
 # AQARA CLIENT (nur Steckdose)
 # --------------------------------------------------------------------
