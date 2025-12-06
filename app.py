@@ -501,6 +501,34 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
     st.session_state.last_warn_status = status_mode
     return status_mode, display_text, display_color, push, minutes_diff
 
+
+def maybe_play_sound(status_mode: str, sound_enabled: bool):
+    """
+    Spielt einen Warnton bei kritischen Zuständen,
+    aber nur, wenn sich der Status geändert hat.
+    """
+    if not sound_enabled or not ALERT_SOUND_URL:
+        return
+
+    prev = st.session_state.last_sound_status
+
+    # gleiche kritische Zustände wie bei den Pushes
+    critical_states_with_sound = ["error", "cover_open", "low_paper"]
+
+    if status_mode in critical_states_with_sound and prev != status_mode:
+        st.session_state.last_sound_status = status_mode
+        st.markdown(
+            f"""
+            <audio autoplay>
+                <source src="{ALERT_SOUND_URL}" type="audio/ogg">
+            </audio>
+            """,
+            unsafe_allow_html=True,
+        )
+    elif status_mode not in critical_states_with_sound and prev is not None:
+        # zurücksetzen, wenn wieder alles ok ist
+        st.session_state.last_sound_status = None
+
 # --------------------------------------------------------------------
 # UI START
 # --------------------------------------------------------------------
