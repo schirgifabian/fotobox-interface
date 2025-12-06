@@ -243,38 +243,15 @@ except Exception:
 
 
 # --------------------------------------------------------------------
-# DSLRBOOTH LOCKSCREEN KONFIG AUS SECRETS
+# DSLRBOOTH STEUERUNG VIA NTFY (nur Topic, kein API-Key hier)
 # --------------------------------------------------------------------
 DSR_ENABLED = False
-DSR_BASE_URL = None
-DSR_API_KEY = None
-DSR_LOCKSCREEN_SHOW_URL = None
-DSR_LOCKSCREEN_HIDE_URL = None
-
-def _get_dsr_headers():
-    headers = {"Accept": "application/json"}
-    # ggf. Headernamen anpassen, falls in der Doku anders:
-    if DSR_API_KEY:
-        headers["x-api-key"] = DSR_API_KEY
-    return headers
+DSR_CONTROL_TOPIC = None
 
 try:
     dsr_cfg = st.secrets["dsrbooth"]
-
-    DSR_BASE_URL = dsr_cfg.get("base_url", "http://localhost:1500")
-    DSR_API_KEY = dsr_cfg.get("api_key")
-
-    # Standard-URLs nach deiner Doku
-    DSR_LOCKSCREEN_SHOW_URL = dsr_cfg.get(
-        "lockscreen_show_url",
-        f"{DSR_BASE_URL}/api/lockscreen/show",
-    )
-    DSR_LOCKSCREEN_HIDE_URL = dsr_cfg.get(
-        "lockscreen_hide_url",
-        f"{DSR_BASE_URL}/api/lockscreen/hide",
-    )
-
-    if DSR_API_KEY and DSR_LOCKSCREEN_SHOW_URL and DSR_LOCKSCREEN_HIDE_URL:
+    DSR_CONTROL_TOPIC = dsr_cfg.get("control_topic")
+    if DSR_CONTROL_TOPIC:
         DSR_ENABLED = True
 except Exception:
     DSR_ENABLED = False
@@ -363,6 +340,23 @@ def send_ntfy_push(title, message, tags="warning", priority="default"):
             f"https://ntfy.sh/{topic}",
             data=message.encode("utf-8"),
             headers=headers,
+            timeout=5,
+        )
+    except Exception:
+        pass
+
+
+def send_dsr_command(cmd: str):
+    """
+    Schickt einen einfachen Steuerbefehl ('lock_on' / 'lock_off')
+    an das ntfy-Topic, das der Agent am Surface abonniert.
+    """
+    if not DSR_ENABLED or not DSR_CONTROL_TOPIC:
+        return
+    try:
+        requests.post(
+            f"https://ntfy.sh/{DSR_CONTROL_TOPIC}",
+            data=cmd.encode("utf-8"),
             timeout=5,
         )
     except Exception:
@@ -939,17 +933,21 @@ if not event_mode:
                     st.error("Fehler beim Schalten der Steckdose:")
                     st.code(json.dumps(res, indent=2))
 
-# DSLRBOOTH LOCKSCREEN
+        st.markdown("---")
+
+        # DSLRBOOTH LOCKSCREEN
         st.write("### dsrBooth Lockscreen")
 
         if not DSR_ENABLED:
             st.info(
-                "dsrBooth ist nicht konfiguriert. Bitte [dsrbooth] in secrets.toml setzen."
+                "dsrBooth-Steuerung ist nicht konfiguriert. Bitte [dsrbooth] mit control_topic in secrets.toml setzen."
             )
         else:
-            state = st.session_state.get("lockscreen_state", "off")
+            if "lockscreen_state" not in st.session_state:
+                st.session_state.lockscreen_state = "off"
 
-            # Badge-Optik ähnlich wie bei der Steckdose
+            state = st.session_state.lockscreen_state
+
             if state == "on":
                 badge_color = "#2563eb"
                 badge_text = "LOCKSCREEN AKTIV"
@@ -1017,33 +1015,14 @@ if not event_mode:
 
                 st.markdown("</div>", unsafe_allow_html=True)
 
-            # Nur reagieren, wenn sich der Toggle-Wert ändert
+            # Nur reagieren, wenn Toggle sich ändert
             if lockscreen_toggle != (state == "on"):
                 desired_on = lockscreen_toggle
-                url = DSR_LOCKSCREEN_SHOW_URL if desired_on else DSR_LOCKSCREEN_HIDE_URL
-
-                try:
-                    res = requests.get(url, headers=_get_dsr_headers(), timeout=5)
-                    # Versuchen, JSON zu lesen (laut Doku)
-                    try:
-                        data = res.json()
-                    except Exception:
-                        data = {"raw": res.text}
-
-                    is_ok = res.ok and data.get("IsSuccessful", True)
-
-                    if is_ok:
-                        st.session_state.lockscreen_state = "on" if desired_on else "off"
-                        st.success(
-                            "Lockscreen aktiviert."
-                            if desired_on
-                            else "Lockscreen deaktiviert."
-                        )
-                        time.sleep(0.5)
-                        st.rerun()
-                    else:
-                        st.error("Fehler beim Schalten des Lockscreens:")
-                        st.code(json.dumps(data, indent=2))
-                except Exception as e:
-                    st.error(f"Fehler beim Aufruf der dsrBooth API: {e}")
-                    
+                cmd = "lock_on" if desired_on else "lock_off"
+                send_dsr_command(cmd)
+                st.session_state.lockscreen_state = "on" if desired_on else "off"
+                st.success(
+                    "Lockscreen-Befehl gesendet (aktivieren)."
+                    if desired_on
+                    else "Lockscreen-Befehl gesendet (deaktivieren)."
+                )
