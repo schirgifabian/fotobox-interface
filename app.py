@@ -10,6 +10,7 @@ import uuid
 import hashlib
 import json
 import extra_streamlit_components as stx
+import pytz
 
 # --- PIN ABFRAGE START ---
 
@@ -463,9 +464,16 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
     # HEARTBEAT
     # ---------------------------------------------------
     minutes_diff = None
+    LOCAL_TZ = pytz.timezone("Europe/Vienna")
     ts_parsed = pd.to_datetime(timestamp, errors="coerce")
     if pd.notna(ts_parsed):
-        delta = datetime.datetime.now() - ts_parsed.to_pydatetime()
+        # Falls Timestamp keine TZ hat → als lokale Zeit interpretieren
+        if ts_parsed.tzinfo is None:
+        ts_parsed = LOCAL_TZ.localize(ts_parsed)
+    # Jetzt aktuellen Zeitpunkt ebenfalls in der gleichen TZ holen
+    now_local = datetime.datetime.now(LOCAL_TZ)
+    delta = now_local - ts_parsed
+    minutes_diff = int(delta.total_seconds() // 60)
         minutes_diff = int(delta.total_seconds() // 60)
         if minutes_diff >= HEARTBEAT_WARN_MINUTES and status_mode not in ["error"]:
             status_mode = "stale"
