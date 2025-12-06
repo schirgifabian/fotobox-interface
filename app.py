@@ -808,7 +808,7 @@ if not event_mode:
                 if st.session_state.socket_state not in ("on", "off"):
                     st.session_state.socket_state = "unknown"
 
-            # Status-Optik
+                        # Status-Optik
             state = st.session_state.socket_state
             if state == "on":
                 badge_color = "#16a34a"
@@ -823,46 +823,60 @@ if not event_mode:
                 badge_text = "STATUS UNBEKANNT"
                 badge_icon = "⚠️"
 
-            status_html = f"""
-            <div style="
-                border:1px solid #e5e7eb;
-                border-radius:12px;
-                padding:12px 16px;
-                margin-bottom:12px;
-                display:flex;
-                justify-content:space-between;
-                align-items:center;
-            ">
-                <div>
-                    <div style="font-size:13px; color:#6b7280;">Fotobox-Steckdose</div>
-                    <div style="font-size:20px; font-weight:600; color:#111827;">
-                        {badge_icon} {badge_text}
-                    </div>
-                </div>
-                <div style="
-                    padding:6px 10px;
-                    border-radius:999px;
-                    background:{badge_color}20;
-                    color:{badge_color};
-                    font-size:12px;
-                    font-weight:600;
-                ">
-                    Zustand: {state}
-                </div>
-            </div>
-            """
-            st.markdown(status_html, unsafe_allow_html=True)
+            # Karte mit Status + Toggle in einer Zeile
+            with st.container():
+                st.markdown(
+                    """
+                    <div style="
+                        border:1px solid #e5e7eb;
+                        border-radius:12px;
+                        padding:12px 16px;
+                        margin-bottom:12px;
+                    ">
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-            # Toggle UI
-            desired_on_default = state == "on"
-            toggle_val = st.toggle(
-                "Steckdose Fotobox",
-                value=desired_on_default,
-                help="Schaltet die Aqara-Steckdose ein oder aus.",
-            )
+                col_left, col_right = st.columns([3, 1])
+
+                with col_left:
+                    st.markdown(
+                        f"""
+                        <div style="font-size:13px; color:#6b7280;">Fotobox-Steckdose</div>
+                        <div style="font-size:20px; font-weight:600; color:#111827; display:flex; align-items:center; gap:6px;">
+                            <span>{badge_icon}</span>
+                            <span>{badge_text}</span>
+                        </div>
+                        <div style="
+                            margin-top:6px;
+                            padding:4px 10px;
+                            border-radius:999px;
+                            background:{badge_color}20;
+                            color:{badge_color};
+                            font-size:11px;
+                            font-weight:600;
+                            display:inline-block;
+                        ">
+                            Zustand: {state}
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                with col_right:
+                    desired_on_default = state == "on"
+                    toggle_val = st.toggle(
+                        "Steckdose Fotobox",
+                        value=desired_on_default,
+                        help="Schaltet die Aqara-Steckdose ein oder aus.",
+                        key="aqara_toggle",
+                        label_visibility="collapsed",
+                    )
+
+                st.markdown("</div>", unsafe_allow_html=True)
 
             # Nur reagieren, wenn sich der Toggle-Wert geändert hat
-            if toggle_val != desired_on_default:
+            if toggle_val != (state == "on"):
                 desired_on = toggle_val
                 res = aqara_client.switch_socket(
                     AQARA_ACCESS_TOKEN,
