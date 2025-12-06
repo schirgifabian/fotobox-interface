@@ -386,82 +386,120 @@ def log_reset_event(package_size: int, note: str = ""):
 # --------------------------------------------------------------------
 # STATUS-LOGIK
 # --------------------------------------------------------------------
-def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
-    """
-    Analysiert den Status. 
-    Da 'Status' nun Papier- und Druckerstatus zusammenfasst, suchen wir nach Keywords 
-    im Text UND prüfen die Zahl bei MediaRemaining.
-    """
-    prev_status = st.session_state.last_warn_status
-    raw_status_l = (raw_status or "").lower()
 
-    # Fehlererkennung basierend auf Text im Status
-    if any(w in raw_status_l for w in ["error", "fehler", "stau", "failure", "unknown", "leer", "empty"]):
+def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
+    prev_status = st.session_state.last_warn_status
+    raw_status_l = (raw_status or "").lower().strip()
+
+    # --- Gruppen laut Drucker-Status ---
+    hard_errors = [
+        "paper end",
+        "ribbon end",
+        "paper jam",
+        "ribbon error",
+        "paper definition error",
+        "data error"
+    ]
+
+    cover_open_kw = ["cover open"]
+    cooldown_kw = ["head cooling down"]
+    printing_kw = ["printing", "processing", "drucken"]
+    idle_kw = ["idle", "standby mode"]
+
+    # ---------------------------------------------------
+    # 1) Harte Fehler
+    # ---------------------------------------------------
+    if any(k in raw_status_l for k in hard_errors):
         status_mode = "error"
-        display_text = f"⚠️ STÖRUNG: {raw_status}"
+        display_text = f"🔴 STÖRUNG: {raw_status}"
         display_color = "red"
-    # Papierwarnung basierend auf der Zahl
+
+    # ---------------------------------------------------
+    # 2) Cover Open → eigenes Level, orange
+    # ---------------------------------------------------
+    elif any(k in raw_status_l for k in cover_open_kw):
+        status_mode = "cover_open"
+        display_text = "⚠️ Deckel offen!"
+        display_color = "orange"
+
+    # ---------------------------------------------------
+    # 3) Druckkopf kühlt ab
+    # ---------------------------------------------------
+    elif any(k in raw_status_l for k in cooldown_kw):
+        status_mode = "cooldown"
+        display_text = "⏳ Druckkopf kühlt ab…"
+        display_color = "orange"
+
+    # ---------------------------------------------------
+    # 4) Papier fast leer (nur wenn kein Fehler)
+    # ---------------------------------------------------
     elif media_remaining <= WARNING_THRESHOLD:
         status_mode = "low_paper"
-        display_text = "⚠️ Papier fast leer!"
+        display_text = f"⚠️ Papier fast leer! ({media_remaining} Stk)"
         display_color = "orange"
-    # Druck-Erkennung
-    elif "printing" in raw_status_l or "processing" in raw_status_l or "drucken" in raw_status_l:
+
+    # ---------------------------------------------------
+    # 5) Druckt gerade
+    # ---------------------------------------------------
+    elif any(k in raw_status_l for k in printing_kw):
         status_mode = "printing"
         display_text = "🖨️ Druckt gerade…"
         display_color = "blue"
-    else:
+
+    # ---------------------------------------------------
+    # 6) Leerlauf
+    # ---------------------------------------------------
+    elif any(k in raw_status_l for k in idle_kw) or raw_status_l == "":
         status_mode = "ready"
         display_text = "✅ Bereit"
         display_color = "green"
 
+    else:
+        status_mode = "ready"
+        display_text = f"✅ Bereit ({raw_status})"
+        display_color = "green"
+
+    # ---------------------------------------------------
+    # HEARTBEAT
+    # ---------------------------------------------------
     minutes_diff = None
     ts_parsed = pd.to_datetime(timestamp, errors="coerce")
     if pd.notna(ts_parsed):
         delta = datetime.datetime.now() - ts_parsed.to_pydatetime()
         minutes_diff = int(delta.total_seconds() // 60)
-        if minutes_diff >= HEARTBEAT_WARN_MINUTES and status_mode != "error":
+        if minutes_diff >= HEARTBEAT_WARN_MINUTES and status_mode not in ["error"]:
             status_mode = "stale"
             display_text = "⚠️ Keine aktuellen Daten"
             display_color = "orange"
 
+    # ---------------------------------------------------
+    # PUSH LOGIK
+    # → nur bei Statuswechsel UND nur bei kritischen Zuständen
+    # ---------------------------------------------------
+    critical_states = ["error", "cover_open", "low_paper", "stale"]
     push = None
-    # Logik für Push-Notifications
-    if status_mode == "error" and prev_status != "error":
-        push = ("🔴 Fehler", f"Status: {raw_status}", "rotating_light")
-    elif status_mode == "low_paper" and prev_status != "low_paper":
-        push = ("⚠️ Papierwarnung", f"Noch {media_remaining} Bilder!", "warning")
-    elif status_mode == "stale" and prev_status != "stale":
-        if minutes_diff is not None:
-            push = (
-                "⚠️ Keine aktuellen Daten",
-                f"Seit {minutes_diff} Minuten kein Signal von der Fotobox.",
-                "warning",
-            )
-    elif prev_status == "error" and status_mode not in ["error", None]:
+
+    if status_mode in critical_states and prev_status != status_mode:
+        title_map = {
+            "error":       "🔴 Fehler",
+            "cover_open":  "⚠️ Deckel offen",
+            "low_paper":   "⚠️ Papier fast leer",
+            "stale":       "⚠️ Keine aktuellen Daten"
+        }
+        msg_map = {
+            "error":       f"Status: {raw_status}",
+            "cover_open":  "Der Druckerdeckel ist offen.",
+            "low_paper":   f"Nur noch {media_remaining} Bilder!",
+            "stale":       f"Seit {minutes_diff} Min kein Signal."
+        }
+        push = (title_map[status_mode], msg_map[status_mode], "warning")
+
+    # Wenn vorher ERROR war und jetzt OK → nur dann Erfolgspush
+    if prev_status == "error" and status_mode not in critical_states:
         push = ("✅ Störung behoben", "Drucker läuft wieder.", "white_check_mark")
 
     st.session_state.last_warn_status = status_mode
     return status_mode, display_text, display_color, push, minutes_diff
-
-
-def maybe_play_sound(status_mode: str, sound_enabled: bool):
-    if not sound_enabled or not ALERT_SOUND_URL:
-        return
-    prev = st.session_state.last_sound_status
-    if status_mode in ["error", "low_paper"] and prev != status_mode:
-        st.session_state.last_sound_status = status_mode
-        st.markdown(
-            f"""
-            <audio autoplay>
-                <source src="{ALERT_SOUND_URL}" type="audio/ogg">
-            </audio>
-            """,
-            unsafe_allow_html=True,
-        )
-    elif status_mode not in ["error", "low_paper"] and prev is not None:
-        st.session_state.last_sound_status = None
-
 
 # --------------------------------------------------------------------
 # UI START
