@@ -243,6 +243,44 @@ except Exception:
 
 
 # --------------------------------------------------------------------
+# DSLRBOOTH LOCKSCREEN KONFIG AUS SECRETS
+# --------------------------------------------------------------------
+DSR_ENABLED = False
+DSR_BASE_URL = None
+DSR_API_KEY = None
+DSR_LOCKSCREEN_SHOW_URL = None
+DSR_LOCKSCREEN_HIDE_URL = None
+
+def _get_dsr_headers():
+    headers = {"Accept": "application/json"}
+    # ggf. Headernamen anpassen, falls in der Doku anders:
+    if DSR_API_KEY:
+        headers["x-api-key"] = DSR_API_KEY
+    return headers
+
+try:
+    dsr_cfg = st.secrets["dsrbooth"]
+
+    DSR_BASE_URL = dsr_cfg.get("base_url", "http://localhost:1500")
+    DSR_API_KEY = dsr_cfg.get("api_key")
+
+    # Standard-URLs nach deiner Doku
+    DSR_LOCKSCREEN_SHOW_URL = dsr_cfg.get(
+        "lockscreen_show_url",
+        f"{DSR_BASE_URL}/api/lockscreen/show",
+    )
+    DSR_LOCKSCREEN_HIDE_URL = dsr_cfg.get(
+        "lockscreen_hide_url",
+        f"{DSR_BASE_URL}/api/lockscreen/hide",
+    )
+
+    if DSR_API_KEY and DSR_LOCKSCREEN_SHOW_URL and DSR_LOCKSCREEN_HIDE_URL:
+        DSR_ENABLED = True
+except Exception:
+    DSR_ENABLED = False
+
+
+# --------------------------------------------------------------------
 # GLOBAL KONFIG
 # --------------------------------------------------------------------
 PAGE_TITLE = "Fotobox Drucker Status"
@@ -283,6 +321,9 @@ if "socket_state" not in st.session_state:
     st.session_state.socket_state = "unknown"
 if "socket_debug" not in st.session_state:
     st.session_state.socket_debug = None
+if "lockscreen_state" not in st.session_state:
+    # Wir kennen den echten Status nicht → nur "letzte Aktion"
+    st.session_state.lockscreen_state = "off"
 
 st.sidebar.header("Einstellungen")
 printer_name = st.sidebar.selectbox("Fotobox auswählen", list(PRINTERS.keys()))
@@ -897,3 +938,112 @@ if not event_mode:
                 else:
                     st.error("Fehler beim Schalten der Steckdose:")
                     st.code(json.dumps(res, indent=2))
+
+# DSLRBOOTH LOCKSCREEN
+        st.write("### dsrBooth Lockscreen")
+
+        if not DSR_ENABLED:
+            st.info(
+                "dsrBooth ist nicht konfiguriert. Bitte [dsrbooth] in secrets.toml setzen."
+            )
+        else:
+            state = st.session_state.get("lockscreen_state", "off")
+
+            # Badge-Optik ähnlich wie bei der Steckdose
+            if state == "on":
+                badge_color = "#2563eb"
+                badge_text = "LOCKSCREEN AKTIV"
+                badge_icon = "🔒"
+            elif state == "off":
+                badge_color = "#6b7280"
+                badge_text = "LOCKSCREEN INAKTIV"
+                badge_icon = "🔓"
+            else:
+                badge_color = "#f97316"
+                badge_text = "STATUS UNBEKANNT"
+                badge_icon = "⚠️"
+
+            with st.container():
+                st.markdown(
+                    """
+                    <div style="
+                        border:1px solid #e5e7eb;
+                        border-radius:12px;
+                        padding:12px 16px;
+                        margin-bottom:12px;
+                    ">
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                col_left, col_right = st.columns([3, 1])
+
+                with col_left:
+                    st.markdown(
+                        f"""
+                        <div style="font-size:13px; color:#6b7280;">dsrBooth – Gästelockscreen</div>
+                        <div style="font-size:20px; font-weight:600; color:#111827; display:flex; align-items:center; gap:6px;">
+                            <span>{badge_icon}</span>
+                            <span>{badge_text}</span>
+                        </div>
+                        <div style="
+                            margin-top:6px;
+                            padding:4px 10px;
+                            border-radius:999px;
+                            background:{badge_color}20;
+                            color:{badge_color};
+                            font-size:11px;
+                            font-weight:600;
+                            display:inline-block;
+                        ">
+                            Zustand (letzte Aktion): {state}
+                        </div>
+                        <div style="margin-top:6px; font-size:11px; color:#9ca3af;">
+                            Hinweis: Der Status basiert nur auf der letzten Aktion, da die API keinen Status-Endpunkt bereitstellt.
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                with col_right:
+                    desired_on_default = state == "on"
+                    lockscreen_toggle = st.toggle(
+                        "Lockscreen aktiv",
+                        value=desired_on_default,
+                        help="Zeigt bzw. versteckt den dslrBooth-Lockscreen.",
+                        key="dsrbooth_lockscreen_toggle",
+                        label_visibility="collapsed",
+                    )
+
+                st.markdown("</div>", unsafe_allow_html=True)
+
+            # Nur reagieren, wenn sich der Toggle-Wert ändert
+            if lockscreen_toggle != (state == "on"):
+                desired_on = lockscreen_toggle
+                url = DSR_LOCKSCREEN_SHOW_URL if desired_on else DSR_LOCKSCREEN_HIDE_URL
+
+                try:
+                    res = requests.get(url, headers=_get_dsr_headers(), timeout=5)
+                    # Versuchen, JSON zu lesen (laut Doku)
+                    try:
+                        data = res.json()
+                    except Exception:
+                        data = {"raw": res.text}
+
+                    is_ok = res.ok and data.get("IsSuccessful", True)
+
+                    if is_ok:
+                        st.session_state.lockscreen_state = "on" if desired_on else "off"
+                        st.success(
+                            "Lockscreen aktiviert."
+                            if desired_on
+                            else "Lockscreen deaktiviert."
+                        )
+                        time.sleep(0.5)
+                        st.rerun()
+                    else:
+                        st.error("Fehler beim Schalten des Lockscreens:")
+                        st.code(json.dumps(data, indent=2))
+                except Exception as e:
+                    st.error(f"Fehler beim Aufruf der dsrBooth API: {e}")
+                    
