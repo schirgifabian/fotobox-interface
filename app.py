@@ -257,7 +257,7 @@ PRINTERS = {
     },
 }
 
-HEARTBEAT_WARN_MINUTES = 5
+HEARTBEAT_WARN_MINUTES = 60
 NTFY_ACTIVE_DEFAULT = True
 ALERT_SOUND_URL = "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
 
@@ -661,9 +661,6 @@ if not event_mode:
 
             st.write("### Benachrichtigungen")
             st.code(st.session_state.ntfy_topic or "(kein Topic konfiguriert)")
-            st.session_state.ntfy_active = st.checkbox(
-                "Push aktiv", st.session_state.ntfy_active
-            )
 
             if st.button("Test Push 🔔"):
                 send_ntfy_push("Test", "Test erfolgreich", tags="tada")
@@ -810,11 +807,3 @@ if not event_mode:
                 else:
                     st.error("Fehler beim Schalten der Steckdose:")
                     st.code(json.dumps(res, indent=2))
-
-            if st.checkbox("Aqara Steckdose Debug anzeigen", value=False):
-                st.text("Letzte Status-Response:")
-                st.code(
-                    json.dumps(st.session_state.socket_debug, indent=2, ensure_ascii=False)
-                    if st.session_state.socket_debug is not None
-                    else "(keine Daten)",
-                )
