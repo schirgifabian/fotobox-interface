@@ -376,7 +376,6 @@ def log_reset_event(package_size: int, note: str = ""):
             meta_ws = sh.add_worksheet(title="Meta", rows=1000, cols=10)
             meta_ws.append_row(["Timestamp", "PackageSize", "Note"])
             
-        # FIX: datetime.datetime.now() verwenden
         meta_ws.append_row(
             [datetime.datetime.now().isoformat(timespec="seconds"), package_size, note]
         )
@@ -388,18 +387,26 @@ def log_reset_event(package_size: int, note: str = ""):
 # STATUS-LOGIK
 # --------------------------------------------------------------------
 def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
+    """
+    Analysiert den Status. 
+    Da 'Status' nun Papier- und Druckerstatus zusammenfasst, suchen wir nach Keywords 
+    im Text UND prüfen die Zahl bei MediaRemaining.
+    """
     prev_status = st.session_state.last_warn_status
     raw_status_l = (raw_status or "").lower()
 
-    if any(w in raw_status_l for w in ["error", "fehler", "stau", "failure", "unknown"]):
+    # Fehlererkennung basierend auf Text im Status
+    if any(w in raw_status_l for w in ["error", "fehler", "stau", "failure", "unknown", "leer", "empty"]):
         status_mode = "error"
         display_text = f"⚠️ STÖRUNG: {raw_status}"
         display_color = "red"
+    # Papierwarnung basierend auf der Zahl
     elif media_remaining <= WARNING_THRESHOLD:
         status_mode = "low_paper"
         display_text = "⚠️ Papier fast leer!"
         display_color = "orange"
-    elif "printing" in raw_status_l or "processing" in raw_status_l:
+    # Druck-Erkennung
+    elif "printing" in raw_status_l or "processing" in raw_status_l or "drucken" in raw_status_l:
         status_mode = "printing"
         display_text = "🖨️ Druckt gerade…"
         display_color = "blue"
@@ -411,7 +418,6 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
     minutes_diff = None
     ts_parsed = pd.to_datetime(timestamp, errors="coerce")
     if pd.notna(ts_parsed):
-        # FIX: datetime.datetime.now() verwenden
         delta = datetime.datetime.now() - ts_parsed.to_pydatetime()
         minutes_diff = int(delta.total_seconds() // 60)
         if minutes_diff >= HEARTBEAT_WARN_MINUTES and status_mode != "error":
@@ -420,8 +426,9 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
             display_color = "orange"
 
     push = None
+    # Logik für Push-Notifications
     if status_mode == "error" and prev_status != "error":
-        push = ("🔴 Fehler", f"Druckerfehler: {raw_status}", "rotating_light")
+        push = ("🔴 Fehler", f"Status: {raw_status}", "rotating_light")
     elif status_mode == "low_paper" and prev_status != "low_paper":
         push = ("⚠️ Papierwarnung", f"Noch {media_remaining} Bilder!", "warning")
     elif status_mode == "stale" and prev_status != "stale":
@@ -472,9 +479,18 @@ def show_live_status(sound_enabled: bool = False):
 
     try:
         last = df.iloc[-1]
+        
+        # --- DATENABFRAGE NEU ---
+        # Spalten: Timestamp, Status, MediaRemaining
         timestamp = str(last.get("Timestamp", ""))
         raw_status = str(last.get("Status", ""))
-        media_remaining = int(last.get("Media_Remaining", 0))
+        
+        # Sicherstellen, dass MediaRemaining eine Zahl ist
+        try:
+            mr_val = last.get("MediaRemaining", 0)
+            media_remaining = int(mr_val)
+        except:
+            media_remaining = 0
 
         (
             status_mode,
@@ -502,12 +518,15 @@ def show_live_status(sound_enabled: bool = False):
             <div style='color: #666; font-size: 14px; margin-bottom: 12px;'>
                 Letztes Signal: {timestamp}{heartbeat_info}
             </div>
+            <div style='color: #888; font-size: 12px; margin-bottom: 20px;'>
+                 Statusmeldung: {raw_status}
+            </div>
         </div>
         """
         st.markdown(header_html, unsafe_allow_html=True)
 
         if status_mode == "error":
-            st.error("Bitte Drucker prüfen (Störung aktiv).")
+            st.error("Bitte Drucker und Papier prüfen (Störung aktiv).")
         elif status_mode == "stale":
             st.warning("Seit einigen Minuten keine Daten – Verbindung / Script prüfen.")
 
@@ -515,8 +534,8 @@ def show_live_status(sound_enabled: bool = False):
         st.markdown("### Papierstatus")
 
         if status_mode == "error":
-            remaining_text = "–"
-            forecast = "Unbekannt (Störung)"
+            remaining_text = f"{media_remaining} Stk (?)"
+            forecast = "Gestört"
         else:
             remaining_text = f"{media_remaining} Stk"
             if media_remaining > 0:
@@ -541,7 +560,7 @@ def show_live_status(sound_enabled: bool = False):
             colC.metric("Kosten seit Reset", "–")
 
         # Progress-Bar
-        if status_mode == "error":
+        if status_mode == "error" and media_remaining == 0:
             bar_color = "red"
             progress_val = 0
         else:
@@ -577,15 +596,16 @@ def show_history():
 
     st.subheader("Verlauf & Analyse")
 
-    if "Timestamp" in df.columns and "Media_Remaining" in df.columns:
+    # Spaltennamen angepasst (MediaRemaining)
+    if "Timestamp" in df.columns and "MediaRemaining" in df.columns:
         df_plot = df.copy()
         df_plot["Timestamp"] = pd.to_datetime(df_plot["Timestamp"], errors="coerce")
         df_plot = df_plot.dropna(subset=["Timestamp"]).set_index("Timestamp")
-        st.line_chart(df_plot["Media_Remaining"], use_container_width=True)
+        st.line_chart(df_plot["MediaRemaining"], use_container_width=True)
 
     last = df.iloc[-1]
     try:
-        media_remaining = int(last.get("Media_Remaining", 0))
+        media_remaining = int(last.get("MediaRemaining", 0))
     except Exception:
         media_remaining = 0
 
