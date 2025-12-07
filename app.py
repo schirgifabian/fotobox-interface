@@ -982,7 +982,9 @@ if not event_mode:
 
         st.markdown("---")
 
-        # AQARA STECKDOSE
+        # ============================================================
+        # AQARA STECKDOSE – MODERNE CARD + BUTTONS
+        # ============================================================
         st.write("### Aqara Steckdose Fotobox")
 
         if not AQARA_ENABLED:
@@ -990,7 +992,7 @@ if not event_mode:
                 "Aqara ist nicht konfiguriert. Bitte [aqara] in secrets.toml setzen."
             )
         else:
-            # Aktuellen Status versuchen abzufragen
+            # Aktuellen Status holen
             current_state, debug_data = aqara_client.get_socket_state(
                 AQARA_ACCESS_TOKEN,
                 AQARA_SOCKET_DEVICE_ID,
@@ -1006,36 +1008,114 @@ if not event_mode:
 
             state = st.session_state.socket_state
 
-            desired_on = render_device_card(
-                header_label="Fotobox-Steckdose",
-                title="Steckdose Fotobox",
-                state=state,
-                badge_icon_on="🟢",
-                badge_icon_off="⚪️",
-                badge_icon_unknown="⚠️",
-                text_on="EINGESCHALTET",
-                text_off="AUSGESCHALTET",
-                text_unknown="STATUS UNBEKANNT",
-                state_prefix="Zustand",
-                hint_text="Schaltet die Stromversorgung der Fotobox über die Aqara-Steckdose.",
-                toggle_key="aqara_segment",
-                toggle_help="Schaltet die Aqara-Steckdose ein oder aus.",
-            )
+            # Farben & Texte je nach Status
+            if state == "on":
+                bg = "#ecfdf3"
+                border = "#bbf7d0"
+                icon = "🟢"
+                title_text = "EINGESCHALTET"
+                desc = "Die Fotobox-Steckdose ist aktiv und mit Strom versorgt."
+                badge = "Zustand: on"
+            elif state == "off":
+                bg = "#f9fafb"
+                border = "#e5e7eb"
+                icon = "⚪️"
+                title_text = "AUSGESCHALTET"
+                desc = "Die Fotobox-Steckdose ist aktuell ausgeschaltet."
+                badge = "Zustand: off"
+            else:
+                bg = "#fffbeb"
+                border = "#fed7aa"
+                icon = "⚠️"
+                title_text = "STATUS UNBEKANNT"
+                desc = "Kein sicherer Status – ggf. Verbindung oder Gerät prüfen."
+                badge = "Zustand: unbekannt"
 
-            # Nur reagieren, wenn gewünschter Zustand anders als aktueller
-            if desired_on != (state == "on"):
+            # Karte
+            card = st.container()
+            with card:
+                st.markdown(
+                    f"""
+                    <div style="
+                        border-radius:18px;
+                        border:1px solid {border};
+                        padding:16px 18px;
+                        background:{bg};
+                        display:flex;
+                        flex-direction:row;
+                        justify-content:space-between;
+                        gap:18px;
+                    ">
+                        <div style="flex:1;">
+                            <div style="font-size:11px; text-transform:uppercase;
+                                        letter-spacing:.16em; color:#9ca3af; margin-bottom:4px;">
+                                Fotobox-Steckdose
+                            </div>
+                            <div style="font-size:18px; font-weight:600; color:#111827;
+                                        display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                                <span>{icon}</span>
+                                <span>{title_text}</span>
+                            </div>
+                            <div style="
+                                display:inline-flex;
+                                align-items:center;
+                                padding:3px 10px;
+                                border-radius:999px;
+                                background:rgba(0,0,0,0.04);
+                                font-size:11px;
+                                color:#4b5563;
+                                margin-bottom:6px;
+                            ">
+                                {badge}
+                            </div>
+                            <div style="font-size:12px; color:#6b7280;">
+                                Schaltet die Stromversorgung der Fotobox über die Aqara-Steckdose.
+                            </div>
+                        </div>
+                        <div style="flex:0 0 180px; display:flex; flex-direction:column; gap:6px;">
+                            <div style="font-size:11px; text-transform:uppercase;
+                                        letter-spacing:.12em; color:#9ca3af; margin-bottom:2px;">
+                                Steuerung
+                            </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                # Buttons in zwei Spalten
+                c_on, c_off = st.columns(2)
+                with c_on:
+                    click_on = st.button("Ein", key="aqara_btn_on", use_container_width=True)
+                with c_off:
+                    click_off = st.button("Aus", key="aqara_btn_off", use_container_width=True)
+
+                st.markdown(
+                    """
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            # Button-Logik
+            desired_state = None
+            if click_on:
+                desired_state = True
+            elif click_off:
+                desired_state = False
+
+            if desired_state is not None and desired_state != (state == "on"):
                 res = aqara_client.switch_socket(
                     AQARA_ACCESS_TOKEN,
                     AQARA_SOCKET_DEVICE_ID,
-                    turn_on=desired_on,
+                    turn_on=desired_state,
                     resource_id=AQARA_SOCKET_RESOURCE_ID,
                     mode="state",
                 )
                 if res.get("code") == 0:
-                    st.session_state.socket_state = "on" if desired_on else "off"
+                    st.session_state.socket_state = "on" if desired_state else "off"
                     st.success(
                         "Steckdose eingeschaltet."
-                        if desired_on
+                        if desired_state
                         else "Steckdose ausgeschaltet."
                     )
                     time.sleep(0.5)
@@ -1046,7 +1126,9 @@ if not event_mode:
 
         st.markdown("---")
 
-        # DSLRBOOTH LOCKSCREEN
+        # ============================================================
+        # DSRBOOTH LOCKSCREEN – MODERNE CARD + BUTTONS
+        # ============================================================
         st.write("### dsrBooth Lockscreen")
 
         if not DSR_ENABLED:
@@ -1059,32 +1141,106 @@ if not event_mode:
 
             state = st.session_state.lockscreen_state
 
-            desired_on = render_device_card(
-                header_label="dsrBooth – Gästelockscreen",
-                title="Lockscreen aktiv",
-                state=state,
-                badge_icon_on="🔒",
-                badge_icon_off="🔓",
-                badge_icon_unknown="⚠️",
-                text_on="LOCKSCREEN AKTIV",
-                text_off="LOCKSCREEN INAKTIV",
-                text_unknown="STATUS UNBEKANNT",
-                state_prefix="Zustand (letzte Aktion)",
-                hint_text=(
-                    "Der Status basiert nur auf der letzten Aktion, "
-                    "da die API keinen Status-Endpunkt bereitstellt."
-                ),
-                toggle_key="dsrbooth_segment",
-                toggle_help="Zeigt bzw. versteckt den dslrBooth-Lockscreen.",
-            )
+            if state == "on":
+                bg = "#eff6ff"
+                border = "#bfdbfe"
+                icon = "🔒"
+                title_text = "LOCKSCREEN AKTIV"
+                desc = "Gäste sehen den Lockscreen, d. h. keine Bedienung möglich."
+                badge = "Zustand (letzte Aktion): on"
+            elif state == "off":
+                bg = "#f9fafb"
+                border = "#e5e7eb"
+                icon = "🔓"
+                title_text = "LOCKSCREEN INAKTIV"
+                desc = "Gäste können die Fotobox aktuell bedienen."
+                badge = "Zustand (letzte Aktion): off"
+            else:
+                bg = "#fffbeb"
+                border = "#fed7aa"
+                icon = "⚠️"
+                title_text = "STATUS UNBEKANNT"
+                desc = "Der Status basiert nur auf der letzten Aktion."
+                badge = "Zustand (letzte Aktion): unbekannt"
 
-            # Nur reagieren, wenn gewünschter Zustand anders als aktueller
-            if desired_on != (state == "on"):
-                cmd = "lock_on" if desired_on else "lock_off"
+            card2 = st.container()
+            with card2:
+                st.markdown(
+                    f"""
+                    <div style="
+                        border-radius:18px;
+                        border:1px solid {border};
+                        padding:16px 18px;
+                        background:{bg};
+                        display:flex;
+                        flex-direction:row;
+                        justify-content:space-between;
+                        gap:18px;
+                    ">
+                        <div style="flex:1;">
+                            <div style="font-size:11px; text-transform:uppercase;
+                                        letter-spacing:.16em; color:#9ca3af; margin-bottom:4px;">
+                                dsrBooth – Gästelockscreen
+                            </div>
+                            <div style="font-size:18px; font-weight:600; color:#111827;
+                                        display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                                <span>{icon}</span>
+                                <span>{title_text}</span>
+                            </div>
+                            <div style="
+                                display:inline-flex;
+                                align-items:center;
+                                padding:3px 10px;
+                                border-radius:999px;
+                                background:rgba(0,0,0,0.04);
+                                font-size:11px;
+                                color:#4b5563;
+                                margin-bottom:6px;
+                            ">
+                                {badge}
+                            </div>
+                            <div style="font-size:12px; color:#6b7280; margin-bottom:4px;">
+                                Der Status basiert nur auf der letzten Aktion, da die API keinen Status-Endpunkt bereitstellt.
+                            </div>
+                            <div style="font-size:11px; color:#9ca3af;">
+                                Tipp: Bei Problemen ggf. dslrBooth-Client am Surface neu starten.
+                            </div>
+                        </div>
+                        <div style="flex:0 0 180px; display:flex; flex-direction:column; gap:6px;">
+                            <div style="font-size:11px; text-transform:uppercase;
+                                        letter-spacing:.12em; color:#9ca3af; margin-bottom:2px;">
+                                Steuerung
+                            </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                c_on, c_off = st.columns(2)
+                with c_on:
+                    click_on = st.button("Sperren", key="dsr_btn_on", use_container_width=True)
+                with c_off:
+                    click_off = st.button("Freigeben", key="dsr_btn_off", use_container_width=True)
+
+                st.markdown(
+                    """
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            desired_state = None
+            if click_on:
+                desired_state = True
+            elif click_off:
+                desired_state = False
+
+            if desired_state is not None and desired_state != (state == "on"):
+                cmd = "lock_on" if desired_state else "lock_off"
                 send_dsr_command(cmd)
-                st.session_state.lockscreen_state = "on" if desired_on else "off"
+                st.session_state.lockscreen_state = "on" if desired_state else "off"
                 st.success(
                     "Lockscreen-Befehl gesendet (aktivieren)."
-                    if desired_on
+                    if desired_state
                     else "Lockscreen-Befehl gesendet (deaktivieren)."
                 )
