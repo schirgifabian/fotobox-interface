@@ -276,11 +276,11 @@ PRINTERS = {
         "has_dsr": True,     # dsrBooth-Lockscreen vorhanden
     },
     "Fotobox 2": {
-        "key": "box2",       # -> secrets.printers.box2
+        "key": "Weinkellerei",       # -> secrets.printers.box2
         "warning_threshold": 20,
         "default_max_prints": 400,
-        "cost_per_roll_eur": 46.59,
-        "has_admin": False,  # kein Admin-Bereich
+        "cost_per_roll_eur": 60,
+        "has_admin": True,  # kein Admin-Bereich
         "has_aqara": False,  # keine Aqara-Steckdose
         "has_dsr": False,    # kein dsrBooth
     },
