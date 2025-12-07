@@ -289,7 +289,7 @@ CUSTOM_CSS = """
   margin-top: 0.75rem;
 }
 
-/* generische Karten-Optik */
+/* generische Karten-Optik (wird aktuell nur für Device-Cards genutzt) */
 .control-card {
   border-radius: 16px;
   padding: 14px 18px;
@@ -360,6 +360,33 @@ CUSTOM_CSS = """
 /* horizontales Radio etwas kompakter */
 .control-card .stRadio > div {
   padding-top: 0;
+}
+
+/* ========= ADMIN-CARDS OBEN ========= */
+
+.admin-card {
+  border-radius: 18px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(15,23,42,0.05);
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+
+.admin-card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 10px;
+}
+
+.admin-card-subtitle {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: #9ca3af;
+  margin-top: 10px;
+  margin-bottom: 4px;
 }
 </style>
 """
@@ -657,6 +684,7 @@ def maybe_play_sound(status_mode: str, sound_enabled: bool):
         # zurücksetzen, wenn wieder alles ok ist
         st.session_state.last_sound_status = None
 
+
 # --------------------------------------------------------------------
 # UI START
 # --------------------------------------------------------------------
@@ -827,81 +855,6 @@ def show_history():
 
 
 # --------------------------------------------------------------------
-# Helper für moderne Karten mit Segment-Buttons (Ein/Aus)
-# --------------------------------------------------------------------
-def render_device_card(
-    header_label: str,
-    title: str,
-    state: str,
-    badge_icon_on: str,
-    badge_icon_off: str,
-    badge_icon_unknown: str,
-    text_on: str,
-    text_off: str,
-    text_unknown: str,
-    state_prefix: str,
-    hint_text: str,
-    toggle_key: str,
-    toggle_help: str,
-) -> bool:
-    """
-    Zeichnet eine moderne Karte mit Status-Badge + Ein/Aus-Segment-Buttons rechts.
-    Gibt den gewünschten Zustand (True = EIN, False = AUS) zurück.
-    """
-
-    if state == "on":
-        badge_icon = badge_icon_on
-        badge_text = text_on
-        pill_class = "status-pill--ok"
-    elif state == "off":
-        badge_icon = badge_icon_off
-        badge_text = text_off
-        pill_class = "status-pill--muted"
-    else:
-        badge_icon = badge_icon_unknown
-        badge_text = text_unknown
-        pill_class = "status-pill--warn"
-
-    st.markdown('<div class="control-card">', unsafe_allow_html=True)
-    col_left, col_right = st.columns([3, 1])
-
-    with col_left:
-        st.markdown(
-            f"""
-            <div class="control-header-label">{header_label}</div>
-            <div class="control-headline">
-                <span>{badge_icon}</span>
-                <span>{badge_text}</span>
-            </div>
-            <div class="status-pill {pill_class}">
-                <span>{state_prefix}: {state}</span>
-            </div>
-            <div class="control-meta">{hint_text}</div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with col_right:
-        st.markdown('<div class="segment-wrapper">', unsafe_allow_html=True)
-        index = 0 if state == "on" else 1
-        selection = st.radio(
-            "Schalten",
-            ["Ein", "Aus"],
-            index=index,
-            key=toggle_key,
-            label_visibility="collapsed",
-            horizontal=True,
-            help=toggle_help,
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # True = Ein, False = Aus
-    return selection == "Ein"
-
-
-# --------------------------------------------------------------------
 # RENDER
 # --------------------------------------------------------------------
 if event_mode:
@@ -922,46 +875,81 @@ if not event_mode:
     with st.expander("🛠️ Admin & Einstellungen"):
         col1, col2 = st.columns(2)
 
-        # LINKS & BENACHRICHTIGUNGEN
+        # LINKS & BENACHRICHTIGUNGEN – CARD
         with col1:
-            st.write("### Externe Links")
-            st.link_button(
-                "🔗 Fotoshare Cloud",
-                "https://fotoshare.co/admin/index",
-                use_container_width=True,
-            )
+            with st.container():
+                st.markdown('<div class="admin-card">', unsafe_allow_html=True)
+                st.markdown(
+                    '<div class="admin-card-title">Externe Links</div>',
+                    unsafe_allow_html=True,
+                )
 
-            st.write("### Benachrichtigungen")
-            st.code(st.session_state.ntfy_topic or "(kein Topic konfiguriert)")
-
-            if st.button("Test Push 🔔"):
-                send_ntfy_push("Test", "Test erfolgreich", tags="tada")
-                st.toast("Test gesendet!")
-
-        # PAPIER / RESET
-        with col2:
-            st.write("### Neuer Auftrag / Papierwechsel")
-            size = st.radio(
-                "Paketgröße",
-                [200, 400],
-                horizontal=True,
-                index=1 if st.session_state.max_prints == 400 else 0,
-            )
-
-            reset_note = st.text_input(
-                "Notiz zum Papierwechsel (optional)", key="reset_note"
-            )
-
-            if not st.session_state.confirm_reset:
-                if st.button(
-                    "Papierwechsel durchgeführt (Reset) 🔄",
+                st.link_button(
+                    "🔗 Fotoshare Cloud",
+                    "https://fotoshare.co/admin/index",
                     use_container_width=True,
-                ):
-                    st.session_state.confirm_reset = True
-                    st.session_state.temp_package_size = size
-                    st.session_state.temp_reset_note = reset_note
-                    st.rerun()
+                )
+
+                st.markdown(
+                    '<div class="admin-card-subtitle">Benachrichtigungen</div>',
+                    unsafe_allow_html=True,
+                )
+
+                st.code(st.session_state.ntfy_topic or "(kein Topic konfiguriert)")
+
+                st.write("")  # kleiner Spacer
+                if st.button("Test Push 🔔", use_container_width=True):
+                    send_ntfy_push("Test", "Test erfolgreich", tags="tada")
+                    st.toast("Test gesendet!")
+
+                st.markdown("</div>", unsafe_allow_html=True)
+
+        # NEUER AUFTRAG / PAPIERWECHSEL – CARD
+        with col2:
+            if not st.session_state.confirm_reset:
+                with st.container():
+                    st.markdown('<div class="admin-card">', unsafe_allow_html=True)
+                    st.markdown(
+                        '<div class="admin-card-title">Neuer Auftrag / Papierwechsel</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                    st.markdown(
+                        '<div class="admin-card-subtitle">Paketgröße</div>',
+                        unsafe_allow_html=True,
+                    )
+                    size = st.radio(
+                        "",
+                        [200, 400],
+                        horizontal=True,
+                        index=1 if st.session_state.max_prints == 400 else 0,
+                        label_visibility="collapsed",
+                    )
+
+                    st.markdown(
+                        '<div class="admin-card-subtitle">Notiz zum Papierwechsel (optional)</div>',
+                        unsafe_allow_html=True,
+                    )
+                    reset_note = st.text_input(
+                        "",
+                        key="reset_note",
+                        label_visibility="collapsed",
+                        placeholder="z.B. neue 400er Rolle eingelegt",
+                    )
+
+                    st.write("")  # Spacer nach unten
+                    if st.button(
+                        "Papierwechsel durchgeführt (Reset) 🔄",
+                        use_container_width=True,
+                    ):
+                        st.session_state.confirm_reset = True
+                        st.session_state.temp_package_size = size
+                        st.session_state.temp_reset_note = reset_note
+                        st.rerun()
+
+                    st.markdown("</div>", unsafe_allow_html=True)
             else:
+                # Bestätigungs-Ansicht
                 st.warning(
                     f"Log löschen & auf {st.session_state.temp_package_size}er Rolle setzen?",
                 )
@@ -1014,21 +1002,18 @@ if not event_mode:
                 border = "#bbf7d0"
                 icon = "🟢"
                 title_text = "EINGESCHALTET"
-                desc = "Die Fotobox-Steckdose ist aktiv und mit Strom versorgt."
                 badge = "Zustand: on"
             elif state == "off":
                 bg = "#f9fafb"
                 border = "#e5e7eb"
                 icon = "⚪️"
                 title_text = "AUSGESCHALTET"
-                desc = "Die Fotobox-Steckdose ist aktuell ausgeschaltet."
                 badge = "Zustand: off"
             else:
                 bg = "#fffbeb"
                 border = "#fed7aa"
                 icon = "⚠️"
                 title_text = "STATUS UNBEKANNT"
-                desc = "Kein sicherer Status – ggf. Verbindung oder Gerät prüfen."
                 badge = "Zustand: unbekannt"
 
             # Karte
@@ -1146,21 +1131,18 @@ if not event_mode:
                 border = "#bfdbfe"
                 icon = "🔒"
                 title_text = "LOCKSCREEN AKTIV"
-                desc = "Gäste sehen den Lockscreen, d. h. keine Bedienung möglich."
                 badge = "Zustand (letzte Aktion): on"
             elif state == "off":
                 bg = "#f9fafb"
                 border = "#e5e7eb"
                 icon = "🔓"
                 title_text = "LOCKSCREEN INAKTIV"
-                desc = "Gäste können die Fotobox aktuell bedienen."
                 badge = "Zustand (letzte Aktion): off"
             else:
                 bg = "#fffbeb"
                 border = "#fed7aa"
                 icon = "⚠️"
                 title_text = "STATUS UNBEKANNT"
-                desc = "Der Status basiert nur auf der letzten Aktion."
                 badge = "Zustand (letzte Aktion): unbekannt"
 
             card2 = st.container()
