@@ -282,14 +282,14 @@ ALERT_SOUND_URL = "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
 # --------------------------------------------------------------------
 st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="centered")
 
-# ---- Globales Styling für Settings / Karten ----
+# ---- Globales Styling für Karten ----
 CUSTOM_CSS = """
 <style>
 .settings-wrapper {
   margin-top: 0.75rem;
 }
 
-/* generische Karten-Optik (wird aktuell nur für Device-Cards genutzt) */
+/* generische Karten-Optik (für Device-Cards) */
 .control-card {
   border-radius: 16px;
   padding: 14px 18px;
@@ -360,33 +360,6 @@ CUSTOM_CSS = """
 /* horizontales Radio etwas kompakter */
 .control-card .stRadio > div {
   padding-top: 0;
-}
-
-/* ========= ADMIN-CARDS OBEN ========= */
-
-.admin-card {
-  border-radius: 18px;
-  border: 1px solid #e5e7eb;
-  background: #ffffff;
-  box-shadow: 0 12px 30px rgba(15,23,42,0.05);
-  padding: 16px 18px;
-  margin-bottom: 16px;
-}
-
-.admin-card-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #111827;
-  margin-bottom: 10px;
-}
-
-.admin-card-subtitle {
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: .12em;
-  color: #9ca3af;
-  margin-top: 10px;
-  margin-bottom: 4px;
 }
 </style>
 """
@@ -629,7 +602,6 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
 
     # ---------------------------------------------------
     # PUSH LOGIK
-    # → nur bei Statuswechsel UND nur bei kritischen Zuständen
     # ---------------------------------------------------
     critical_states = ["error", "cover_open", "low_paper", "stale"]
     push = None
@@ -649,7 +621,6 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
         }
         push = (title_map[status_mode], msg_map[status_mode], "warning")
 
-    # Wenn vorher ERROR war und jetzt OK → nur dann Erfolgspush
     if prev_status == "error" and status_mode not in critical_states:
         push = ("✅ Störung behoben", "Drucker läuft wieder.", "white_check_mark")
 
@@ -658,16 +629,10 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
 
 
 def maybe_play_sound(status_mode: str, sound_enabled: bool):
-    """
-    Spielt einen Warnton bei kritischen Zuständen,
-    aber nur, wenn sich der Status geändert hat.
-    """
     if not sound_enabled or not ALERT_SOUND_URL:
         return
 
     prev = st.session_state.last_sound_status
-
-    # gleiche kritische Zustände wie bei den Pushes
     critical_states_with_sound = ["error", "cover_open", "low_paper"]
 
     if status_mode in critical_states_with_sound and prev != status_mode:
@@ -681,7 +646,6 @@ def maybe_play_sound(status_mode: str, sound_enabled: bool):
             unsafe_allow_html=True,
         )
     elif status_mode not in critical_states_with_sound and prev is not None:
-        # zurücksetzen, wenn wieder alles ok ist
         st.session_state.last_sound_status = None
 
 
@@ -701,19 +665,14 @@ def show_live_status(sound_enabled: bool = False):
 
     try:
         last = df.iloc[-1]
-        
-        # --- DATENABFRAGE NEU ---
-        # Spalten: Timestamp, Status, MediaRemaining
         timestamp = str(last.get("Timestamp", ""))
         raw_status = str(last.get("Status", ""))
-        
-        # Sicherstellen, dass MediaRemaining eine Zahl ist
-        # Die Datenbank liefert den Wert halbiert → hier verdoppeln
+
         try:
             mr_val = last.get("MediaRemaining", 0)
             media_remaining_raw = int(mr_val)
             media_remaining = media_remaining_raw * 2
-        except:
+        except Exception:
             media_remaining_raw = 0
             media_remaining = 0
 
@@ -821,7 +780,6 @@ def show_history():
 
     st.subheader("Verlauf & Analyse")
 
-    # Spaltennamen angepasst (MediaRemaining)
     if "Timestamp" in df.columns and "MediaRemaining" in df.columns:
         df_plot = df.copy()
         df_plot["Timestamp"] = pd.to_datetime(df_plot["Timestamp"], errors="coerce")
@@ -873,17 +831,36 @@ st.markdown("---")
 # --------------------------------------------------------------------
 if not event_mode:
     with st.expander("🛠️ Admin & Einstellungen"):
-        col1, col2 = st.columns(2)
 
-        # LINKS & BENACHRICHTIGUNGEN – CARD
-        with col1:
-            with st.container():
-                st.markdown('<div class="admin-card">', unsafe_allow_html=True)
+        # Eine große Admin-Karte über die ganze Breite
+        admin_card = st.container()
+        with admin_card:
+            st.markdown(
+                """
+                <div style="
+                    border-radius:18px;
+                    border:1px solid #e5e7eb;
+                    background:#ffffff;
+                    box-shadow:0 12px 30px rgba(15,23,42,0.05);
+                    padding:18px 20px;
+                    margin-bottom:20px;
+                ">
+                """,
+                unsafe_allow_html=True,
+            )
+
+            col1, col2 = st.columns(2)
+
+            # LINKS / NTFY
+            with col1:
                 st.markdown(
-                    '<div class="admin-card-title">Externe Links</div>',
+                    """
+                    <div style="font-size:18px;font-weight:600;color:#111827;margin-bottom:8px;">
+                        Externe Links
+                    </div>
+                    """,
                     unsafe_allow_html=True,
                 )
-
                 st.link_button(
                     "🔗 Fotoshare Cloud",
                     "https://fotoshare.co/admin/index",
@@ -891,53 +868,70 @@ if not event_mode:
                 )
 
                 st.markdown(
-                    '<div class="admin-card-subtitle">Benachrichtigungen</div>',
+                    """
+                    <div style="font-size:12px;text-transform:uppercase;
+                                letter-spacing:.14em;color:#9ca3af;
+                                margin-top:16px;margin-bottom:4px;">
+                        Benachrichtigungen
+                    </div>
+                    """,
                     unsafe_allow_html=True,
                 )
-
                 st.code(st.session_state.ntfy_topic or "(kein Topic konfiguriert)")
 
-                st.write("")  # kleiner Spacer
+                st.write("")
                 if st.button("Test Push 🔔", use_container_width=True):
                     send_ntfy_push("Test", "Test erfolgreich", tags="tada")
                     st.toast("Test gesendet!")
 
-                st.markdown("</div>", unsafe_allow_html=True)
+            # PAPIER / RESET
+            with col2:
+                st.markdown(
+                    """
+                    <div style="font-size:18px;font-weight:600;color:#111827;margin-bottom:8px;">
+                        Neuer Auftrag / Papierwechsel
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-        # NEUER AUFTRAG / PAPIERWECHSEL – CARD
-        with col2:
-            if not st.session_state.confirm_reset:
-                with st.container():
-                    st.markdown('<div class="admin-card">', unsafe_allow_html=True)
-                    st.markdown(
-                        '<div class="admin-card-title">Neuer Auftrag / Papierwechsel</div>',
-                        unsafe_allow_html=True,
-                    )
+                st.markdown(
+                    """
+                    <div style="font-size:12px;text-transform:uppercase;
+                                letter-spacing:.14em;color:#9ca3af;
+                                margin-bottom:4px;">
+                        Paketgröße
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                size = st.radio(
+                    "",
+                    [200, 400],
+                    horizontal=True,
+                    index=1 if st.session_state.max_prints == 400 else 0,
+                    label_visibility="collapsed",
+                )
 
-                    st.markdown(
-                        '<div class="admin-card-subtitle">Paketgröße</div>',
-                        unsafe_allow_html=True,
-                    )
-                    size = st.radio(
-                        "",
-                        [200, 400],
-                        horizontal=True,
-                        index=1 if st.session_state.max_prints == 400 else 0,
-                        label_visibility="collapsed",
-                    )
+                st.markdown(
+                    """
+                    <div style="font-size:12px;text-transform:uppercase;
+                                letter-spacing:.14em;color:#9ca3af;
+                                margin-top:10px;margin-bottom:4px;">
+                        Notiz zum Papierwechsel (optional)
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                reset_note = st.text_input(
+                    "",
+                    key="reset_note",
+                    label_visibility="collapsed",
+                    placeholder="z.B. neue 400er Rolle eingelegt",
+                )
 
-                    st.markdown(
-                        '<div class="admin-card-subtitle">Notiz zum Papierwechsel (optional)</div>',
-                        unsafe_allow_html=True,
-                    )
-                    reset_note = st.text_input(
-                        "",
-                        key="reset_note",
-                        label_visibility="collapsed",
-                        placeholder="z.B. neue 400er Rolle eingelegt",
-                    )
-
-                    st.write("")  # Spacer nach unten
+                st.write("")
+                if not st.session_state.confirm_reset:
                     if st.button(
                         "Papierwechsel durchgeführt (Reset) 🔄",
                         use_container_width=True,
@@ -946,27 +940,30 @@ if not event_mode:
                         st.session_state.temp_package_size = size
                         st.session_state.temp_reset_note = reset_note
                         st.rerun()
+                else:
+                    st.info("Bestätigung unten abschließen …")
 
-                    st.markdown("</div>", unsafe_allow_html=True)
-            else:
-                # Bestätigungs-Ansicht
-                st.warning(
-                    f"Log löschen & auf {st.session_state.temp_package_size}er Rolle setzen?",
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        # Wenn Reset bestätigt werden soll, extra Block darunter
+        if st.session_state.confirm_reset:
+            st.warning(
+                f"Log löschen & auf {st.session_state.temp_package_size}er Rolle setzen?",
+            )
+            y, n = st.columns(2)
+            if y.button("Ja", use_container_width=True):
+                st.session_state.max_prints = st.session_state.temp_package_size
+                clear_google_sheet()
+                log_reset_event(
+                    st.session_state.temp_package_size,
+                    st.session_state.temp_reset_note,
                 )
-                y, n = st.columns(2)
-                if y.button("Ja", use_container_width=True):
-                    st.session_state.max_prints = st.session_state.temp_package_size
-                    clear_google_sheet()
-                    log_reset_event(
-                        st.session_state.temp_package_size,
-                        st.session_state.temp_reset_note,
-                    )
-                    st.session_state.confirm_reset = False
-                    st.session_state.last_warn_status = None
-                    st.rerun()
-                if n.button("Nein", use_container_width=True):
-                    st.session_state.confirm_reset = False
-                    st.rerun()
+                st.session_state.confirm_reset = False
+                st.session_state.last_warn_status = None
+                st.rerun()
+            if n.button("Nein", use_container_width=True):
+                st.session_state.confirm_reset = False
+                st.rerun()
 
         st.markdown("---")
 
@@ -980,7 +977,6 @@ if not event_mode:
                 "Aqara ist nicht konfiguriert. Bitte [aqara] in secrets.toml setzen."
             )
         else:
-            # Aktuellen Status holen
             current_state, debug_data = aqara_client.get_socket_state(
                 AQARA_ACCESS_TOKEN,
                 AQARA_SOCKET_DEVICE_ID,
@@ -996,7 +992,6 @@ if not event_mode:
 
             state = st.session_state.socket_state
 
-            # Farben & Texte je nach Status
             if state == "on":
                 bg = "#ecfdf3"
                 border = "#bbf7d0"
@@ -1016,7 +1011,6 @@ if not event_mode:
                 title_text = "STATUS UNBEKANNT"
                 badge = "Zustand: unbekannt"
 
-            # Karte
             card = st.container()
             with card:
                 st.markdown(
@@ -1066,12 +1060,15 @@ if not event_mode:
                     unsafe_allow_html=True,
                 )
 
-                # Buttons in zwei Spalten
                 c_on, c_off = st.columns(2)
                 with c_on:
-                    click_on = st.button("Ein", key="aqara_btn_on", use_container_width=True)
+                    click_on = st.button(
+                        "Ein", key="aqara_btn_on", use_container_width=True
+                    )
                 with c_off:
-                    click_off = st.button("Aus", key="aqara_btn_off", use_container_width=True)
+                    click_off = st.button(
+                        "Aus", key="aqara_btn_off", use_container_width=True
+                    )
 
                 st.markdown(
                     """
@@ -1081,7 +1078,6 @@ if not event_mode:
                     unsafe_allow_html=True,
                 )
 
-            # Button-Logik
             desired_state = None
             if click_on:
                 desired_state = True
@@ -1199,9 +1195,13 @@ if not event_mode:
 
                 c_on, c_off = st.columns(2)
                 with c_on:
-                    click_on = st.button("Sperren", key="dsr_btn_on", use_container_width=True)
+                    click_on = st.button(
+                        "Sperren", key="dsr_btn_on", use_container_width=True
+                    )
                 with c_off:
-                    click_off = st.button("Freigeben", key="dsr_btn_off", use_container_width=True)
+                    click_off = st.button(
+                        "Freigeben", key="dsr_btn_off", use_container_width=True
+                    )
 
                 st.markdown(
                     """
