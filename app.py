@@ -264,13 +264,25 @@ except Exception:
 PAGE_TITLE = "Fotobox Drucker Status"
 PAGE_ICON = "🖨️"
 
+# Konfigurationen, die NICHT geheim sind, bleiben im Code
 PRINTERS = {
     "Standard Fotobox": {
-        "sheet_id": "10uLjotNMT3AewBHdkuYyOudbbOCEuquDqGbwr2Wu7ig",
-        "ntfy_topic": "fotobox_status_secret_4566",
+        "key": "standard",   # -> secrets.printers.standard
         "warning_threshold": 20,
         "default_max_prints": 400,
         "cost_per_roll_eur": 46.59,
+        "has_admin": True,   # Admin-Bereich + Geräte-Steuerung
+        "has_aqara": True,   # Aqara-Steckdose vorhanden
+        "has_dsr": True,     # dsrBooth-Lockscreen vorhanden
+    },
+    "Fotobox 2": {
+        "key": "box2",       # -> secrets.printers.box2
+        "warning_threshold": 20,
+        "default_max_prints": 400,
+        "cost_per_roll_eur": 46.59,
+        "has_admin": False,  # kein Admin-Bereich
+        "has_aqara": False,  # keine Aqara-Steckdose
+        "has_dsr": False,    # kein dsrBooth
     },
 }
 
@@ -448,16 +460,37 @@ sound_enabled = st.sidebar.toggle("Sound bei Warnungen", value=False)
 
 printer_cfg = PRINTERS[printer_name]
 
+# Capability-Flags je Fotobox
+printer_has_admin = printer_cfg.get("has_admin", True)
+printer_has_aqara = printer_cfg.get("has_aqara", False)
+printer_has_dsr = printer_cfg.get("has_dsr", False)
+
+# Zuordnung auf secrets.printers.<key>
+printer_key = printer_cfg["key"]
+printers_secrets = st.secrets.get("printers", {})
+printer_secret = printers_secrets.get(printer_key, {})
+
+sheet_id = printer_secret.get("sheet_id")
+ntfy_topic = printer_secret.get("ntfy_topic")
+
+if not sheet_id:
+    st.error(
+        f"Keine 'sheet_id' für '{printer_name}' in secrets.toml gefunden "
+        f"(Sektion [printers.{printer_key}])."
+    )
+    st.stop()
+
+# State aktualisieren
 if st.session_state.selected_printer != printer_name:
     st.session_state.selected_printer = printer_name
     st.session_state.last_warn_status = None
     st.session_state.last_sound_status = None
     st.session_state.max_prints = printer_cfg["default_max_prints"]
 
-st.session_state.sheet_id = printer_cfg["sheet_id"]
-st.session_state.ntfy_topic = printer_cfg["ntfy_topic"]
-WARNING_THRESHOLD = printer_cfg["warning_threshold"]
-COST_PER_ROLL_EUR = printer_cfg["cost_per_roll_eur"]
+st.session_state.sheet_id = sheet_id
+st.session_state.ntfy_topic = ntfy_topic
+WARNING_THRESHOLD = printer_cfg.get("warning_threshold", 20)
+COST_PER_ROLL_EUR = printer_cfg.get("cost_per_roll_eur")
 
 
 # --------------------------------------------------------------------
@@ -515,8 +548,8 @@ def get_gspread_client():
 
 def get_spreadsheet():
     gc = get_gspread_client()
-    sheet_id = st.session_state.sheet_id
-    return gc.open_by_key(sheet_id)
+    sheet_id_local = st.session_state.sheet_id
+    return gc.open_by_key(sheet_id_local)
 
 
 def get_main_worksheet():
@@ -1200,7 +1233,10 @@ def show_history():
 # --------------------------------------------------------------------
 # RENDER MAIN VIEW
 # --------------------------------------------------------------------
-if event_mode:
+# Für Boxen ohne Admin erzwingen wir Event-Ansicht
+view_event_mode = event_mode or not printer_has_admin
+
+if view_event_mode:
     show_live_status(sound_enabled, event_mode=True)
     render_status_help()
 else:
@@ -1216,7 +1252,7 @@ st.markdown("---")
 # --------------------------------------------------------------------
 # ADMIN
 # --------------------------------------------------------------------
-if not event_mode:
+if (not view_event_mode) and printer_has_admin:
     with st.expander("🛠️ Admin & Einstellungen"):
 
         # ============================================================
@@ -1351,7 +1387,9 @@ if not event_mode:
         # ============================================================
         st.write("### Aqara Steckdose Fotobox")
 
-        if not AQARA_ENABLED:
+        if not printer_has_aqara:
+            st.info("Für diese Fotobox ist keine Aqara-Steckdose hinterlegt.")
+        elif not AQARA_ENABLED:
             st.info(
                 "Aqara ist nicht konfiguriert. Bitte [aqara] in secrets.toml setzen."
             )
@@ -1422,7 +1460,9 @@ if not event_mode:
         # ============================================================
         st.write("### dsrBooth Lockscreen")
 
-        if not DSR_ENABLED:
+        if not printer_has_dsr:
+            st.info("Für diese Fotobox ist kein dsrBooth-Lockscreen hinterlegt.")
+        elif not DSR_ENABLED:
             st.info(
                 "dsrBooth-Steuerung ist nicht konfiguriert. Bitte [dsrbooth] mit control_topic in secrets.toml setzen."
             )
