@@ -264,6 +264,8 @@ except Exception:
 PAGE_TITLE = "Fotobox Drucker Status"
 PAGE_ICON = "🖨️"
 
+APP_ICON_URL = "https://www.fabianschirgi.com/uploads/tx_bh/710/icon-dashboard.png"
+
 # Konfigurationen, die NICHT geheim sind, bleiben im Code
 PRINTERS = {
     "Standard Fotobox": {
