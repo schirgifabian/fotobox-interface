@@ -282,6 +282,88 @@ ALERT_SOUND_URL = "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
 # --------------------------------------------------------------------
 st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="centered")
 
+# ---- Globales Styling für Settings / Karten ----
+CUSTOM_CSS = """
+<style>
+.settings-wrapper {
+  margin-top: 0.75rem;
+}
+
+/* generische Karten-Optik */
+.control-card {
+  border-radius: 16px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #ffffff, #f9fafb);
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 18px 45px rgba(15,23,42,0.08);
+  margin-bottom: 12px;
+}
+
+/* kleine Überschrift über der Karte */
+.control-header-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color:#9ca3af;
+  margin-bottom: 2px;
+}
+
+/* Hauptzeile mit Icon + Text */
+.control-headline {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color:#111827;
+  display:flex;
+  align-items:center;
+  gap: 0.4rem;
+  margin-bottom: 6px;
+}
+
+/* Status-Badge */
+.status-pill {
+  margin-top: 4px;
+  padding: 4px 10px;
+  border-radius:999px;
+  font-size: 0.7rem;
+  font-weight:600;
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+}
+.status-pill--ok {
+  background:#dcfce7;
+  color:#166534;
+}
+.status-pill--muted {
+  background:#e5e7eb;
+  color:#374151;
+}
+.status-pill--warn {
+  background:#fef3c7;
+  color:#92400e;
+}
+
+/* Zusatzinfos unten */
+.control-meta {
+  margin-top: 6px;
+  font-size: 0.7rem;
+  color:#9ca3af;
+}
+
+/* rechte Spalte mit Toggle */
+.toggle-col {
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  height:100%;
+}
+.toggle-col > div {
+  transform: scale(0.9);
+}
+</style>
+"""
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
 if "confirm_reset" not in st.session_state:
     st.session_state.confirm_reset = False
 if "ntfy_active" not in st.session_state:
@@ -744,6 +826,77 @@ def show_history():
 
 
 # --------------------------------------------------------------------
+# Helper für moderne Karten mit Toggle
+# --------------------------------------------------------------------
+def render_device_card(
+    header_label: str,
+    title: str,
+    state: str,
+    badge_icon_on: str,
+    badge_icon_off: str,
+    badge_icon_unknown: str,
+    text_on: str,
+    text_off: str,
+    text_unknown: str,
+    state_prefix: str,
+    hint_text: str,
+    toggle_key: str,
+    toggle_help: str,
+):
+    """
+    Zeichnet eine moderne Karte mit Status-Badge + Toggle rechts.
+    Gibt den Toggle-Wert zurück.
+    """
+
+    if state == "on":
+        badge_icon = badge_icon_on
+        badge_text = text_on
+        pill_class = "status-pill--ok"
+    elif state == "off":
+        badge_icon = badge_icon_off
+        badge_text = text_off
+        pill_class = "status-pill--muted"
+    else:
+        badge_icon = badge_icon_unknown
+        badge_text = text_unknown
+        pill_class = "status-pill--warn"
+
+    st.markdown('<div class="control-card">', unsafe_allow_html=True)
+    col_left, col_right = st.columns([3, 1])
+
+    with col_left:
+        st.markdown(
+            f"""
+            <div class="control-header-label">{header_label}</div>
+            <div class="control-headline">
+                <span>{badge_icon}</span>
+                <span>{badge_text}</span>
+            </div>
+            <div class="status-pill {pill_class}">
+                <span>{state_prefix}: {state}</span>
+            </div>
+            <div class="control-meta">{hint_text}</div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with col_right:
+        with st.container():
+            st.markdown('<div class="toggle-col">', unsafe_allow_html=True)
+            toggle_val = st.toggle(
+                label=title,
+                value=(state == "on"),
+                key=toggle_key,
+                help=toggle_help,
+                label_visibility="collapsed",
+            )
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
+    return toggle_val
+
+
+# --------------------------------------------------------------------
 # RENDER
 # --------------------------------------------------------------------
 if event_mode:
@@ -846,72 +999,23 @@ if not event_mode:
                 if st.session_state.socket_state not in ("on", "off"):
                     st.session_state.socket_state = "unknown"
 
-                        # Status-Optik
             state = st.session_state.socket_state
-            if state == "on":
-                badge_color = "#16a34a"
-                badge_text = "EINGESCHALTET"
-                badge_icon = "🟢"
-            elif state == "off":
-                badge_color = "#6b7280"
-                badge_text = "AUSGESCHALTET"
-                badge_icon = "⚪️"
-            else:
-                badge_color = "#f97316"
-                badge_text = "STATUS UNBEKANNT"
-                badge_icon = "⚠️"
 
-            # Karte mit Status + Toggle in einer Zeile
-            with st.container():
-                st.markdown(
-                    """
-                    <div style="
-                        border:1px solid #e5e7eb;
-                        border-radius:12px;
-                        padding:12px 16px;
-                        margin-bottom:12px;
-                    ">
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-                col_left, col_right = st.columns([3, 1])
-
-                with col_left:
-                    st.markdown(
-                        f"""
-                        <div style="font-size:13px; color:#6b7280;">Fotobox-Steckdose</div>
-                        <div style="font-size:20px; font-weight:600; color:#111827; display:flex; align-items:center; gap:6px;">
-                            <span>{badge_icon}</span>
-                            <span>{badge_text}</span>
-                        </div>
-                        <div style="
-                            margin-top:6px;
-                            padding:4px 10px;
-                            border-radius:999px;
-                            background:{badge_color}20;
-                            color:{badge_color};
-                            font-size:11px;
-                            font-weight:600;
-                            display:inline-block;
-                        ">
-                            Zustand: {state}
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-                with col_right:
-                    desired_on_default = state == "on"
-                    toggle_val = st.toggle(
-                        "Steckdose Fotobox",
-                        value=desired_on_default,
-                        help="Schaltet die Aqara-Steckdose ein oder aus.",
-                        key="aqara_toggle",
-                        label_visibility="collapsed",
-                    )
-
-                st.markdown("</div>", unsafe_allow_html=True)
+            toggle_val = render_device_card(
+                header_label="Fotobox-Steckdose",
+                title="Steckdose Fotobox",
+                state=state,
+                badge_icon_on="🟢",
+                badge_icon_off="⚪️",
+                badge_icon_unknown="⚠️",
+                text_on="EINGESCHALTET",
+                text_off="AUSGESCHALTET",
+                text_unknown="STATUS UNBEKANNT",
+                state_prefix="Zustand",
+                hint_text="Schaltet die Stromversorgung der Fotobox über die Aqara-Steckdose.",
+                toggle_key="aqara_toggle",
+                toggle_help="Schaltet die Aqara-Steckdose ein oder aus.",
+            )
 
             # Nur reagieren, wenn sich der Toggle-Wert geändert hat
             if toggle_val != (state == "on"):
@@ -951,76 +1055,28 @@ if not event_mode:
 
             state = st.session_state.lockscreen_state
 
-            if state == "on":
-                badge_color = "#2563eb"
-                badge_text = "LOCKSCREEN AKTIV"
-                badge_icon = "🔒"
-            elif state == "off":
-                badge_color = "#6b7280"
-                badge_text = "LOCKSCREEN INAKTIV"
-                badge_icon = "🔓"
-            else:
-                badge_color = "#f97316"
-                badge_text = "STATUS UNBEKANNT"
-                badge_icon = "⚠️"
-
-            with st.container():
-                st.markdown(
-                    """
-                    <div style="
-                        border:1px solid #e5e7eb;
-                        border-radius:12px;
-                        padding:12px 16px;
-                        margin-bottom:12px;
-                    ">
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-                col_left, col_right = st.columns([3, 1])
-
-                with col_left:
-                    st.markdown(
-                        f"""
-                        <div style="font-size:13px; color:#6b7280;">dsrBooth – Gästelockscreen</div>
-                        <div style="font-size:20px; font-weight:600; color:#111827; display:flex; align-items:center; gap:6px;">
-                            <span>{badge_icon}</span>
-                            <span>{badge_text}</span>
-                        </div>
-                        <div style="
-                            margin-top:6px;
-                            padding:4px 10px;
-                            border-radius:999px;
-                            background:{badge_color}20;
-                            color:{badge_color};
-                            font-size:11px;
-                            font-weight:600;
-                            display:inline-block;
-                        ">
-                            Zustand (letzte Aktion): {state}
-                        </div>
-                        <div style="margin-top:6px; font-size:11px; color:#9ca3af;">
-                            Hinweis: Der Status basiert nur auf der letzten Aktion, da die API keinen Status-Endpunkt bereitstellt.
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-                with col_right:
-                    desired_on_default = state == "on"
-                    lockscreen_toggle = st.toggle(
-                        "Lockscreen aktiv",
-                        value=desired_on_default,
-                        help="Zeigt bzw. versteckt den dslrBooth-Lockscreen.",
-                        key="dsrbooth_lockscreen_toggle",
-                        label_visibility="collapsed",
-                    )
-
-                st.markdown("</div>", unsafe_allow_html=True)
+            toggle_val = render_device_card(
+                header_label="dsrBooth – Gästelockscreen",
+                title="Lockscreen aktiv",
+                state=state,
+                badge_icon_on="🔒",
+                badge_icon_off="🔓",
+                badge_icon_unknown="⚠️",
+                text_on="LOCKSCREEN AKTIV",
+                text_off="LOCKSCREEN INAKTIV",
+                text_unknown="STATUS UNBEKANNT",
+                state_prefix="Zustand (letzte Aktion)",
+                hint_text=(
+                    "Der Status basiert nur auf der letzten Aktion, "
+                    "da die API keinen Status-Endpunkt bereitstellt."
+                ),
+                toggle_key="dsrbooth_lockscreen_toggle",
+                toggle_help="Zeigt bzw. versteckt den dslrBooth-Lockscreen.",
+            )
 
             # Nur reagieren, wenn Toggle sich ändert
-            if lockscreen_toggle != (state == "on"):
-                desired_on = lockscreen_toggle
+            if toggle_val != (state == "on"):
+                desired_on = toggle_val
                 cmd = "lock_on" if desired_on else "lock_off"
                 send_dsr_command(cmd)
                 st.session_state.lockscreen_state = "on" if desired_on else "off"
