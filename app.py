@@ -945,15 +945,15 @@ def render_status_help():
 
 - `🔴 STÖRUNG`  
   Harte Fehler wie „paper end“, „ribbon end“, „paper jam“, „data error“ usw.  
-  → Papier/Rolle prüfen, Drucker-Display checken, ggf. Papier neu einlegen.
+  → Papier/Rolle prüfen, Drucker-Statusleuchten checken, ggf. Papier neu einlegen.
 
 ---
 
 **Geräte-Steuerung**
 
 - **Aqara Steckdose Fotobox**  
-  Schaltet die Stromversorgung der Fotobox komplett ein/aus.  
-  `Ein` = Fotobox bekommt Strom, `Aus` = Fotobox stromlos.
+  Schaltet die Stromversorgung vom Blitz komplett ein/aus.  
+  `Ein` = Blitz bekommt Strom, `Aus` = Blitz stromlos.
 
 - **dsrBooth – Gästelockscreen**  
   `Sperren` aktiviert den Gästelockscreen (Gäste können keine Fotos starten).  
