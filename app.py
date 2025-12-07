@@ -37,7 +37,7 @@ def check_login():
         return True
 
     # --- FALL 3: Login Formular zeigen ---
-    st.title("🔒 Zugriff geschützt")
+    st.title("Dashboard dieFotobox.")
     
     msg_placeholder = st.empty()
 
@@ -650,6 +650,95 @@ def maybe_play_sound(status_mode: str, sound_enabled: bool):
 
 
 # --------------------------------------------------------------------
+# HISTORIEN-HELPER (inkl. *2-Logik)
+# --------------------------------------------------------------------
+
+def _prepare_history_df(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Timestamp in Datetime umwandeln, nach Zeit sortieren und Zeilen ohne Timestamp / MediaRemaining rauswerfen.
+    """
+    if df.empty:
+        return df
+
+    df = df.copy()
+    if "Timestamp" not in df.columns or "MediaRemaining" not in df.columns:
+        return pd.DataFrame()
+
+    df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
+    df = df.dropna(subset=["Timestamp", "MediaRemaining"])
+    if df.empty:
+        return df
+
+    df = df.sort_values("Timestamp")
+    df = df.set_index("Timestamp")
+    df["MediaRemaining"] = pd.to_numeric(df["MediaRemaining"], errors="coerce")
+    df = df.dropna(subset=["MediaRemaining"])
+    return df
+
+
+def compute_print_stats(df: pd.DataFrame, window_min: int = 30) -> dict:
+    """
+    Berechnet Kennzahlen aus dem Verlauf in "echten" Drucken.
+    Drucker liefert halbe Werte → wir rechnen alles *2.
+    - prints_total: Drucke seit Reset (geschätzt)
+    - duration_min: Gesamtdauer in Minuten
+    - ppm_overall: Drucke pro Minute gesamt
+    - ppm_window: Drucke/Minute in den letzten `window_min` Minuten
+    """
+    result = {
+        "prints_total": 0,
+        "duration_min": 0,
+        "ppm_overall": None,
+        "ppm_window": None,
+    }
+
+    df = _prepare_history_df(df)
+    if df.empty or len(df) < 2:
+        return result
+
+    first_media_raw = df["MediaRemaining"].iloc[0]
+    last_media_raw = df["MediaRemaining"].iloc[-1]
+
+    # Differenz in Roh-Einheiten, dann *2 für echte Drucke
+    prints_total = max(0, (first_media_raw - last_media_raw) * 2)
+    duration_min = (df.index[-1] - df.index[0]).total_seconds() / 60.0
+
+    result["prints_total"] = prints_total
+    result["duration_min"] = duration_min
+
+    if duration_min > 0 and prints_total > 0:
+        result["ppm_overall"] = prints_total / duration_min
+
+    # Fenster (z.B. letzte 30 Minuten)
+    window_start = df.index[-1] - datetime.timedelta(minutes=window_min)
+    dfw = df[df.index >= window_start]
+    if len(dfw) >= 2:
+        f_m_raw = dfw["MediaRemaining"].iloc[0]
+        l_m_raw = dfw["MediaRemaining"].iloc[-1]
+        prints_win = max(0, (f_m_raw - l_m_raw) * 2)
+        dur_win_min = (dfw.index[-1] - dfw.index[0]).total_seconds() / 60.0
+        if dur_win_min > 0 and prints_win > 0:
+            result["ppm_window"] = prints_win / dur_win_min
+
+    return result
+
+
+def humanize_minutes(minutes: float) -> str:
+    """
+    Formatiert Minuten als schönen String.
+    """
+    if minutes is None or minutes <= 0:
+        return "0 Min."
+    m = int(minutes)
+    h = m // 60
+    r = m % 60
+    if h > 0:
+        return f"{h} Std. {r} Min."
+    else:
+        return f"{r} Min."
+
+
+# --------------------------------------------------------------------
 # UI START
 # --------------------------------------------------------------------
 st.title(f"{PAGE_ICON} {PAGE_TITLE}")
@@ -668,13 +757,14 @@ def show_live_status(sound_enabled: bool = False):
         timestamp = str(last.get("Timestamp", ""))
         raw_status = str(last.get("Status", ""))
 
+        # Rohwert vom Drucker → Hälfte der echten Drucke
         try:
-            mr_val = last.get("MediaRemaining", 0)
-            media_remaining_raw = int(mr_val)
-            media_remaining = media_remaining_raw * 2
+            media_remaining_raw = int(last.get("MediaRemaining", 0))
         except Exception:
             media_remaining_raw = 0
-            media_remaining = 0
+
+        # Echte verbleibende Drucke (für Anzeige & Berechnung)
+        media_remaining = media_remaining_raw * 2
 
         (
             status_mode,
@@ -717,26 +807,42 @@ def show_live_status(sound_enabled: bool = False):
         # Papierstatus
         st.markdown("### Papierstatus")
 
+        # Drucke seit Reset: max_prints (echte Drucke) - media_remaining (echte Drucke)
+        prints_since_reset = max(
+            0,
+            (st.session_state.max_prints or 0) - media_remaining
+        )
+
+        # Restlaufzeit aus Historie (alles in echten Drucken dank compute_print_stats)
+        stats = compute_print_stats(df, window_min=30)
+        forecast = "–"
+
         if status_mode == "error":
-            remaining_text = f"{media_remaining} Stk (?)"
             forecast = "Gestört"
         else:
-            remaining_text = f"{media_remaining} Stk"
-            if media_remaining > 0:
-                m = int(media_remaining * 1.5)
-                forecast = f"{m} Min." if m < 60 else f"{m//60} Std. {m%60} Min."
+            ppm = stats.get("ppm_window") or stats.get("ppm_overall")
+            if ppm and ppm > 0 and media_remaining > 0:
+                minutes_left = media_remaining / ppm
+                forecast = humanize_minutes(minutes_left)
+            elif media_remaining > 0:
+                # Fallback: 1 Druck/Min
+                minutes_left = media_remaining * 1.0
+                forecast = humanize_minutes(minutes_left)
             else:
                 forecast = "0 Min."
 
         colA, colB, colC = st.columns(3)
-        colA.metric("Verbleibend", remaining_text, f"von {st.session_state.max_prints}")
+        colA.metric(
+            "Verbleibend",
+            f"{media_remaining} Stk",
+            f"von {st.session_state.max_prints}",
+        )
         colB.metric("Restlaufzeit (geschätzt)", forecast)
 
-        if COST_PER_ROLL_EUR:
+        if COST_PER_ROLL_EUR and (st.session_state.max_prints or 0) > 0:
             try:
-                used = max(0, st.session_state.max_prints - media_remaining)
                 cost_per_print = COST_PER_ROLL_EUR / st.session_state.max_prints
-                cost_used = used * cost_per_print
+                cost_used = prints_since_reset * cost_per_print
                 colC.metric("Kosten seit Reset", f"{cost_used:0.2f} €")
             except Exception:
                 colC.metric("Kosten seit Reset", "–")
@@ -748,7 +854,14 @@ def show_live_status(sound_enabled: bool = False):
             bar_color = "red"
             progress_val = 0
         else:
-            progress_val = max(0, min(1, media_remaining / st.session_state.max_prints))
+            if not st.session_state.max_prints:
+                progress_val = 0
+            else:
+                progress_val = max(
+                    0.0,
+                    min(1.0, media_remaining / st.session_state.max_prints),
+                )
+
             if progress_val < 0.1:
                 bar_color = "red"
             elif progress_val < 0.25:
@@ -780,33 +893,55 @@ def show_history():
 
     st.subheader("Verlauf & Analyse")
 
-    if "Timestamp" in df.columns and "MediaRemaining" in df.columns:
-        df_plot = df.copy()
-        df_plot["Timestamp"] = pd.to_datetime(df_plot["Timestamp"], errors="coerce")
-        df_plot = df_plot.dropna(subset=["Timestamp"]).set_index("Timestamp")
-        st.line_chart(df_plot["MediaRemaining"], use_container_width=True)
+    df_hist = _prepare_history_df(df)
+    if df_hist.empty:
+        st.info("Keine auswertbaren Daten (Timestamp / MediaRemaining fehlen).")
+        return
 
-    last = df.iloc[-1]
-    try:
-        media_remaining = int(last.get("MediaRemaining", 0))
-    except Exception:
-        media_remaining = 0
+    df_hist = df_hist.copy()
+    # Echte verbleibende Drucke
+    df_hist["RemainingPrints"] = df_hist["MediaRemaining"] * 2
 
-    total_rows = len(df)
-    prints_since_reset = max(0, st.session_state.max_prints - media_remaining)
+    st.markdown("#### Medienverlauf (echte Drucke)")
+    st.line_chart(df_hist["RemainingPrints"], use_container_width=True)
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Log-Einträge", total_rows)
-    c2.metric("Drucke (geschätzt)", prints_since_reset)
-    if COST_PER_ROLL_EUR:
+    # Kennzahlen
+    stats = compute_print_stats(df, window_min=30)
+
+    last_remaining = int(df_hist["RemainingPrints"].iloc[-1])
+    prints_since_reset = max(
+        0,
+        (st.session_state.max_prints or 0) - last_remaining
+    )
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Log-Einträge", len(df_hist))
+    c2.metric("Drucke seit Reset (geschätzt)", prints_since_reset)
+
+    if stats["ppm_overall"]:
+        c3.metric("Ø Drucke/Std (Session)", f"{stats['ppm_overall'] * 60:.1f}")
+    else:
+        c3.metric("Ø Drucke/Std (Session)", "–")
+
+    if stats["ppm_window"]:
+        c4.metric("Ø Drucke/Std (letzte 30 Min)", f"{stats['ppm_window'] * 60:.1f}")
+    else:
+        c4.metric("Ø Drucke/Std (letzte 30 Min)", "–")
+
+    st.markdown("#### Kostenabschätzung")
+    col_cost1, col_cost2 = st.columns(2)
+    if COST_PER_ROLL_EUR and (st.session_state.max_prints or 0) > 0:
         try:
             cost_per_print = COST_PER_ROLL_EUR / st.session_state.max_prints
             cost_used = prints_since_reset * cost_per_print
-            c3.metric("Kosten (geschätzt)", f"{cost_used:0.2f} €")
+            col_cost1.metric("Kosten seit Reset", f"{cost_used:0.2f} €")
+            col_cost2.metric("Kosten pro Druck (ca.)", f"{cost_per_print:0.3f} €")
         except Exception:
-            c3.metric("Kosten (geschätzt)", "–")
+            col_cost1.metric("Kosten seit Reset", "–")
+            col_cost2.metric("Kosten pro Druck (ca.)", "–")
     else:
-        c3.metric("Kosten (geschätzt)", "–")
+        col_cost1.metric("Kosten seit Reset", "–")
+        col_cost2.metric("Kosten pro Druck (ca.)", "–")
 
     st.markdown("#### Rohdaten (letzte 200 Zeilen)")
     st.dataframe(df.tail(200), use_container_width=True)
