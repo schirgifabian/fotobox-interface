@@ -12,7 +12,8 @@ import json
 import extra_streamlit_components as stx
 import pytz
 
-# --- PIN ABFRAGE START ---
+# --- PIN ABFRAGE START --------------------------------------------------------
+
 
 def check_login():
     # Session State initialisieren
@@ -21,41 +22,41 @@ def check_login():
 
     # Cookie Manager initialisieren
     cookie_manager = stx.CookieManager(key="fotobox_auth")
-    
+
     # Echten PIN holen und als String casten
     secret_pin = str(st.secrets["general"]["app_pin"])
-    
+
     # Cookie lesen
     cookie_val = cookie_manager.get("auth_pin")
 
     # --- PRÜFUNG 1: Ist der Nutzer laut Cookie schon eingeloggt? ---
     if cookie_val is not None and str(cookie_val) == secret_pin:
         st.session_state["is_logged_in"] = True
-    
+
     # --- PRÜFUNG 2: Ist der Nutzer laut Session State eingeloggt? ---
     if st.session_state["is_logged_in"]:
         return True
 
     # --- FALL 3: Login Formular zeigen ---
     st.title("Dashboard dieFotobox.")
-    
+
     msg_placeholder = st.empty()
 
     with st.form("login_form"):
         user_input = st.text_input("Bitte PIN eingeben:", type="password")
         submitted = st.form_submit_button("Login")
-        
+
         if submitted:
             if str(user_input) == secret_pin:
                 # 1. Session freigeben
                 st.session_state["is_logged_in"] = True
-                
+
                 # 2. Cookie setzen
                 expires = datetime.datetime.now() + datetime.timedelta(hours=1)
                 cookie_manager.set("auth_pin", user_input, expires_at=expires)
-                
+
                 msg_placeholder.success("Login korrekt! Geht sofort los...")
-                
+
                 # Kurze Pause, dann Reload
                 time.sleep(1)
                 st.rerun()
@@ -65,15 +66,17 @@ def check_login():
     # Hier stoppt alles, solange nicht eingeloggt
     st.stop()
 
+
 # Login-Check ausführen, bevor irgendetwas anderes passiert
 check_login()
 
-# --- PIN ABFRAGE ENDE ---
+# --- PIN ABFRAGE ENDE --------------------------------------------------------
 
 
 # --------------------------------------------------------------------
 # AQARA CLIENT
 # --------------------------------------------------------------------
+
 
 class AqaraClient:
     def __init__(self, app_id, key_id, app_secret, region="ger"):
@@ -95,9 +98,7 @@ class AqaraClient:
         if access_token:
             sign_params["Accesstoken"] = access_token
 
-        sign_str = "&".join(
-            f"{k}={sign_params[k]}" for k in sorted(sign_params.keys())
-        )
+        sign_str = "&".join(f"{k}={sign_params[k]}" for k in sorted(sign_params.keys()))
         sign_str += self.app_secret
         sign = hashlib.md5(sign_str.lower().encode("utf-8")).hexdigest()
 
@@ -282,7 +283,6 @@ ALERT_SOUND_URL = "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
 # --------------------------------------------------------------------
 st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="centered")
 
-# ---- Globales Styling für Karten ----
 CUSTOM_CSS = """
 <style>
 .settings-wrapper {
@@ -361,10 +361,65 @@ CUSTOM_CSS = """
 .control-card .stRadio > div {
   padding-top: 0;
 }
+
+/* ----------------------------------------------------
+   Admin-Karte
+   ---------------------------------------------------- */
+.admin-card {
+  border-radius:18px;
+  border:1px solid #e5e7eb;
+  background:#ffffff;
+  box-shadow:0 12px 30px rgba(15,23,42,0.05);
+  padding:18px 20px 20px 20px;
+  margin-bottom:20px;
+}
+
+.admin-card-header {
+  display:flex;
+  justify-content:space-between;
+  align-items:baseline;
+  margin-bottom:14px;
+}
+
+.admin-card-title {
+  font-size:16px;
+  font-weight:600;
+  color:#111827;
+}
+
+.admin-card-subtitle {
+  font-size:12px;
+  color:#9ca3af;
+}
+
+.admin-section-title {
+  font-size:15px;
+  font-weight:600;
+  color:#111827;
+  margin-bottom:6px;
+}
+
+.admin-label-pill {
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.14em;
+  color:#9ca3af;
+  margin-top:10px;
+  margin-bottom:4px;
+}
+
+.admin-spacer-xs {
+  height:4px;
+}
+
+.admin-spacer-sm {
+  height:8px;
+}
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
+# Session-State Defaults
 if "confirm_reset" not in st.session_state:
     st.session_state.confirm_reset = False
 if "ntfy_active" not in st.session_state:
@@ -385,6 +440,7 @@ if "lockscreen_state" not in st.session_state:
     # Wir kennen den echten Status nicht → nur "letzte Aktion"
     st.session_state.lockscreen_state = "off"
 
+# Sidebar
 st.sidebar.header("Einstellungen")
 printer_name = st.sidebar.selectbox("Fotobox auswählen", list(PRINTERS.keys()))
 event_mode = st.sidebar.toggle("Event-Ansicht (nur Status)", value=False)
@@ -405,7 +461,7 @@ COST_PER_ROLL_EUR = printer_cfg["cost_per_roll_eur"]
 
 
 # --------------------------------------------------------------------
-# PUSH FUNKTION
+# PUSH FUNKTIONEN
 # --------------------------------------------------------------------
 def send_ntfy_push(title, message, tags="warning", priority="default"):
     if not st.session_state.ntfy_active:
@@ -514,7 +570,7 @@ def log_reset_event(package_size: int, note: str = ""):
         except WorksheetNotFound:
             meta_ws = sh.add_worksheet(title="Meta", rows=1000, cols=10)
             meta_ws.append_row(["Timestamp", "PackageSize", "Note"])
-            
+
         meta_ws.append_row(
             [datetime.datetime.now().isoformat(timespec="seconds"), package_size, note]
         )
@@ -525,7 +581,6 @@ def log_reset_event(package_size: int, note: str = ""):
 # --------------------------------------------------------------------
 # STATUS-LOGIK
 # --------------------------------------------------------------------
-
 def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
     prev_status = st.session_state.last_warn_status
     raw_status_l = (raw_status or "").lower().strip()
@@ -537,7 +592,7 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
         "paper jam",
         "ribbon error",
         "paper definition error",
-        "data error"
+        "data error",
     ]
 
     cover_open_kw = ["cover open"]
@@ -545,49 +600,37 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
     printing_kw = ["printing", "processing", "drucken"]
     idle_kw = ["idle", "standby mode"]
 
-    # ---------------------------------------------------
     # 1) Harte Fehler
-    # ---------------------------------------------------
     if any(k in raw_status_l for k in hard_errors):
         status_mode = "error"
         display_text = f"🔴 STÖRUNG: {raw_status}"
         display_color = "red"
 
-    # ---------------------------------------------------
-    # 2) Cover Open → eigenes Level, orange
-    # ---------------------------------------------------
+    # 2) Cover Open
     elif any(k in raw_status_l for k in cover_open_kw):
         status_mode = "cover_open"
         display_text = "⚠️ Deckel offen!"
         display_color = "orange"
 
-    # ---------------------------------------------------
     # 3) Druckkopf kühlt ab
-    # ---------------------------------------------------
     elif any(k in raw_status_l for k in cooldown_kw):
         status_mode = "cooldown"
         display_text = "⏳ Druckkopf kühlt ab…"
         display_color = "orange"
 
-    # ---------------------------------------------------
     # 4) Papier fast leer (nur wenn kein Fehler)
-    # ---------------------------------------------------
     elif media_remaining <= WARNING_THRESHOLD:
         status_mode = "low_paper"
         display_text = f"⚠️ Papier fast leer! ({media_remaining} Stk)"
         display_color = "orange"
 
-    # ---------------------------------------------------
     # 5) Druckt gerade
-    # ---------------------------------------------------
     elif any(k in raw_status_l for k in printing_kw):
         status_mode = "printing"
         display_text = "🖨️ Druckt gerade…"
         display_color = "blue"
 
-    # ---------------------------------------------------
     # 6) Leerlauf
-    # ---------------------------------------------------
     elif any(k in raw_status_l for k in idle_kw) or raw_status_l == "":
         status_mode = "ready"
         display_text = "✅ Bereit"
@@ -598,21 +641,17 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
         display_text = f"✅ Bereit ({raw_status})"
         display_color = "green"
 
-    # ---------------------------------------------------
     # HEARTBEAT
-    # ---------------------------------------------------
     minutes_diff = None
     LOCAL_TZ = pytz.timezone("Europe/Vienna")
     ts_parsed = pd.to_datetime(timestamp, errors="coerce")
 
     if pd.notna(ts_parsed):
-        # Falls Timestamp keine TZ hat → als lokale Zeit interpretieren
         if ts_parsed.tzinfo is None:
             ts_parsed = LOCAL_TZ.localize(ts_parsed)
         else:
             ts_parsed = ts_parsed.astimezone(LOCAL_TZ)
 
-        # Jetzt aktuellen Zeitpunkt ebenfalls in der gleichen TZ holen
         now_local = datetime.datetime.now(LOCAL_TZ)
         delta = now_local - ts_parsed
         minutes_diff = int(delta.total_seconds() // 60)
@@ -622,24 +661,22 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
             display_text = "⚠️ Keine aktuellen Daten"
             display_color = "orange"
 
-    # ---------------------------------------------------
     # PUSH LOGIK
-    # ---------------------------------------------------
     critical_states = ["error", "cover_open", "low_paper", "stale"]
     push = None
 
     if status_mode in critical_states and prev_status != status_mode:
         title_map = {
-            "error":       "🔴 Fehler",
-            "cover_open":  "⚠️ Deckel offen",
-            "low_paper":   "⚠️ Papier fast leer",
-            "stale":       "⚠️ Keine aktuellen Daten"
+            "error": "🔴 Fehler",
+            "cover_open": "⚠️ Deckel offen",
+            "low_paper": "⚠️ Papier fast leer",
+            "stale": "⚠️ Keine aktuellen Daten",
         }
         msg_map = {
-            "error":       f"Status: {raw_status}",
-            "cover_open":  "Der Druckerdeckel ist offen.",
-            "low_paper":   f"Nur noch {media_remaining} Bilder!",
-            "stale":       f"Seit {minutes_diff} Min kein Signal."
+            "error": f"Status: {raw_status}",
+            "cover_open": "Der Druckerdeckel ist offen.",
+            "low_paper": f"Nur noch {media_remaining} Bilder!",
+            "stale": f"Seit {minutes_diff} Min kein Signal.",
         }
         push = (title_map[status_mode], msg_map[status_mode], "warning")
 
@@ -672,9 +709,8 @@ def maybe_play_sound(status_mode: str, sound_enabled: bool):
 
 
 # --------------------------------------------------------------------
-# HISTORIEN-HELPER (inkl. *2-Logik)
+# HISTORIE & STATS
 # --------------------------------------------------------------------
-
 def _prepare_history_df(df: pd.DataFrame) -> pd.DataFrame:
     """
     Timestamp in Datetime umwandeln, nach Zeit sortieren und Zeilen ohne Timestamp / MediaRemaining rauswerfen.
@@ -702,10 +738,6 @@ def compute_print_stats(df: pd.DataFrame, window_min: int = 30) -> dict:
     """
     Berechnet Kennzahlen aus dem Verlauf in "echten" Drucken.
     Drucker liefert halbe Werte → wir rechnen alles *2.
-    - prints_total: Drucke seit Reset (geschätzt)
-    - duration_min: Gesamtdauer in Minuten
-    - ppm_overall: Drucke pro Minute gesamt
-    - ppm_window: Drucke/Minute in den letzten `window_min` Minuten
     """
     result = {
         "prints_total": 0,
@@ -854,9 +886,13 @@ def render_toggle_card(
 
         c_left, c_right = st.columns(2)
         with c_left:
-            click_left = st.button(btn_left_label, key=btn_left_key, use_container_width=True)
+            click_left = st.button(
+                btn_left_label, key=btn_left_key, use_container_width=True
+            )
         with c_right:
-            click_right = st.button(btn_right_label, key=btn_right_key, use_container_width=True)
+            click_right = st.button(
+                btn_right_label, key=btn_right_key, use_container_width=True
+            )
 
         st.markdown(
             """
@@ -945,15 +981,15 @@ def render_status_help():
 
 - `🔴 STÖRUNG`  
   Harte Fehler wie „paper end“, „ribbon end“, „paper jam“, „data error“ usw.  
-  → Papier/Rolle prüfen, Drucker-Statusleuchten checken, ggf. Papier neu einlegen.
+  → Papier/Rolle prüfen, Drucker-Display checken, ggf. Papier neu einlegen.
 
 ---
 
 **Geräte-Steuerung**
 
 - **Aqara Steckdose Fotobox**  
-  Schaltet die Stromversorgung vom Blitz komplett ein/aus.  
-  `Ein` = Blitz bekommt Strom, `Aus` = Blitz stromlos.
+  Schaltet die Stromversorgung der Fotobox komplett ein/aus.  
+  `Ein` = Fotobox bekommt Strom, `Aus` = Fotobox stromlos.
 
 - **dsrBooth – Gästelockscreen**  
   `Sperren` aktiviert den Gästelockscreen (Gäste können keine Fotos starten).  
@@ -967,7 +1003,6 @@ def render_status_help():
 # UI START
 # --------------------------------------------------------------------
 st.title(f"{PAGE_ICON} {PAGE_TITLE}")
-render_health_overview()
 
 
 @st.fragment(run_every=10)
@@ -1034,10 +1069,7 @@ def show_live_status(sound_enabled: bool = False, event_mode: bool = False):
         st.markdown("### Papierstatus")
 
         # Drucke seit Reset: max_prints (echte Drucke) - media_remaining (echte Drucke)
-        prints_since_reset = max(
-            0,
-            (st.session_state.max_prints or 0) - media_remaining
-        )
+        prints_since_reset = max(0, (st.session_state.max_prints or 0) - media_remaining)
 
         # Restlaufzeit aus Historie (alles in echten Drucken dank compute_print_stats)
         stats = compute_print_stats(df, window_min=30)
@@ -1058,11 +1090,7 @@ def show_live_status(sound_enabled: bool = False, event_mode: bool = False):
                 forecast = "0 Min."
 
         colA, colB, colC = st.columns(3)
-        colA.metric(
-            "Verbleibend",
-            f"{media_remaining} Stk",
-            f"von {st.session_state.max_prints}",
-        )
+        colA.metric("Verbleibend", f"{media_remaining} Stk", f"von {st.session_state.max_prints}")
         colB.metric("Restlaufzeit (geschätzt)", forecast)
 
         if COST_PER_ROLL_EUR and (st.session_state.max_prints or 0) > 0:
@@ -1084,8 +1112,7 @@ def show_live_status(sound_enabled: bool = False, event_mode: bool = False):
                 progress_val = 0
             else:
                 progress_val = max(
-                    0.0,
-                    min(1.0, media_remaining / st.session_state.max_prints),
+                    0.0, min(1.0, media_remaining / st.session_state.max_prints)
                 )
 
             if progress_val < 0.1:
@@ -1135,10 +1162,7 @@ def show_history():
     stats = compute_print_stats(df, window_min=30)
 
     last_remaining = int(df_hist["RemainingPrints"].iloc[-1])
-    prints_since_reset = max(
-        0,
-        (st.session_state.max_prints or 0) - last_remaining
-    )
+    prints_since_reset = max(0, (st.session_state.max_prints or 0) - last_remaining)
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Log-Einträge", len(df_hist))
@@ -1174,7 +1198,7 @@ def show_history():
 
 
 # --------------------------------------------------------------------
-# RENDER
+# RENDER MAIN VIEW
 # --------------------------------------------------------------------
 if event_mode:
     show_live_status(sound_enabled, event_mode=True)
@@ -1195,19 +1219,22 @@ st.markdown("---")
 if not event_mode:
     with st.expander("🛠️ Admin & Einstellungen"):
 
-        # Eine große Admin-Karte über die ganze Breite
+        # ============================================================
+        # ADMIN-KARTE: Schnellzugriff & Papierwechsel
+        # ============================================================
         admin_card = st.container()
         with admin_card:
             st.markdown(
                 """
-                <div style="
-                    border-radius:18px;
-                    border:1px solid #e5e7eb;
-                    background:#ffffff;
-                    box-shadow:0 12px 30px rgba(15,23,42,0.05);
-                    padding:18px 20px;
-                    margin-bottom:20px;
-                ">
+                <div class="admin-card">
+                    <div class="admin-card-header">
+                        <div class="admin-card-title">
+                            Schnellzugriff & Papierwechsel
+                        </div>
+                        <div class="admin-card-subtitle">
+                            Links, Benachrichtigungen und Rollenwechsel
+                        </div>
+                    </div>
                 """,
                 unsafe_allow_html=True,
             )
@@ -1217,11 +1244,7 @@ if not event_mode:
             # LINKS / NTFY
             with col1:
                 st.markdown(
-                    """
-                    <div style="font-size:18px;font-weight:600;color:#111827;margin-bottom:8px;">
-                        Externe Links
-                    </div>
-                    """,
+                    '<div class="admin-section-title">Externe Links</div>',
                     unsafe_allow_html=True,
                 )
                 st.link_button(
@@ -1231,18 +1254,22 @@ if not event_mode:
                 )
 
                 st.markdown(
-                    """
-                    <div style="font-size:12px;text-transform:uppercase;
-                                letter-spacing:.14em;color:#9ca3af;
-                                margin-top:16px;margin-bottom:4px;">
-                        Benachrichtigungen
-                    </div>
-                    """,
+                    '<div class="admin-label-pill">Benachrichtigungen</div>',
                     unsafe_allow_html=True,
                 )
-                st.code(st.session_state.ntfy_topic or "(kein Topic konfiguriert)")
+                st.text_input(
+                    "",
+                    value=st.session_state.ntfy_topic
+                    or "(kein Topic konfiguriert)",
+                    key="ntfy_topic_display",
+                    disabled=True,
+                    label_visibility="collapsed",
+                )
 
-                st.write("")
+                st.markdown(
+                    '<div class="admin-spacer-sm"></div>', unsafe_allow_html=True
+                )
+
                 if st.button("Test Push 🔔", use_container_width=True):
                     send_ntfy_push("Test", "Test erfolgreich", tags="tada")
                     st.toast("Test gesendet!")
@@ -1250,22 +1277,12 @@ if not event_mode:
             # PAPIER / RESET
             with col2:
                 st.markdown(
-                    """
-                    <div style="font-size:18px;font-weight:600;color:#111827;margin-bottom:8px;">
-                        Neuer Auftrag / Papierwechsel
-                    </div>
-                    """,
+                    '<div class="admin-section-title">Neuer Auftrag / Papierwechsel</div>',
                     unsafe_allow_html=True,
                 )
 
                 st.markdown(
-                    """
-                    <div style="font-size:12px;text-transform:uppercase;
-                                letter-spacing:.14em;color:#9ca3af;
-                                margin-bottom:4px;">
-                        Paketgröße
-                    </div>
-                    """,
+                    '<div class="admin-label-pill">Paketgröße</div>',
                     unsafe_allow_html=True,
                 )
                 size = st.radio(
@@ -1277,13 +1294,7 @@ if not event_mode:
                 )
 
                 st.markdown(
-                    """
-                    <div style="font-size:12px;text-transform:uppercase;
-                                letter-spacing:.14em;color:#9ca3af;
-                                margin-top:10px;margin-bottom:4px;">
-                        Notiz zum Papierwechsel (optional)
-                    </div>
-                    """,
+                    '<div class="admin-label-pill">Notiz zum Papierwechsel (optional)</div>',
                     unsafe_allow_html=True,
                 )
                 reset_note = st.text_input(
@@ -1293,7 +1304,10 @@ if not event_mode:
                     placeholder="z.B. neue 400er Rolle eingelegt",
                 )
 
-                st.write("")
+                st.markdown(
+                    '<div class="admin-spacer-sm"></div>', unsafe_allow_html=True
+                )
+
                 if not st.session_state.confirm_reset:
                     if st.button(
                         "Papierwechsel durchgeführt (Reset) 🔄",
@@ -1308,7 +1322,9 @@ if not event_mode:
 
             st.markdown("</div>", unsafe_allow_html=True)
 
-        # Wenn Reset bestätigt werden soll, extra Block darunter
+        # ============================================================
+        # RESET-BESTÄTIGUNGSBLOCK
+        # ============================================================
         if st.session_state.confirm_reset:
             st.warning(
                 f"Log löschen & auf {st.session_state.temp_package_size}er Rolle setzen?",
@@ -1452,3 +1468,10 @@ if not event_mode:
                     if desired_state
                     else "Lockscreen-Befehl gesendet (deaktivieren)."
                 )
+
+        st.markdown("---")
+
+        # ============================================================
+        # SYSTEMSTATUS GANZ UNTEN IM ADMINBEREICH
+        # ============================================================
+        render_health_overview()
