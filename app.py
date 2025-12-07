@@ -60,7 +60,7 @@ def check_login():
                 time.sleep(1)
                 st.rerun()
             else:
-                msg_placeholder.error(f"Falscher PIN!")
+                msg_placeholder.error("Falscher PIN!")
 
     # Hier stoppt alles, solange nicht eingeloggt
     st.stop()
@@ -350,15 +350,16 @@ CUSTOM_CSS = """
   color:#9ca3af;
 }
 
-/* rechte Spalte mit Toggle */
-.toggle-col {
+/* rechte Spalte – wir brauchen nur ein sauberes Layout für das Radio */
+.segment-wrapper {
   display:flex;
-  align-items:center;
   justify-content:flex-end;
-  height:100%;
+  align-items:center;
 }
-.toggle-col > div {
-  transform: scale(0.9);
+
+/* horizontales Radio etwas kompakter */
+.control-card .stRadio > div {
+  padding-top: 0;
 }
 </style>
 """
@@ -826,7 +827,7 @@ def show_history():
 
 
 # --------------------------------------------------------------------
-# Helper für moderne Karten mit Toggle
+# Helper für moderne Karten mit Segment-Buttons (Ein/Aus)
 # --------------------------------------------------------------------
 def render_device_card(
     header_label: str,
@@ -842,10 +843,10 @@ def render_device_card(
     hint_text: str,
     toggle_key: str,
     toggle_help: str,
-):
+) -> bool:
     """
-    Zeichnet eine moderne Karte mit Status-Badge + Toggle rechts.
-    Gibt den Toggle-Wert zurück.
+    Zeichnet eine moderne Karte mit Status-Badge + Ein/Aus-Segment-Buttons rechts.
+    Gibt den gewünschten Zustand (True = EIN, False = AUS) zurück.
     """
 
     if state == "on":
@@ -881,19 +882,23 @@ def render_device_card(
         )
 
     with col_right:
-        with st.container():
-            st.markdown('<div class="toggle-col">', unsafe_allow_html=True)
-            toggle_val = st.toggle(
-                label=title,
-                value=(state == "on"),
-                key=toggle_key,
-                help=toggle_help,
-                label_visibility="collapsed",
-            )
-            st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('<div class="segment-wrapper">', unsafe_allow_html=True)
+        index = 0 if state == "on" else 1
+        selection = st.radio(
+            "Schalten",
+            ["Ein", "Aus"],
+            index=index,
+            key=toggle_key,
+            label_visibility="collapsed",
+            horizontal=True,
+            help=toggle_help,
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
-    return toggle_val
+
+    # True = Ein, False = Aus
+    return selection == "Ein"
 
 
 # --------------------------------------------------------------------
@@ -1001,7 +1006,7 @@ if not event_mode:
 
             state = st.session_state.socket_state
 
-            toggle_val = render_device_card(
+            desired_on = render_device_card(
                 header_label="Fotobox-Steckdose",
                 title="Steckdose Fotobox",
                 state=state,
@@ -1013,13 +1018,12 @@ if not event_mode:
                 text_unknown="STATUS UNBEKANNT",
                 state_prefix="Zustand",
                 hint_text="Schaltet die Stromversorgung der Fotobox über die Aqara-Steckdose.",
-                toggle_key="aqara_toggle",
+                toggle_key="aqara_segment",
                 toggle_help="Schaltet die Aqara-Steckdose ein oder aus.",
             )
 
-            # Nur reagieren, wenn sich der Toggle-Wert geändert hat
-            if toggle_val != (state == "on"):
-                desired_on = toggle_val
+            # Nur reagieren, wenn gewünschter Zustand anders als aktueller
+            if desired_on != (state == "on"):
                 res = aqara_client.switch_socket(
                     AQARA_ACCESS_TOKEN,
                     AQARA_SOCKET_DEVICE_ID,
@@ -1055,7 +1059,7 @@ if not event_mode:
 
             state = st.session_state.lockscreen_state
 
-            toggle_val = render_device_card(
+            desired_on = render_device_card(
                 header_label="dsrBooth – Gästelockscreen",
                 title="Lockscreen aktiv",
                 state=state,
@@ -1070,13 +1074,12 @@ if not event_mode:
                     "Der Status basiert nur auf der letzten Aktion, "
                     "da die API keinen Status-Endpunkt bereitstellt."
                 ),
-                toggle_key="dsrbooth_lockscreen_toggle",
+                toggle_key="dsrbooth_segment",
                 toggle_help="Zeigt bzw. versteckt den dslrBooth-Lockscreen.",
             )
 
-            # Nur reagieren, wenn Toggle sich ändert
-            if toggle_val != (state == "on"):
-                desired_on = toggle_val
+            # Nur reagieren, wenn gewünschter Zustand anders als aktueller
+            if desired_on != (state == "on"):
                 cmd = "lock_on" if desired_on else "lock_off"
                 send_dsr_command(cmd)
                 st.session_state.lockscreen_state = "on" if desired_on else "off"
