@@ -275,7 +275,7 @@ PRINTERS = {
         "has_aqara": True,   # Aqara-Steckdose vorhanden
         "has_dsr": True,     # dsrBooth-Lockscreen vorhanden
     },
-    "Fotobox 2": {
+    "Weinkellerei": {
         "key": "Weinkellerei",       # -> secrets.printers.box2
         "warning_threshold": 20,
         "default_max_prints": 400,
