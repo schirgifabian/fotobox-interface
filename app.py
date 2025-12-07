@@ -415,7 +415,7 @@ def send_ntfy_push(title, message, tags="warning", priority="default"):
         return
     try:
         headers = {
-            "Title": title.encode("utf-8"),
+            "Title": title,
             "Tags": tags,
             "Priority": priority,
         }
@@ -467,8 +467,8 @@ def get_main_worksheet():
     return get_spreadsheet().sheet1
 
 
-@st.cache_data(ttl=10)
-def get_data(sheet_id: str):
+@st.cache_data(ttl=300)  # 5 Minuten Cache für Admin / Historie
+def get_data_admin(sheet_id: str):
     try:
         ws = get_gspread_client().open_by_key(sheet_id).sheet1
         return pd.DataFrame(ws.get_all_records())
@@ -476,11 +476,31 @@ def get_data(sheet_id: str):
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=30)  # 30 Sekunden Cache für Event-Ansicht
+def get_data_event(sheet_id: str):
+    try:
+        ws = get_gspread_client().open_by_key(sheet_id).sheet1
+        return pd.DataFrame(ws.get_all_records())
+    except Exception:
+        return pd.DataFrame()
+
+
+def get_data(sheet_id: str, event_mode: bool):
+    """
+    Wrapper, der je nach Ansicht das passende Cache-Profil benutzt.
+    """
+    if event_mode:
+        return get_data_event(sheet_id)
+    else:
+        return get_data_admin(sheet_id)
+
+
 def clear_google_sheet():
     try:
         ws = get_main_worksheet()
         ws.batch_clear(["A2:Z10000"])
-        get_data.clear()
+        get_data_admin.clear()
+        get_data_event.clear()
         st.toast("Log erfolgreich zurückgesetzt!", icon="♻️")
     except Exception as e:
         st.error(f"Fehler beim Reset: {e}")
@@ -589,6 +609,8 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
         # Falls Timestamp keine TZ hat → als lokale Zeit interpretieren
         if ts_parsed.tzinfo is None:
             ts_parsed = LOCAL_TZ.localize(ts_parsed)
+        else:
+            ts_parsed = ts_parsed.astimezone(LOCAL_TZ)
 
         # Jetzt aktuellen Zeitpunkt ebenfalls in der gleichen TZ holen
         now_local = datetime.datetime.now(LOCAL_TZ)
@@ -660,10 +682,10 @@ def _prepare_history_df(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
 
-    df = df.copy()
     if "Timestamp" not in df.columns or "MediaRemaining" not in df.columns:
         return pd.DataFrame()
 
+    df = df.copy()
     df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
     df = df.dropna(subset=["Timestamp", "MediaRemaining"])
     if df.empty:
@@ -739,14 +761,218 @@ def humanize_minutes(minutes: float) -> str:
 
 
 # --------------------------------------------------------------------
+# GENERISCHE TOGGLE-KARTE FÜR GERÄTE
+# --------------------------------------------------------------------
+def render_toggle_card(
+    section_title: str,
+    description: str,
+    state: str,
+    title_on: str,
+    title_off: str,
+    title_unknown: str,
+    badge_prefix: str,
+    icon_on: str,
+    icon_off: str,
+    icon_unknown: str,
+    btn_left_label: str,
+    btn_right_label: str,
+    btn_left_key: str,
+    btn_right_key: str,
+):
+    """
+    Zeichnet eine Status-Karte mit zwei Buttons (links/rechts).
+    Gibt (clicked_left, clicked_right) zurück.
+    state: "on" | "off" | "unknown"
+    """
+    if state == "on":
+        bg = "#ecfdf3"
+        border = "#bbf7d0"
+        icon = icon_on
+        title_text = title_on
+        badge = f"{badge_prefix}: on"
+    elif state == "off":
+        bg = "#f9fafb"
+        border = "#e5e7eb"
+        icon = icon_off
+        title_text = title_off
+        badge = f"{badge_prefix}: off"
+    else:
+        bg = "#fffbeb"
+        border = "#fed7aa"
+        icon = icon_unknown
+        title_text = title_unknown
+        badge = f"{badge_prefix}: unbekannt"
+
+    container = st.container()
+    with container:
+        st.markdown(
+            f"""
+            <div style="
+                border-radius:18px;
+                border:1px solid {border};
+                padding:16px 18px;
+                background:{bg};
+                display:flex;
+                flex-direction:row;
+                justify-content:space-between;
+                gap:18px;
+            ">
+                <div style="flex:1;">
+                    <div style="font-size:11px; text-transform:uppercase;
+                                letter-spacing:.16em; color:#9ca3af; margin-bottom:4px;">
+                        {section_title}
+                    </div>
+                    <div style="font-size:18px; font-weight:600; color:#111827;
+                                display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                        <span>{icon}</span>
+                        <span>{title_text}</span>
+                    </div>
+                    <div style="
+                        display:inline-flex;
+                        align-items:center;
+                        padding:3px 10px;
+                        border-radius:999px;
+                        background:rgba(0,0,0,0.04);
+                        font-size:11px;
+                        color:#4b5563;
+                        margin-bottom:6px;
+                    ">
+                        {badge}
+                    </div>
+                    <div style="font-size:12px; color:#6b7280;">
+                        {description}
+                    </div>
+                </div>
+                <div style="flex:0 0 180px; display:flex; flex-direction:column; gap:6px;">
+                    <div style="font-size:11px; text-transform:uppercase;
+                                letter-spacing:.12em; color:#9ca3af; margin-bottom:2px;">
+                        Steuerung
+                    </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        c_left, c_right = st.columns(2)
+        with c_left:
+            click_left = st.button(btn_left_label, key=btn_left_key, use_container_width=True)
+        with c_right:
+            click_right = st.button(btn_right_label, key=btn_right_key, use_container_width=True)
+
+        st.markdown(
+            """
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    return click_left, click_right
+
+
+# --------------------------------------------------------------------
+# SYSTEM-STATUS & HILFE
+# --------------------------------------------------------------------
+def render_health_overview():
+    items = []
+
+    # Google Sheets
+    sheets_ok = False
+    try:
+        _ = get_spreadsheet()
+        sheets_ok = True
+    except Exception:
+        sheets_ok = False
+    items.append(("Google Sheets", sheets_ok, "Verbindung zur Log-Tabelle"))
+
+    # ntfy
+    ntfy_ok = bool(st.session_state.get("ntfy_topic")) and st.session_state.ntfy_active
+    items.append(("ntfy Push", ntfy_ok, "Benachrichtigungen für Probleme"))
+
+    # Aqara
+    items.append(("Aqara", AQARA_ENABLED, "Steckdose der Fotobox"))
+
+    # dsrBooth
+    items.append(("dsrBooth", DSR_ENABLED, "Lockscreen-Steuerung"))
+
+    st.markdown("#### Systemstatus")
+
+    cols = st.columns(len(items))
+    for col, (name, ok, desc) in zip(cols, items):
+        emoji = "✅" if ok else "⚠️"
+        col.markdown(
+            f"""
+            <div style="
+                border-radius:12px;
+                border:1px solid #e5e7eb;
+                padding:8px 10px;
+                background:#f9fafb;
+                font-size:12px;
+                margin-bottom:6px;
+            ">
+                <div style="font-weight:600; margin-bottom:2px;">
+                    {emoji} {name}
+                </div>
+                <div style="color:#6b7280; font-size:11px;">
+                    {desc}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def render_status_help():
+    with st.expander("ℹ️ Hilfe zu Status & Geräten"):
+        st.markdown(
+            f"""
+**Druckerstatus**
+
+- `✅ Bereit`  
+  Drucker ist verbunden und meldet keinen Fehler.
+
+- `⚠️ Papier fast leer`  
+  Weniger als **{WARNING_THRESHOLD}** verbleibende Drucke laut Zähler.
+
+- `⚠️ Deckel offen`  
+  Der Druckerdeckel ist nicht geschlossen – bitte Deckel prüfen und erneut testen.
+
+- `⏳ Druckkopf kühlt ab…`  
+  Der Drucker pausiert kurz, weil der Kopf zu heiß ist. In der Regel reicht es, kurz zu warten.
+
+- `⚠️ Keine aktuellen Daten`  
+  Seit mehr als **{HEARTBEAT_WARN_MINUTES}** Minuten ist kein neuer Eintrag vom Fotobox-Skript eingegangen.  
+  → Prüfen: Fotobox-PC an? Script läuft? Internet/Google Sheets erreichbar?
+
+- `🔴 STÖRUNG`  
+  Harte Fehler wie „paper end“, „ribbon end“, „paper jam“, „data error“ usw.  
+  → Papier/Rolle prüfen, Drucker-Display checken, ggf. Papier neu einlegen.
+
+---
+
+**Geräte-Steuerung**
+
+- **Aqara Steckdose Fotobox**  
+  Schaltet die Stromversorgung der Fotobox komplett ein/aus.  
+  `Ein` = Fotobox bekommt Strom, `Aus` = Fotobox stromlos.
+
+- **dsrBooth – Gästelockscreen**  
+  `Sperren` aktiviert den Gästelockscreen (Gäste können keine Fotos starten).  
+  `Freigeben` deaktiviert ihn.  
+  Der angezeigte Status basiert nur auf der *letzten gesendeten Aktion*, nicht auf einem echten Status-Request.
+            """
+        )
+
+
+# --------------------------------------------------------------------
 # UI START
 # --------------------------------------------------------------------
 st.title(f"{PAGE_ICON} {PAGE_TITLE}")
+render_health_overview()
 
 
 @st.fragment(run_every=10)
-def show_live_status(sound_enabled: bool = False):
-    df = get_data(st.session_state.sheet_id)
+def show_live_status(sound_enabled: bool = False, event_mode: bool = False):
+    df = get_data(st.session_state.sheet_id, event_mode=event_mode)
     if df.empty:
         st.info("System wartet auf Start…")
         st.caption("Noch keine Druckdaten empfangen.")
@@ -886,7 +1112,7 @@ def show_live_status(sound_enabled: bool = False):
 
 
 def show_history():
-    df = get_data(st.session_state.sheet_id)
+    df = get_data_admin(st.session_state.sheet_id)
     if df.empty:
         st.info("Noch keine Daten für die Historie.")
         return
@@ -951,11 +1177,13 @@ def show_history():
 # RENDER
 # --------------------------------------------------------------------
 if event_mode:
-    show_live_status(sound_enabled)
+    show_live_status(sound_enabled, event_mode=True)
+    render_status_help()
 else:
     tab_live, tab_hist = st.tabs(["Live-Status", "Historie & Analyse"])
     with tab_live:
-        show_live_status(sound_enabled)
+        show_live_status(sound_enabled, event_mode=False)
+        render_status_help()
     with tab_hist:
         show_history()
 
@@ -1103,7 +1331,7 @@ if not event_mode:
         st.markdown("---")
 
         # ============================================================
-        # AQARA STECKDOSE – MODERNE CARD + BUTTONS
+        # AQARA STECKDOSE – CARD + BUTTONS
         # ============================================================
         st.write("### Aqara Steckdose Fotobox")
 
@@ -1127,91 +1355,22 @@ if not event_mode:
 
             state = st.session_state.socket_state
 
-            if state == "on":
-                bg = "#ecfdf3"
-                border = "#bbf7d0"
-                icon = "🟢"
-                title_text = "EINGESCHALTET"
-                badge = "Zustand: on"
-            elif state == "off":
-                bg = "#f9fafb"
-                border = "#e5e7eb"
-                icon = "⚪️"
-                title_text = "AUSGESCHALTET"
-                badge = "Zustand: off"
-            else:
-                bg = "#fffbeb"
-                border = "#fed7aa"
-                icon = "⚠️"
-                title_text = "STATUS UNBEKANNT"
-                badge = "Zustand: unbekannt"
-
-            card = st.container()
-            with card:
-                st.markdown(
-                    f"""
-                    <div style="
-                        border-radius:18px;
-                        border:1px solid {border};
-                        padding:16px 18px;
-                        background:{bg};
-                        display:flex;
-                        flex-direction:row;
-                        justify-content:space-between;
-                        gap:18px;
-                    ">
-                        <div style="flex:1;">
-                            <div style="font-size:11px; text-transform:uppercase;
-                                        letter-spacing:.16em; color:#9ca3af; margin-bottom:4px;">
-                                Fotobox-Steckdose
-                            </div>
-                            <div style="font-size:18px; font-weight:600; color:#111827;
-                                        display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-                                <span>{icon}</span>
-                                <span>{title_text}</span>
-                            </div>
-                            <div style="
-                                display:inline-flex;
-                                align-items:center;
-                                padding:3px 10px;
-                                border-radius:999px;
-                                background:rgba(0,0,0,0.04);
-                                font-size:11px;
-                                color:#4b5563;
-                                margin-bottom:6px;
-                            ">
-                                {badge}
-                            </div>
-                            <div style="font-size:12px; color:#6b7280;">
-                                Schaltet die Stromversorgung der Fotobox über die Aqara-Steckdose.
-                            </div>
-                        </div>
-                        <div style="flex:0 0 180px; display:flex; flex-direction:column; gap:6px;">
-                            <div style="font-size:11px; text-transform:uppercase;
-                                        letter-spacing:.12em; color:#9ca3af; margin-bottom:2px;">
-                                Steuerung
-                            </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-                c_on, c_off = st.columns(2)
-                with c_on:
-                    click_on = st.button(
-                        "Ein", key="aqara_btn_on", use_container_width=True
-                    )
-                with c_off:
-                    click_off = st.button(
-                        "Aus", key="aqara_btn_off", use_container_width=True
-                    )
-
-                st.markdown(
-                    """
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+            click_on, click_off = render_toggle_card(
+                section_title="Fotobox-Steckdose",
+                description="Schaltet die Stromversorgung der Fotobox über die Aqara-Steckdose.",
+                state=state,
+                title_on="EINGESCHALTET",
+                title_off="AUSGESCHALTET",
+                title_unknown="STATUS UNBEKANNT",
+                badge_prefix="Zustand",
+                icon_on="🟢",
+                icon_off="⚪️",
+                icon_unknown="⚠️",
+                btn_left_label="Ein",
+                btn_right_label="Aus",
+                btn_left_key="aqara_btn_on",
+                btn_right_key="aqara_btn_off",
+            )
 
             desired_state = None
             if click_on:
@@ -1243,7 +1402,7 @@ if not event_mode:
         st.markdown("---")
 
         # ============================================================
-        # DSRBOOTH LOCKSCREEN – MODERNE CARD + BUTTONS
+        # DSRBOOTH LOCKSCREEN – CARD + BUTTONS
         # ============================================================
         st.write("### dsrBooth Lockscreen")
 
@@ -1257,94 +1416,26 @@ if not event_mode:
 
             state = st.session_state.lockscreen_state
 
-            if state == "on":
-                bg = "#eff6ff"
-                border = "#bfdbfe"
-                icon = "🔒"
-                title_text = "LOCKSCREEN AKTIV"
-                badge = "Zustand (letzte Aktion): on"
-            elif state == "off":
-                bg = "#f9fafb"
-                border = "#e5e7eb"
-                icon = "🔓"
-                title_text = "LOCKSCREEN INAKTIV"
-                badge = "Zustand (letzte Aktion): off"
-            else:
-                bg = "#fffbeb"
-                border = "#fed7aa"
-                icon = "⚠️"
-                title_text = "STATUS UNBEKANNT"
-                badge = "Zustand (letzte Aktion): unbekannt"
-
-            card2 = st.container()
-            with card2:
-                st.markdown(
-                    f"""
-                    <div style="
-                        border-radius:18px;
-                        border:1px solid {border};
-                        padding:16px 18px;
-                        background:{bg};
-                        display:flex;
-                        flex-direction:row;
-                        justify-content:space-between;
-                        gap:18px;
-                    ">
-                        <div style="flex:1;">
-                            <div style="font-size:11px; text-transform:uppercase;
-                                        letter-spacing:.16em; color:#9ca3af; margin-bottom:4px;">
-                                dsrBooth – Gästelockscreen
-                            </div>
-                            <div style="font-size:18px; font-weight:600; color:#111827;
-                                        display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-                                <span>{icon}</span>
-                                <span>{title_text}</span>
-                            </div>
-                            <div style="
-                                display:inline-flex;
-                                align-items:center;
-                                padding:3px 10px;
-                                border-radius:999px;
-                                background:rgba(0,0,0,0.04);
-                                font-size:11px;
-                                color:#4b5563;
-                                margin-bottom:6px;
-                            ">
-                                {badge}
-                            </div>
-                            <div style="font-size:12px; color:#6b7280; margin-bottom:4px;">
-                                Der Status basiert nur auf der letzten Aktion, da die API keinen Status-Endpunkt bereitstellt.
-                            </div>
-                            <div style="font-size:11px; color:#9ca3af;">
-                                Tipp: Bei Problemen ggf. dslrBooth-Client am Surface neu starten.
-                            </div>
-                        </div>
-                        <div style="flex:0 0 180px; display:flex; flex-direction:column; gap:6px;">
-                            <div style="font-size:11px; text-transform:uppercase;
-                                        letter-spacing:.12em; color:#9ca3af; margin-bottom:2px;">
-                                Steuerung
-                            </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-                c_on, c_off = st.columns(2)
-                with c_on:
-                    click_on = st.button(
-                        "Sperren", key="dsr_btn_on", use_container_width=True
-                    )
-                with c_off:
-                    click_off = st.button(
-                        "Freigeben", key="dsr_btn_off", use_container_width=True
-                    )
-
-                st.markdown(
-                    """
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+            click_on, click_off = render_toggle_card(
+                section_title="dsrBooth – Gästelockscreen",
+                description=(
+                    "Sperrt oder gibt den Gästemodus in dsrBooth frei. "
+                    "Der Status basiert nur auf der letzten Aktion, da die API keinen "
+                    "Status-Endpunkt bereitstellt."
+                ),
+                state=state,
+                title_on="LOCKSCREEN AKTIV",
+                title_off="LOCKSCREEN INAKTIV",
+                title_unknown="STATUS UNBEKANNT",
+                badge_prefix="Zustand (letzte Aktion)",
+                icon_on="🔒",
+                icon_off="🔓",
+                icon_unknown="⚠️",
+                btn_left_label="Sperren",
+                btn_right_label="Freigeben",
+                btn_left_key="dsr_btn_on",
+                btn_right_key="dsr_btn_off",
+            )
 
             desired_state = None
             if click_on:
