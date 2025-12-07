@@ -597,10 +597,13 @@ def show_live_status(sound_enabled: bool = False):
         raw_status = str(last.get("Status", ""))
         
         # Sicherstellen, dass MediaRemaining eine Zahl ist
+        # Die Datenbank liefert den Wert halbiert → hier verdoppeln
         try:
             mr_val = last.get("MediaRemaining", 0)
-            media_remaining = int(mr_val)
+            media_remaining_raw = int(mr_val)
+            media_remaining = media_remaining_raw * 2
         except:
+            media_remaining_raw = 0
             media_remaining = 0
 
         (
