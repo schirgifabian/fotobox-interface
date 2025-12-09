@@ -276,6 +276,7 @@ PRINTERS = {
         "has_admin": True,   # Admin-Bereich + Geräte-Steuerung
         "has_aqara": True,   # Aqara-Steckdose vorhanden
         "has_dsr": True,     # dsrBooth-Lockscreen vorhanden
+        "media_factor": 1,   # Rohwert * 2 -> altes Papier # Rohwert * 1 -> neues Papier
     },
     "Weinkellerei": {
         "key": "Weinkellerei",       # -> secrets.printers.box2
@@ -285,6 +286,7 @@ PRINTERS = {
         "has_admin": True,  # kein Admin-Bereich
         "has_aqara": False,  # keine Aqara-Steckdose
         "has_dsr": False,    # kein dsrBooth
+        "media_factor": 2,   # Rohwert * 2 -> altes Papier # Rohwert * 1 -> neues Papier
     },
 }
 
@@ -461,6 +463,9 @@ event_mode = st.sidebar.toggle("Event-Ansicht (nur Status)", value=False)
 sound_enabled = st.sidebar.toggle("Sound bei Warnungen", value=False)
 
 printer_cfg = PRINTERS[printer_name]
+
+# Konfigurierbarer Faktor für Rohwerte -> echte Drucke
+MEDIA_FACTOR = printer_cfg.get("media_factor", 2)
 
 # Capability-Flags je Fotobox
 printer_has_admin = printer_cfg.get("has_admin", True)
@@ -769,10 +774,15 @@ def _prepare_history_df(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def compute_print_stats(df: pd.DataFrame, window_min: int = 30) -> dict:
+def compute_print_stats(
+    df: pd.DataFrame,
+    window_min: int = 30,
+    media_factor: int = 2,
+) -> dict:
     """
     Berechnet Kennzahlen aus dem Verlauf in "echten" Drucken.
-    Drucker liefert halbe Werte → wir rechnen alles *2.
+    Der Rohwert vom Drucker wird mit media_factor multipliziert
+    (z.B. 2 für altes Papier, 1 für neues Papier).
     """
     result = {
         "prints_total": 0,
@@ -788,8 +798,8 @@ def compute_print_stats(df: pd.DataFrame, window_min: int = 30) -> dict:
     first_media_raw = df["MediaRemaining"].iloc[0]
     last_media_raw = df["MediaRemaining"].iloc[-1]
 
-    # Differenz in Roh-Einheiten, dann *2 für echte Drucke
-    prints_total = max(0, (first_media_raw - last_media_raw) * 2)
+    # Differenz in Roh-Einheiten, dann * media_factor für echte Drucke
+    prints_total = max(0, (first_media_raw - last_media_raw) * media_factor)
     duration_min = (df.index[-1] - df.index[0]).total_seconds() / 60.0
 
     result["prints_total"] = prints_total
@@ -804,7 +814,7 @@ def compute_print_stats(df: pd.DataFrame, window_min: int = 30) -> dict:
     if len(dfw) >= 2:
         f_m_raw = dfw["MediaRemaining"].iloc[0]
         l_m_raw = dfw["MediaRemaining"].iloc[-1]
-        prints_win = max(0, (f_m_raw - l_m_raw) * 2)
+        prints_win = max(0, (f_m_raw - l_m_raw) * media_factor)
         dur_win_min = (dfw.index[-1] - dfw.index[0]).total_seconds() / 60.0
         if dur_win_min > 0 and prints_win > 0:
             result["ppm_window"] = prints_win / dur_win_min
@@ -1053,14 +1063,14 @@ def show_live_status(sound_enabled: bool = False, event_mode: bool = False):
         timestamp = str(last.get("Timestamp", ""))
         raw_status = str(last.get("Status", ""))
 
-        # Rohwert vom Drucker → Hälfte der echten Drucke
+        # Rohwert vom Drucker -> wird mit MEDIA_FACTOR in echte Drucke umgerechnet
         try:
             media_remaining_raw = int(last.get("MediaRemaining", 0))
         except Exception:
             media_remaining_raw = 0
 
         # Echte verbleibende Drucke (für Anzeige & Berechnung)
-        media_remaining = media_remaining_raw * 2
+        media_remaining = media_remaining_raw * MEDIA_FACTOR
 
         (
             status_mode,
@@ -1107,7 +1117,7 @@ def show_live_status(sound_enabled: bool = False, event_mode: bool = False):
         prints_since_reset = max(0, (st.session_state.max_prints or 0) - media_remaining)
 
         # Restlaufzeit aus Historie (alles in echten Drucken dank compute_print_stats)
-        stats = compute_print_stats(df, window_min=30)
+        stats = compute_print_stats(df, window_min=30, media_factor=MEDIA_FACTOR)
         forecast = "–"
 
         if status_mode == "error":
@@ -1188,13 +1198,13 @@ def show_history():
 
     df_hist = df_hist.copy()
     # Echte verbleibende Drucke
-    df_hist["RemainingPrints"] = df_hist["MediaRemaining"] * 2
+    df_hist["RemainingPrints"] = df_hist["MediaRemaining"] * MEDIA_FACTOR
 
     st.markdown("#### Medienverlauf (echte Drucke)")
     st.line_chart(df_hist["RemainingPrints"], use_container_width=True)
 
     # Kennzahlen
-    stats = compute_print_stats(df, window_min=30)
+    stats = compute_print_stats(df, window_min=30, media_factor=MEDIA_FACTOR)
 
     last_remaining = int(df_hist["RemainingPrints"].iloc[-1])
     prints_since_reset = max(0, (st.session_state.max_prints or 0) - last_remaining)
