@@ -816,25 +816,46 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
     critical_states = ["error", "cover_open", "low_paper", "stale"]
     push = None
 
-    if status_mode in critical_states and prev_status != status_mode:
-        title_map = {
-            "error": "🔴 Fehler",
-            "cover_open": "⚠️ Deckel offen",
-            "low_paper": "⚠️ Papier fast leer",
-            "stale": "⚠️ Keine aktuellen Daten",
-        }
-        msg_map = {
-            "error": f"Status: {raw_status}",
-            "cover_open": "Der Druckerdeckel ist offen.",
-            "low_paper": f"Nur noch {media_remaining} Bilder!",
-            "stale": f"Seit {minutes_diff} Min kein Signal.",
-        }
-        push = (title_map[status_mode], msg_map[status_mode], "warning")
+    # Bisherige "Warn-Signatur" aus Session holen
+    prev_sig = st.session_state.get("last_warn_signature")
 
-    if prev_status == "error" and status_mode not in critical_states:
+    # Neue Signatur definieren – hier kannst du steuern, was "neu" bedeutet
+    current_sig = {
+        "status_mode": status_mode,
+        "raw_status": raw_status_l,
+        "media_remaining": media_remaining,
+        "minutes_diff": minutes_diff if minutes_diff is not None else -1,
+    }
+
+    if status_mode in critical_states:
+        # Nur Push, wenn sich die Signatur geändert hat
+        if prev_sig != current_sig:
+            title_map = {
+                "error": "🔴 Fehler",
+                "cover_open": "⚠️ Deckel offen",
+                "low_paper": "⚠️ Papier fast leer",
+                "stale": "⚠️ Keine aktuellen Daten",
+            }
+            msg_map = {
+                "error": f"Status: {raw_status}",
+                "cover_open": "Der Druckerdeckel ist offen.",
+                "low_paper": f"Nur noch {media_remaining} Bilder!",
+                "stale": f"Seit {minutes_diff} Min kein Signal.",
+            }
+            push = (title_map[status_mode], msg_map[status_mode], "warning")
+
+        # Signatur merken
+        st.session_state.last_warn_signature = current_sig
+
+    # Extra-Case: Störung behoben (Wechsel *weg* von error)
+    elif prev_sig is not None and prev_sig.get("status_mode") == "error":
         push = ("✅ Störung behoben", "Drucker läuft wieder.", "white_check_mark")
+        # Reset, damit nächster Fehler wieder eine Push auslöst
+        st.session_state.last_warn_signature = None
 
+    # Für evtl. andere Zwecke den "plain" Status noch merken
     st.session_state.last_warn_status = status_mode
+
     return status_mode, display_text, display_color, push, minutes_diff
 
 
