@@ -788,31 +788,37 @@ st.session_state.sound_enabled = sound_enabled
 # --------------------------------------------------------------------
 # PUSH FUNKTIONEN
 # --------------------------------------------------------------------
+import re
+import unicodedata
+
 def _sanitize_header_value(val: str, default: str = "ntfy") -> str:
     """
-    Bereitet einen String so auf, dass er als HTTP-Headerwert taugt:
-    - in String umwandeln
-    - Zeilenumbrüche entfernen
-    - auf latin-1 einkürzen (Emojis etc. fliegen raus)
-    - führende/trailing Whitespaces entfernen
-    - falls leer -> Default verwenden
+    Bereitet Titel/Tags für HTTP-Header vor:
+    - CR/LF entfernen
+    - Emojis entfernen
+    - unicode normalisieren (Umlaute bleiben erhalten)
+    - auf latin-1 begrenzen
+    - führende/trailing Spaces entfernen
     """
+
     if not isinstance(val, str):
         val = str(val)
 
-    # CR/LF raus
+    # Zeilenumbrüche entfernen
     val = val.replace("\r", " ").replace("\n", " ")
 
-    # Auf latin-1 beschränken (alles andere wird entfernt)
-    try:
-        val = val.encode("latin-1", "ignore").decode("latin-1")
-    except Exception:
-        val = default
+    # Unicode normalisieren (ä,ö,ü bleiben sicher erhalten)
+    val = unicodedata.normalize("NFKC", val)
 
-    # Führende / trailing Spaces weg
+    # Emojis explizit entfernen (alles außerhalb Basic Multilingual Plane)
+    val = re.sub(r"[\U00010000-\U0010FFFF]", "", val)
+
+    # Rest auf latin-1 begrenzen (Umlaute bleiben, Emojis wären jetzt schon raus)
+    val = val.encode("latin-1", "ignore").decode("latin-1")
+
+    # Leerzeichen trimmen
     val = val.strip()
 
-    # Falls komplett leer geworden -> Default
     if not val:
         val = default
 
