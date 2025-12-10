@@ -788,26 +788,35 @@ st.session_state.sound_enabled = sound_enabled
 # --------------------------------------------------------------------
 # PUSH FUNKTIONEN
 # --------------------------------------------------------------------
+def _sanitize_header_value(val: str) -> str:
+    """
+    Entfernt Zeichen, die nicht in latin-1 darstellbar sind (z.B. Emojis),
+    damit requests die Header ohne Fehler senden kann.
+    """
+    if not isinstance(val, str):
+        val = str(val)
+    # Alles, was nicht latin-1 ist, wird einfach entfernt
+    return val.encode("latin-1", "ignore").decode("latin-1")
+
+
 def send_ntfy_push(title, message, tags="warning", priority="default"):
-    # --- DEBUG: Status anzeigen ---
-    active = st.session_state.get("ntfy_active", None)
-    topic = st.session_state.get("ntfy_topic", None)
-
-    st.toast(f"DEBUG ntfy: active={active}, topic={topic}", icon="🪵")
-
-    if not active:
-        st.toast("Push NICHT gesendet: ntfy_active = False", icon="⚠️")
+    if not st.session_state.get("ntfy_active", False):
         return
 
+    topic = st.session_state.get("ntfy_topic")
     if not topic:
-        st.toast("Push NICHT gesendet: kein ntfy_topic gesetzt", icon="⚠️")
         return
+
+    # Titel/Tags für HTTP-Header säubern (Emojis fliegen raus)
+    safe_title = _sanitize_header_value(title)
+    safe_tags = _sanitize_header_value(tags)
+    safe_priority = _sanitize_header_value(priority)
 
     try:
         headers = {
-            "Title": title,
-            "Tags": tags,
-            "Priority": priority,
+            "Title": safe_title,
+            "Tags": safe_tags,
+            "Priority": safe_priority,
         }
         resp = requests.post(
             f"https://ntfy.sh/{topic}",
@@ -815,11 +824,9 @@ def send_ntfy_push(title, message, tags="warning", priority="default"):
             headers=headers,
             timeout=5,
         )
-
-        # --- DEBUG: HTTP-Ergebnis anzeigen ---
-        st.toast(f"ntfy Response: {resp.status_code}", icon="📡")
-        if not resp.ok:
-            st.error(f"ntfy Fehler: {resp.status_code} – {resp.text[:200]}")
+        # Optional: kleines Debug
+        # if not resp.ok:
+        #     st.error(f"ntfy Fehler: {resp.status_code} – {resp.text[:200]}")
     except Exception as e:
         st.error(f"Exception bei ntfy: {e}")
 
