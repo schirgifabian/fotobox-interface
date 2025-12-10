@@ -470,8 +470,20 @@ if "lockscreen_state" not in st.session_state:
     # Wir kennen den echten Status nicht → nur "letzte Aktion"
     st.session_state.lockscreen_state = "off"
 
-# Sidebar – zuerst nur Drucker-Auswahl
+# Sidebar – Ansicht wählen + Drucker-Auswahl
 st.sidebar.header("Einstellungen")
+
+view_mode = st.sidebar.radio(
+    "Ansicht",
+    ["Einzelne Fotobox", "Alle Boxen"],
+)
+
+# Wenn Flottenübersicht gewählt ist: nur Übersicht anzeigen und Rest abbrechen
+if view_mode == "Alle Boxen":
+    render_fleet_overview()
+    st.stop()
+
+# Ab hier: Logik für einzelne Fotobox wie bisher
 printer_name = st.sidebar.selectbox("Fotobox auswählen", list(PRINTERS.keys()))
 printer_cfg = PRINTERS[printer_name]
 
@@ -1190,6 +1202,73 @@ def render_status_help():
   Der angezeigte Status basiert nur auf der *letzten gesendeten Aktion*, nicht auf einem echten Status-Request.
             """
         )
+
+
+def render_fleet_overview():
+    """
+    Zeigt einen groben Überblick über alle konfigurierten Fotoboxen.
+    Nutzt nur die letzte Zeile aus der jeweiligen Tabelle.
+    """
+    st.subheader("Flottenübersicht (alle Fotoboxen)")
+
+    printers_secrets = st.secrets.get("printers", {})
+    cols = st.columns(max(1, min(3, len(PRINTERS))))
+
+    idx = 0
+    for name, cfg in PRINTERS.items():
+        sheet_id = printers_secrets.get(cfg["key"], {}).get("sheet_id")
+        if not sheet_id:
+            continue
+
+        try:
+            df = get_data_event(sheet_id)
+            if df.empty:
+                last_ts = "–"
+                raw_status = "keine Daten"
+                media_raw = None
+            else:
+                last = df.iloc[-1]
+                last_ts = str(last.get("Timestamp", ""))
+                raw_status = str(last.get("Status", ""))
+                try:
+                    media_raw = int(last.get("MediaRemaining", 0)) * cfg.get("media_factor", 1)
+                except Exception:
+                    media_raw = None
+        except Exception:
+            last_ts = "Fehler"
+            raw_status = "–"
+            media_raw = None
+
+        with cols[idx]:
+            st.markdown(
+                f"""
+                <div style="
+                    border-radius:14px;
+                    border:1px solid #e5e7eb;
+                    padding:10px 12px;
+                    background:#f9fafb;
+                    font-size:12px;
+                    margin-bottom:10px;
+                ">
+                    <div style="font-weight:600; margin-bottom:4px;">
+                        {name}
+                    </div>
+                    <div style="color:#6b7280; margin-bottom:2px;">
+                        Letztes Signal: {last_ts}
+                    </div>
+                    <div style="color:#6b7280; margin-bottom:2px;">
+                        Status: {raw_status}
+                    </div>
+                    <div style="color:#6b7280;">
+                        Verbleibende Drucke: {media_raw if media_raw is not None else '–'}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        idx = (idx + 1) % len(cols)
+
 
 
 # --------------------------------------------------------------------
