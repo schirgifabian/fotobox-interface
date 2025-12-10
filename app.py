@@ -310,6 +310,74 @@ HEARTBEAT_WARN_MINUTES = 60
 NTFY_ACTIVE_DEFAULT = True
 ALERT_SOUND_URL = "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
 
+
+
+def render_fleet_overview():
+    """
+    Zeigt einen groben Überblick über alle konfigurierten Fotoboxen.
+    Nutzt nur die letzte Zeile aus der jeweiligen Tabelle.
+    """
+    st.subheader("Flottenübersicht (alle Fotoboxen)")
+
+    printers_secrets = st.secrets.get("printers", {})
+    cols = st.columns(max(1, min(3, len(PRINTERS))))
+
+    idx = 0
+    for name, cfg in PRINTERS.items():
+        sheet_id = printers_secrets.get(cfg["key"], {}).get("sheet_id")
+        if not sheet_id:
+            continue
+
+        try:
+            df = get_data_event(sheet_id)
+            if df.empty:
+                last_ts = "–"
+                raw_status = "keine Daten"
+                media_raw = None
+            else:
+                last = df.iloc[-1]
+                last_ts = str(last.get("Timestamp", ""))
+                raw_status = str(last.get("Status", ""))
+                try:
+                    media_raw = int(last.get("MediaRemaining", 0)) * cfg.get("media_factor", 1)
+                except Exception:
+                    media_raw = None
+        except Exception:
+            last_ts = "Fehler"
+            raw_status = "–"
+            media_raw = None
+
+        with cols[idx]:
+            st.markdown(
+                f"""
+                <div style="
+                    border-radius:14px;
+                    border:1px solid #e5e7eb;
+                    padding:10px 12px;
+                    background:#f9fafb;
+                    font-size:12px;
+                    margin-bottom:10px;
+                ">
+                    <div style="font-weight:600; margin-bottom:4px;">
+                        {name}
+                    </div>
+                    <div style="color:#6b7280; margin-bottom:2px;">
+                        Letztes Signal: {last_ts}
+                    </div>
+                    <div style="color:#6b7280; margin-bottom:2px;">
+                        Status: {raw_status}
+                    </div>
+                    <div style="color:#6b7280;">
+                        Verbleibende Drucke: {media_raw if media_raw is not None else '–'}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        idx = (idx + 1) % len(cols)
+
+
 # --------------------------------------------------------------------
 # LAYOUT & SESSION STATE
 # --------------------------------------------------------------------
@@ -1202,72 +1270,6 @@ def render_status_help():
   Der angezeigte Status basiert nur auf der *letzten gesendeten Aktion*, nicht auf einem echten Status-Request.
             """
         )
-
-
-def render_fleet_overview():
-    """
-    Zeigt einen groben Überblick über alle konfigurierten Fotoboxen.
-    Nutzt nur die letzte Zeile aus der jeweiligen Tabelle.
-    """
-    st.subheader("Flottenübersicht (alle Fotoboxen)")
-
-    printers_secrets = st.secrets.get("printers", {})
-    cols = st.columns(max(1, min(3, len(PRINTERS))))
-
-    idx = 0
-    for name, cfg in PRINTERS.items():
-        sheet_id = printers_secrets.get(cfg["key"], {}).get("sheet_id")
-        if not sheet_id:
-            continue
-
-        try:
-            df = get_data_event(sheet_id)
-            if df.empty:
-                last_ts = "–"
-                raw_status = "keine Daten"
-                media_raw = None
-            else:
-                last = df.iloc[-1]
-                last_ts = str(last.get("Timestamp", ""))
-                raw_status = str(last.get("Status", ""))
-                try:
-                    media_raw = int(last.get("MediaRemaining", 0)) * cfg.get("media_factor", 1)
-                except Exception:
-                    media_raw = None
-        except Exception:
-            last_ts = "Fehler"
-            raw_status = "–"
-            media_raw = None
-
-        with cols[idx]:
-            st.markdown(
-                f"""
-                <div style="
-                    border-radius:14px;
-                    border:1px solid #e5e7eb;
-                    padding:10px 12px;
-                    background:#f9fafb;
-                    font-size:12px;
-                    margin-bottom:10px;
-                ">
-                    <div style="font-weight:600; margin-bottom:4px;">
-                        {name}
-                    </div>
-                    <div style="color:#6b7280; margin-bottom:2px;">
-                        Letztes Signal: {last_ts}
-                    </div>
-                    <div style="color:#6b7280; margin-bottom:2px;">
-                        Status: {raw_status}
-                    </div>
-                    <div style="color:#6b7280;">
-                        Verbleibende Drucke: {media_raw if media_raw is not None else '–'}
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        idx = (idx + 1) % len(cols)
 
 
 
