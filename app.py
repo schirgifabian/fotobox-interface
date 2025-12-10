@@ -14,32 +14,38 @@ import pytz
 
 # --- PIN ABFRAGE START --------------------------------------------------------
 
+def get_manager():
+    return stx.CookieManager(key="fotobox_auth")
 
 def check_login():
-    # Session State initialisieren
-    if "is_logged_in" not in st.session_state:
-        st.session_state["is_logged_in"] = False
+    # 1. PIN aus Secrets laden
+    try:
+        secret_pin = str(st.secrets["general"]["app_pin"])
+    except FileNotFoundError:
+        st.error("Secrets nicht gefunden. Bitte .streamlit/secrets.toml prüfen.")
+        st.stop()
+        return
 
-    # Cookie Manager initialisieren
-    cookie_manager = stx.CookieManager(key="fotobox_auth")
-
-    # Echten PIN holen und als String casten
-    secret_pin = str(st.secrets["general"]["app_pin"])
-
-    # Cookie lesen
+    # 2. Cookie Manager initialisieren
+    cookie_manager = get_manager()
+    
+    # Versuche, das Cookie zu lesen (kann beim ersten Render None sein)
     cookie_val = cookie_manager.get("auth_pin")
 
-    # --- PRÜFUNG 1: Ist der Nutzer laut Cookie schon eingeloggt? ---
-    if cookie_val is not None and str(cookie_val) == secret_pin:
-        st.session_state["is_logged_in"] = True
-
-    # --- PRÜFUNG 2: Ist der Nutzer laut Session State eingeloggt? ---
-    if st.session_state["is_logged_in"]:
+    # 3. PRÜFUNG: Session State Check (Schnellste Methode)
+    # Wenn wir in dieser Sitzung schon eingeloggt sind, sofort durchlassen
+    if st.session_state.get("is_logged_in", False):
         return True
 
-    # --- FALL 3: Login Formular zeigen ---
-    st.title("Dashboard dieFotobox.")
+    # 4. PRÜFUNG: Cookie Check (Persistente Methode)
+    # Wenn das Cookie existiert und korrekt ist
+    if cookie_val is not None and str(cookie_val) == secret_pin:
+        st.session_state["is_logged_in"] = True
+        return True
 
+    # 5. FALL: Login Formular anzeigen
+    st.title("Dashboard dieFotobox.")
+    
     msg_placeholder = st.empty()
 
     with st.form("login_form"):
@@ -48,27 +54,37 @@ def check_login():
 
         if submitted:
             if str(user_input) == secret_pin:
-                # 1. Session freigeben
+                # A. Session aktivieren
                 st.session_state["is_logged_in"] = True
-
-                # 2. Cookie setzen
-                expires = datetime.datetime.now() + datetime.timedelta(hours=1)
+                
+                # B. Cookie setzen (Langfristig speichern!)
+                # WICHTIG: Hier auf z.B. 30 Tage erhöhen statt 1 Stunde
+                expires = datetime.datetime.now() + datetime.timedelta(days=30)
+                
                 cookie_manager.set("auth_pin", user_input, expires_at=expires)
-
-                msg_placeholder.success("Login korrekt! Geht sofort los...")
-
-                # Kurze Pause, dann Reload
-                time.sleep(1)
+                
+                msg_placeholder.success("Login korrekt! Lade neu...")
+                
+                # Kurze Pause für den Browser, um das Cookie zu schreiben
+                time.sleep(0.5)
                 st.rerun()
             else:
                 msg_placeholder.error("Falscher PIN!")
 
-    # Hier stoppt alles, solange nicht eingeloggt
+    # Alles stoppen, solange nicht eingeloggt
     st.stop()
 
 
-# Login-Check ausführen, bevor irgendetwas anderes passiert
+# Login-Check ausführen
 check_login()
+
+# Optional: Logout-Button für die Sidebar (zum Testen)
+if st.sidebar.button("Logout"):
+    # Cookie löschen
+    stx.CookieManager(key="fotobox_auth").delete("auth_pin")
+    # Session State löschen
+    st.session_state["is_logged_in"] = False
+    st.rerun()
 
 # --- PIN ABFRAGE ENDE --------------------------------------------------------
 
@@ -1453,6 +1469,28 @@ if (not view_event_mode) and printer_has_admin:
                 if st.button("Test Push 🔔", use_container_width=True):
                     send_ntfy_push("Test", "Test erfolgreich", tags="tada")
                     st.toast("Test gesendet!")
+
+                st.markdown(
+                    '<div class="admin-label-pill">Status-Simulation</div>',
+                    unsafe_allow_html=True,
+                )
+                sim_option = st.selectbox(
+                    "",
+                    ["Keine", "Fehler", "Papier fast leer", "Keine Daten"],
+                    label_visibility="collapsed",
+                    key="status_sim_option",
+                )
+                if st.button("Simulation auslösen", use_container_width=True):
+                    if sim_option == "Fehler":
+                        send_ntfy_push("🔴 Fehler (Test)", "Simulierter Fehlerzustand", tags="rotating_light")
+                        maybe_play_sound("error", st.session_state.sound_enabled)
+                    elif sim_option == "Papier fast leer":
+                        send_ntfy_push("⚠️ Papier fast leer (Test)", "Simulierter Low-Paper-Status", tags="warning")
+                        maybe_play_sound("low_paper", st.session_state.sound_enabled)
+                    elif sim_option == "Keine Daten":
+                        send_ntfy_push("⚠️ Keine aktuellen Daten (Test)", "Simulierter Stale-Status", tags="hourglass")
+                        maybe_play_sound("stale", st.session_state.sound_enabled)
+                    st.toast("Simulation gesendet")
 
             # PAPIER / RESET
             with col2:
