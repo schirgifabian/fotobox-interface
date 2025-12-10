@@ -914,20 +914,32 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
     critical_states = ["error", "cover_open", "low_paper", "stale"]
     push = None
 
-    # Bisherige "Warn-Signatur" aus Session holen
+    # Bisherige Warn-Signatur & Zeitpunkt holen
     prev_sig = st.session_state.get("last_warn_signature")
+    prev_ts = st.session_state.get("last_warn_time")  # Unix-Timestamp oder None
 
-    # Neue Signatur definieren – hier kannst du steuern, was "neu" bedeutet
+    # Neue Signatur – minutes_diff nehmen wir raus, damit "stale" nicht jede Minute
+    # als neuer Zustand zählt.
     current_sig = {
         "status_mode": status_mode,
         "raw_status": raw_status_l,
         "media_remaining": media_remaining,
-        "minutes_diff": minutes_diff if minutes_diff is not None else -1,
     }
 
+    now_ts = time.time()
+    COOLDOWN_MINUTES = 30  # nach x Minuten darf für denselben Zustand erneut gepusht werden
+    cooldown_seconds = COOLDOWN_MINUTES * 60
+
     if status_mode in critical_states:
-        # Nur Push, wenn sich die Signatur geändert hat
-        if prev_sig != current_sig:
+        # Signatur hat sich geändert (neuer Fehler / anderer Füllstand)
+        sig_changed = prev_sig != current_sig
+
+        # oder: gleicher Zustand, aber Cooldown abgelaufen -> Reminder
+        cooldown_over = (
+            prev_ts is None or (now_ts - prev_ts) > cooldown_seconds
+        )
+
+        if sig_changed or cooldown_over:
             title_map = {
                 "error": "🔴 Fehler",
                 "cover_open": "⚠️ Deckel offen",
@@ -942,16 +954,19 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
             }
             push = (title_map[status_mode], msg_map[status_mode], "warning")
 
-        # Signatur merken
-        st.session_state.last_warn_signature = current_sig
+            # Signatur + Zeitstempel merken
+            st.session_state.last_warn_signature = current_sig
+            st.session_state.last_warn_time = now_ts
 
-    # Extra-Case: Störung behoben (Wechsel *weg* von error)
-    elif prev_sig is not None and prev_sig.get("status_mode") == "error":
-        push = ("✅ Störung behoben", "Drucker läuft wieder.", "white_check_mark")
-        # Reset, damit nächster Fehler wieder eine Push auslöst
+    else:
+        # Extra-Case: Störung behoben (Wechsel weg von Fehler-Zustand)
+        if prev_sig is not None and prev_sig.get("status_mode") == "error":
+            push = ("✅ Störung behoben", "Drucker läuft wieder.", "white_check_mark")
+        # Reset, damit der nächste Fehler wieder normal behandelt wird
         st.session_state.last_warn_signature = None
+        st.session_state.last_warn_time = None
 
-    # Für evtl. andere Zwecke den "plain" Status noch merken
+    # Für andere Zwecke den letzten Status merken
     st.session_state.last_warn_status = status_mode
 
     return status_mode, display_text, display_color, push, minutes_diff
