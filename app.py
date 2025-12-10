@@ -283,7 +283,7 @@ PRINTERS = {
         "warning_threshold": 20,
         "default_max_prints": 400,
         "cost_per_roll_eur": 60,
-        "has_admin": True,  # Admin-Bereich
+        "has_admin": True,  # kein Admin-Bereich
         "has_aqara": False,  # keine Aqara-Steckdose
         "has_dsr": False,    # kein dsrBooth
         "media_factor": 2,   # Rohwert * 2 -> altes Papier # Rohwert * 1 -> neues Papier
@@ -433,19 +433,6 @@ CUSTOM_CSS = """
 }
 </style>
 """
-
-DARK_CSS = """
-<style>
-body, .main, .stApp {
-    background-color: #020617 !important;
-    color: #e5e7eb !important;
-}
-[data-testid="stSidebar"] {
-    background-color: #020617 !important;
-}
-</style>
-"""
-
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 # Session-State Defaults (nur Dinge, die wir nicht über Settings steuern)
@@ -632,27 +619,6 @@ def log_reset_event(package_size: int, note: str = ""):
         st.warning(f"Reset konnte nicht im Meta-Log gespeichert werden: {e}")
 
 
-@st.cache_data(ttl=60)
-def get_last_reset_info(sheet_id: str):
-    """
-    Holt die letzte Zeile aus dem 'Meta'-Sheet (Papierwechsel-Log).
-    Gibt ein Dict mit Timestamp, PackageSize, Note zurück oder None.
-    """
-    try:
-        sh = get_gspread_client().open_by_key(sheet_id)
-        try:
-            ws = sh.worksheet("Meta")
-        except WorksheetNotFound:
-            return None
-
-        rows = ws.get_all_records()
-        if not rows:
-            return None
-        return rows[-1]
-    except Exception:
-        return None
-
-
 # --------------------------------------------------------------------
 # NACH DEM LADEN DER SHEETS: PRINTER-ABHÄNGIGE DEFAULTS AUS SETTINGS
 # --------------------------------------------------------------------
@@ -703,63 +669,6 @@ ntfy_active_ui = st.sidebar.toggle(
     value=st.session_state.ntfy_active,
 )
 
-# Ruhezeiten (Night Mode)
-if "quiet_enabled" not in st.session_state:
-    try:
-        q_en = get_setting("quiet_enabled", "false")
-        st.session_state.quiet_enabled = str(q_en).lower() == "true"
-    except Exception:
-        st.session_state.quiet_enabled = False
-
-if "quiet_start" not in st.session_state:
-    try:
-        q_start = get_setting("quiet_start", "22:00")
-        st.session_state.quiet_start = datetime.time.fromisoformat(q_start)
-    except Exception:
-        st.session_state.quiet_start = datetime.time(22, 0)
-
-if "quiet_end" not in st.session_state:
-    try:
-        q_end = get_setting("quiet_end", "07:00")
-        st.session_state.quiet_end = datetime.time.fromisoformat(q_end)
-    except Exception:
-        st.session_state.quiet_end = datetime.time(7, 0)
-
-st.sidebar.markdown("---")
-st.sidebar.caption("🔕 Ruhezeiten (Push + Sound)")
-
-quiet_enabled_ui = st.sidebar.toggle(
-    "Ruhezeiten aktiv",
-    value=st.session_state.quiet_enabled,
-)
-
-quiet_col1, quiet_col2 = st.sidebar.columns(2)
-with quiet_col1:
-    quiet_start_ui = st.time_input(
-        "Start",
-        value=st.session_state.quiet_start,
-        step=300,
-    )
-with quiet_col2:
-    quiet_end_ui = st.time_input(
-        "Ende",
-        value=st.session_state.quiet_end,
-        step=300,
-    )
-
-# Dark Mode Toggle (rein CSS-basiert)
-if "dark_mode" not in st.session_state:
-    try:
-        theme = get_setting("theme", "light")
-        st.session_state.dark_mode = theme == "dark"
-    except Exception:
-        st.session_state.dark_mode = False
-
-dark_mode_ui = st.sidebar.toggle(
-    "🌙 Dark Mode",
-    value=st.session_state.dark_mode,
-)
-
 # Änderungen in den Settings speichern
 if event_mode != st.session_state.event_mode:
     st.session_state.event_mode = event_mode
@@ -775,67 +684,8 @@ if ntfy_active_ui != st.session_state.ntfy_active:
     except Exception:
         pass
 
-# Ruhezeiten speichern
-if quiet_enabled_ui != st.session_state.quiet_enabled:
-    st.session_state.quiet_enabled = quiet_enabled_ui
-    try:
-        set_setting("quiet_enabled", quiet_enabled_ui)
-    except Exception:
-        pass
-
-if quiet_start_ui != st.session_state.quiet_start:
-    st.session_state.quiet_start = quiet_start_ui
-    try:
-        set_setting("quiet_start", quiet_start_ui.isoformat(timespec="minutes"))
-    except Exception:
-        pass
-
-if quiet_end_ui != st.session_state.quiet_end:
-    st.session_state.quiet_end = quiet_end_ui
-    try:
-        set_setting("quiet_end", quiet_end_ui.isoformat(timespec="minutes"))
-    except Exception:
-        pass
-
-# Dark Mode speichern
-if dark_mode_ui != st.session_state.dark_mode:
-    st.session_state.dark_mode = dark_mode_ui
-    try:
-        set_setting("theme", "dark" if dark_mode_ui else "light")
-    except Exception:
-        pass
-
 # Sound nur in Session merken
 st.session_state.sound_enabled = sound_enabled
-
-# Dark-CSS aktivieren
-if st.session_state.get("dark_mode", False):
-    st.markdown(DARK_CSS, unsafe_allow_html=True)
-
-
-def is_quiet_time() -> bool:
-    """
-    Prüft, ob wir uns innerhalb der konfigurierten Ruhezeiten befinden.
-    Ruft Werte aus st.session_state (quiet_enabled, quiet_start, quiet_end) ab.
-    """
-    if not st.session_state.get("quiet_enabled", False):
-        return False
-
-    quiet_start = st.session_state.get("quiet_start")
-    quiet_end = st.session_state.get("quiet_end")
-
-    if not quiet_start or not quiet_end:
-        return False
-
-    LOCAL_TZ = pytz.timezone("Europe/Vienna")
-    now = datetime.datetime.now(LOCAL_TZ).time()
-
-    # Zeitraum innerhalb eines Tages oder über Mitternacht
-    if quiet_start < quiet_end:
-        return quiet_start <= now < quiet_end
-    else:
-        return now >= quiet_start or now < quiet_end
-
 
 # --------------------------------------------------------------------
 # PUSH FUNKTIONEN
@@ -843,11 +693,6 @@ def is_quiet_time() -> bool:
 def send_ntfy_push(title, message, tags="warning", priority="default"):
     if not st.session_state.ntfy_active:
         return
-
-    # Ruhezeiten respektieren
-    if is_quiet_time():
-        return
-
     topic = st.session_state.get("ntfy_topic")
     if not topic:
         return
@@ -974,7 +819,7 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
     # Bisherige "Warn-Signatur" aus Session holen
     prev_sig = st.session_state.get("last_warn_signature")
 
-    # Neue Signatur definieren
+    # Neue Signatur definieren – hier kannst du steuern, was "neu" bedeutet
     current_sig = {
         "status_mode": status_mode,
         "raw_status": raw_status_l,
@@ -997,17 +842,7 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
                 "low_paper": f"Nur noch {media_remaining} Bilder!",
                 "stale": f"Seit {minutes_diff} Min kein Signal.",
             }
-            tag_map = {
-                "error": "rotating_light",
-                "cover_open": "wrench",
-                "low_paper": "warning",
-                "stale": "hourglass",
-            }
-            push = (
-                title_map[status_mode],
-                msg_map[status_mode],
-                tag_map.get(status_mode, "warning"),
-            )
+            push = (title_map[status_mode], msg_map[status_mode], "warning")
 
         # Signatur merken
         st.session_state.last_warn_signature = current_sig
@@ -1026,10 +861,6 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
 
 def maybe_play_sound(status_mode: str, sound_enabled: bool):
     if not sound_enabled or not ALERT_SOUND_URL:
-        return
-
-    # Ruhezeiten -> kein Sound
-    if is_quiet_time():
         return
 
     prev = st.session_state.last_sound_status
@@ -1345,80 +1176,10 @@ def render_status_help():
         )
 
 
-def render_fleet_overview():
-    """
-    Zeigt einen groben Überblick über alle konfigurierten Fotoboxen.
-    Nutzt nur die letzte Zeile aus der jeweiligen Tabelle.
-    """
-    st.subheader("Flottenübersicht (alle Fotoboxen)")
-
-    printers_secrets = st.secrets.get("printers", {})
-    cols = st.columns(max(1, min(3, len(PRINTERS))))
-
-    idx = 0
-    for name, cfg in PRINTERS.items():
-        sheet_id_local = printers_secrets.get(cfg["key"], {}).get("sheet_id")
-        if not sheet_id_local:
-            continue
-
-        try:
-            df = get_data_event(sheet_id_local)
-            if df.empty:
-                last_ts = "–"
-                raw_status = "keine Daten"
-                media_raw = None
-            else:
-                last = df.iloc[-1]
-                last_ts = str(last.get("Timestamp", ""))
-                raw_status = str(last.get("Status", ""))
-                try:
-                    media_raw = int(last.get("MediaRemaining", 0)) * cfg.get(
-                        "media_factor", 1
-                    )
-                except Exception:
-                    media_raw = None
-        except Exception:
-            last_ts = "Fehler"
-            raw_status = "–"
-            media_raw = None
-
-        with cols[idx]:
-            st.markdown(
-                f"""
-                <div style="
-                    border-radius:14px;
-                    border:1px solid #e5e7eb;
-                    padding:10px 12px;
-                    background:#f9fafb;
-                    font-size:12px;
-                    margin-bottom:10px;
-                ">
-                    <div style="font-weight:600; margin-bottom:4px;">
-                        {name}
-                    </div>
-                    <div style="color:#6b7280; margin-bottom:2px;">
-                        Letztes Signal: {last_ts}
-                    </div>
-                    <div style="color:#6b7280; margin-bottom:2px;">
-                        Status: {raw_status}
-                    </div>
-                    <div style="color:#6b7280;">
-                        Verbleibende Drucke: {media_raw if media_raw is not None else '–'}
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        idx = (idx + 1) % len(cols)
-
-
 # --------------------------------------------------------------------
 # UI START
 # --------------------------------------------------------------------
 st.title(f"{PAGE_ICON} {PAGE_TITLE}")
-render_fleet_overview()
-st.markdown("---")
 
 
 @st.fragment(run_every=10)
@@ -1428,11 +1189,6 @@ def show_live_status(sound_enabled: bool = False, event_mode: bool = False):
         st.info("System wartet auf Start…")
         st.caption("Noch keine Druckdaten empfangen.")
         return
-
-    # Event-Info aus Settings
-    event_name = get_setting("event_name", "")
-    event_note = get_setting("event_note", "")
-    last_reset = get_last_reset_info(st.session_state.sheet_id)
 
     try:
         last = df.iloc[-1]
@@ -1466,60 +1222,25 @@ def show_live_status(sound_enabled: bool = False, event_mode: bool = False):
         if minutes_diff is not None:
             heartbeat_info = f" (vor {minutes_diff} Min)"
 
-        reset_info_html = ""
-        if last_reset:
-            reset_ts = last_reset.get("Timestamp", "")
-            reset_pkg = last_reset.get("PackageSize", "")
-            reset_note = last_reset.get("Note", "")
-            reset_info_html = (
-                f"<div style='color:#9ca3af; font-size:12px; margin-top:2px;'>"
-                f"Letzter Papierwechsel: {reset_ts} – {reset_pkg}er Rolle"
-                f"{' – ' + reset_note if reset_note else ''}"
-                f"</div>"
-            )
-
-        event_html = ""
-        if event_name or event_note:
-            event_html = "<div style='margin-bottom:6px;'>"
-            if event_name:
-                event_html += (
-                    f"<div style='font-weight:600; font-size:15px;'>{event_name}</div>"
-                )
-            if event_note:
-                event_html += (
-                    f"<div style='font-size:12px; color:#6b7280;'>{event_note}</div>"
-                )
-            event_html += "</div>"
-
-header_html = f"""
-<div style='text-align: left; margin-top: 0;'>
-  <h2 style='color:{display_color}; font-weight: 700; margin-bottom: 4px;'>
-    {display_text}
-  </h2>
-  {event_html}
-  <div style='color: #666; font-size: 14px; margin-bottom: 4px;'>
-    Letztes Signal: {timestamp}{heartbeat_info}
-  </div>
-  <div style='color: #888; font-size: 12px; margin-bottom: 8px;'>
-    Statusmeldung: {raw_status}
-  </div>
-  {reset_info_html}
-</div>
-"""
-st.markdown(header_html, unsafe_allow_html=True)
+        header_html = f"""
+        <div style='text-align: left; margin-top: 0;'>
+            <h2 style='color:{display_color}; font-weight: 700; margin-bottom: 4px;'>
+                {display_text}
+            </h2>
+            <div style='color: #666; font-size: 14px; margin-bottom: 12px;'>
+                Letztes Signal: {timestamp}{heartbeat_info}
+            </div>
+            <div style='color: #888; font-size: 12px; margin-bottom: 20px;'>
+                 Statusmeldung: {raw_status}
+            </div>
+        </div>
+        """
+        st.markdown(header_html, unsafe_allow_html=True)
 
         if status_mode == "error":
             st.error("Bitte Drucker und Papier prüfen (Störung aktiv).")
         elif status_mode == "stale":
             st.warning("Seit einigen Minuten keine Daten – Verbindung / Script prüfen.")
-
-        if status_mode == "error":
-            with st.expander("Details / letzte Statusmeldungen"):
-                try:
-                    df_tail = df.tail(15)[["Timestamp", "Status"]]
-                    st.dataframe(df_tail, use_container_width=True)
-                except Exception:
-                    st.info("Keine Detaildaten verfügbar.")
 
         # Papierstatus
         st.markdown("### Papierstatus")
@@ -1611,45 +1332,28 @@ def show_history():
     # Echte verbleibende Drucke
     df_hist["RemainingPrints"] = df_hist["MediaRemaining"] * MEDIA_FACTOR
 
-    # Event-Statistiken
-    stats = compute_print_stats(df, window_min=30, media_factor=MEDIA_FACTOR)
-    prints_total = stats.get("prints_total", 0)
-    duration_min = stats.get("duration_min", 0)
-    ppm_overall = stats.get("ppm_overall")
-    ppm_window = stats.get("ppm_window")
-
-    st.markdown("#### Event-Übersicht")
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Gesamtdrucke (Event)", int(prints_total))
-    c2.metric("Dauer", humanize_minutes(duration_min))
-
-    if ppm_overall:
-        c3.metric("Ø Drucke/Std (Event)", f"{ppm_overall * 60:.1f}")
-    else:
-        c3.metric("Ø Drucke/Std (Event)", "–")
-
-    if ppm_window:
-        c4.metric("Ø Drucke/Std (letzte 30 Min)", f"{ppm_window * 60:.1f}")
-    else:
-        c4.metric("Ø Drucke/Std (letzte 30 Min)", "–")
-
     st.markdown("#### Medienverlauf (echte Drucke)")
     st.line_chart(df_hist["RemainingPrints"], use_container_width=True)
 
-    # Drucke pro Stunde
-    st.markdown("#### Drucke pro Stunde")
-    df_hist["Prints"] = -df_hist["MediaRemaining"].diff().fillna(0) * MEDIA_FACTOR
-    hourly = df_hist["Prints"].resample("1H").sum()
-    hourly = hourly[hourly > 0]
-    if not hourly.empty:
-        st.bar_chart(hourly, use_container_width=True)
-    else:
-        st.caption("Noch zu wenig Daten für eine Stunden-Auswertung.")
+    # Kennzahlen
+    stats = compute_print_stats(df, window_min=30, media_factor=MEDIA_FACTOR)
 
-    # Kosten
     last_remaining = int(df_hist["RemainingPrints"].iloc[-1])
     prints_since_reset = max(0, (st.session_state.max_prints or 0) - last_remaining)
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Log-Einträge", len(df_hist))
+    c2.metric("Drucke seit Reset (geschätzt)", prints_since_reset)
+
+    if stats["ppm_overall"]:
+        c3.metric("Ø Drucke/Std (Session)", f"{stats['ppm_overall'] * 60:.1f}")
+    else:
+        c3.metric("Ø Drucke/Std (Session)", "–")
+
+    if stats["ppm_window"]:
+        c4.metric("Ø Drucke/Std (letzte 30 Min)", f"{stats['ppm_window'] * 60:.1f}")
+    else:
+        c4.metric("Ø Drucke/Std (letzte 30 Min)", "–")
 
     st.markdown("#### Kostenabschätzung")
     col_cost1, col_cost2 = st.columns(2)
@@ -1670,30 +1374,6 @@ def show_history():
     st.dataframe(df.tail(200), use_container_width=True)
 
 
-def show_meta_history():
-    """
-    Zeigt das Meta-Log (Papierwechsel) an, falls vorhanden.
-    """
-    try:
-        sh = get_spreadsheet()
-        try:
-            ws = sh.worksheet("Meta")
-        except WorksheetNotFound:
-            st.info("Noch keine Meta-Daten (Papierwechsel) vorhanden.")
-            return
-
-        rows = ws.get_all_records()
-        if not rows:
-            st.info("Noch keine Meta-Daten (Papierwechsel) vorhanden.")
-            return
-
-        st.subheader("Papierwechsel-Historie")
-        df_meta = pd.DataFrame(rows)
-        st.dataframe(df_meta.tail(50), use_container_width=True)
-    except Exception as e:
-        st.warning(f"Meta-Log konnte nicht geladen werden: {e}")
-
-
 # --------------------------------------------------------------------
 # RENDER MAIN VIEW
 # --------------------------------------------------------------------
@@ -1710,8 +1390,6 @@ else:
         render_status_help()
     with tab_hist:
         show_history()
-        st.markdown("---")
-        show_meta_history()
 
 st.markdown("---")
 
@@ -1743,7 +1421,7 @@ if (not view_event_mode) and printer_has_admin:
 
             col1, col2 = st.columns(2)
 
-            # LINKS / NTFY / Event Angaben
+            # LINKS / NTFY
             with col1:
                 st.markdown(
                     '<div class="admin-section-title">Externe Links</div>',
@@ -1769,73 +1447,12 @@ if (not view_event_mode) and printer_has_admin:
                 )
 
                 st.markdown(
-                    '<div class="admin-spacer-sm"></div>',
-                    unsafe_allow_html=True,
+                    '<div class="admin-spacer-sm"></div>', unsafe_allow_html=True
                 )
 
                 if st.button("Test Push 🔔", use_container_width=True):
                     send_ntfy_push("Test", "Test erfolgreich", tags="tada")
                     st.toast("Test gesendet!")
-
-                st.markdown(
-                    '<div class="admin-label-pill">Status-Simulation</div>',
-                    unsafe_allow_html=True,
-                )
-                sim_option = st.selectbox(
-                    "",
-                    ["Keine", "Fehler", "Papier fast leer", "Keine Daten"],
-                    label_visibility="collapsed",
-                    key="status_sim_option",
-                )
-                if st.button("Simulation auslösen", use_container_width=True):
-                    if sim_option == "Fehler":
-                        send_ntfy_push(
-                            "🔴 Fehler (Test)",
-                            "Simulierter Fehlerzustand",
-                            tags="rotating_light",
-                        )
-                        maybe_play_sound("error", st.session_state.sound_enabled)
-                    elif sim_option == "Papier fast leer":
-                        send_ntfy_push(
-                            "⚠️ Papier fast leer (Test)",
-                            "Simulierter Low-Paper-Status",
-                            tags="warning",
-                        )
-                        maybe_play_sound("low_paper", st.session_state.sound_enabled)
-                    elif sim_option == "Keine Daten":
-                        send_ntfy_push(
-                            "⚠️ Keine aktuellen Daten (Test)",
-                            "Simulierter Stale-Status",
-                            tags="hourglass",
-                        )
-                        # kein Sound für stale
-                    st.toast("Simulation gesendet")
-
-                st.markdown(
-                    '<div class="admin-label-pill">Event-Infos</div>',
-                    unsafe_allow_html=True,
-                )
-                event_name_current = get_setting("event_name", "")
-                event_note_current = get_setting("event_note", "")
-
-                event_name_input = st.text_input(
-                    "Event-Name",
-                    value=event_name_current,
-                    key="event_name_input",
-                )
-                event_note_input = st.text_input(
-                    "Notiz",
-                    value=event_note_current,
-                    key="event_note_input",
-                )
-
-                if st.button("Event-Infos speichern", use_container_width=True):
-                    try:
-                        set_setting("event_name", event_name_input)
-                        set_setting("event_note", event_note_input)
-                        st.toast("Event-Infos gespeichert", icon="✅")
-                    except Exception as e:
-                        st.error(f"Event-Infos konnten nicht gespeichert werden: {e}")
 
             # PAPIER / RESET
             with col2:
@@ -1850,10 +1467,7 @@ if (not view_event_mode) and printer_has_admin:
                 )
                 size_options = [200, 400]
                 try:
-                    current_size = int(
-                        st.session_state.max_prints
-                        or printer_cfg["default_max_prints"]
-                    )
+                    current_size = int(st.session_state.max_prints or printer_cfg["default_max_prints"])
                 except Exception:
                     current_size = printer_cfg["default_max_prints"]
                 idx = 0 if current_size == 200 else 1
@@ -1877,8 +1491,7 @@ if (not view_event_mode) and printer_has_admin:
                 )
 
                 st.markdown(
-                    '<div class="admin-spacer-sm"></div>',
-                    unsafe_allow_html=True,
+                    '<div class="admin-spacer-sm"></div>', unsafe_allow_html=True
                 )
 
                 if not st.session_state.confirm_reset:
