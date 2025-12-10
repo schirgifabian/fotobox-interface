@@ -788,18 +788,39 @@ st.session_state.sound_enabled = sound_enabled
 # --------------------------------------------------------------------
 # PUSH FUNKTIONEN
 # --------------------------------------------------------------------
-def _sanitize_header_value(val: str) -> str:
+def _sanitize_header_value(val: str, default: str = "ntfy") -> str:
     """
-    Entfernt Zeichen, die nicht in latin-1 darstellbar sind (z.B. Emojis),
-    damit requests die Header ohne Fehler senden kann.
+    Bereitet einen String so auf, dass er als HTTP-Headerwert taugt:
+    - in String umwandeln
+    - Zeilenumbrüche entfernen
+    - auf latin-1 einkürzen (Emojis etc. fliegen raus)
+    - führende/trailing Whitespaces entfernen
+    - falls leer -> Default verwenden
     """
     if not isinstance(val, str):
         val = str(val)
-    # Alles, was nicht latin-1 ist, wird einfach entfernt
-    return val.encode("latin-1", "ignore").decode("latin-1")
+
+    # CR/LF raus
+    val = val.replace("\r", " ").replace("\n", " ")
+
+    # Auf latin-1 beschränken (alles andere wird entfernt)
+    try:
+        val = val.encode("latin-1", "ignore").decode("latin-1")
+    except Exception:
+        val = default
+
+    # Führende / trailing Spaces weg
+    val = val.strip()
+
+    # Falls komplett leer geworden -> Default
+    if not val:
+        val = default
+
+    return val
 
 
 def send_ntfy_push(title, message, tags="warning", priority="default"):
+    # ntfy global deaktiviert?
     if not st.session_state.get("ntfy_active", False):
         return
 
@@ -807,10 +828,10 @@ def send_ntfy_push(title, message, tags="warning", priority="default"):
     if not topic:
         return
 
-    # Titel/Tags für HTTP-Header säubern (Emojis fliegen raus)
-    safe_title = _sanitize_header_value(title)
-    safe_tags = _sanitize_header_value(tags)
-    safe_priority = _sanitize_header_value(priority)
+    # Titel/Tags/Prio für Header säubern (Emojis, CR/LF, führende Spaces entfernen)
+    safe_title = _sanitize_header_value(title, default="Status")
+    safe_tags = _sanitize_header_value(tags, default="info")
+    safe_priority = _sanitize_header_value(priority, default="default")
 
     try:
         headers = {
@@ -820,16 +841,17 @@ def send_ntfy_push(title, message, tags="warning", priority="default"):
         }
         resp = requests.post(
             f"https://ntfy.sh/{topic}",
-            data=message.encode("utf-8"),
+            data=message.encode("utf-8"),  # Body darf UTF-8/Emojis haben
             headers=headers,
             timeout=5,
         )
-        # Optional: kleines Debug
-        # if not resp.ok:
-        #     st.error(f"ntfy Fehler: {resp.status_code} – {resp.text[:200]}")
+
+        # Optional: nur bei Fehlern anzeigen
+        if not resp.ok:
+            st.error(f"ntfy Fehler: {resp.status_code} – {resp.text[:200]}")
     except Exception as e:
         st.error(f"Exception bei ntfy: {e}")
-
+        
 
 def send_dsr_command(cmd: str):
     """
