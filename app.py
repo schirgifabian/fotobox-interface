@@ -58,20 +58,15 @@ def check_login():
                 st.session_state["is_logged_in"] = True
                 
                 # B. Cookie setzen (Langfristig speichern!)
-                # WICHTIG: Hier auf z.B. 30 Tage erhöhen statt 1 Stunde
                 expires = datetime.datetime.now() + datetime.timedelta(days=30)
-                
                 cookie_manager.set("auth_pin", user_input, expires_at=expires)
                 
                 msg_placeholder.success("Login korrekt! Lade neu...")
-                
-                # Kurze Pause für den Browser, um das Cookie zu schreiben
                 time.sleep(0.5)
                 st.rerun()
             else:
                 msg_placeholder.error("Falscher PIN!")
 
-    # Alles stoppen, solange nicht eingeloggt
     st.stop()
 
 
@@ -80,9 +75,7 @@ check_login()
 
 # Optional: Logout-Button für die Sidebar (zum Testen)
 if st.sidebar.button("Logout"):
-    # Cookie löschen
     stx.CookieManager(key="fotobox_auth").delete("auth_pin")
-    # Session State löschen
     st.session_state["is_logged_in"] = False
     st.rerun()
 
@@ -282,27 +275,26 @@ PAGE_ICON = "🖨️"
 
 APP_ICON_URL = "https://www.fabianschirgi.com/uploads/tx_bh/710/icon-dashboard.png"
 
-# Konfigurationen, die NICHT geheim sind, bleiben im Code
 PRINTERS = {
     "die Fotobox": {
-        "key": "standard",   # -> secrets.printers.standard
+        "key": "standard",
         "warning_threshold": 20,
         "default_max_prints": 400,
         "cost_per_roll_eur": 46.59,
-        "has_admin": True,   # Admin-Bereich + Geräte-Steuerung
-        "has_aqara": True,   # Aqara-Steckdose vorhanden
-        "has_dsr": True,     # dsrBooth-Lockscreen vorhanden
-        "media_factor": 1,   # Rohwert * 2 -> altes Papier # Rohwert * 1 -> neues Papier
+        "has_admin": True,
+        "has_aqara": True,
+        "has_dsr": True,
+        "media_factor": 1,
     },
     "Weinkellerei": {
-        "key": "Weinkellerei",       # -> secrets.printers.box2
+        "key": "Weinkellerei",
         "warning_threshold": 20,
         "default_max_prints": 400,
         "cost_per_roll_eur": 60,
-        "has_admin": True,  # kein Admin-Bereich
-        "has_aqara": False,  # keine Aqara-Steckdose
-        "has_dsr": False,    # kein dsrBooth
-        "media_factor": 2,   # Rohwert * 2 -> altes Papier # Rohwert * 1 -> neues Papier
+        "has_admin": True,
+        "has_aqara": False,
+        "has_dsr": False,
+        "media_factor": 2,
     },
 }
 
@@ -312,7 +304,7 @@ ALERT_SOUND_URL = "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
 
 
 # --------------------------------------------------------------------
-# GOOGLE SHEETS (NACH OBEN GEZOGEN, DAMIT render_fleet_overview SIE KENNT)
+# GOOGLE SHEETS
 # --------------------------------------------------------------------
 def get_gspread_client():
     secrets = st.secrets["gcp_service_account"]
@@ -345,9 +337,6 @@ def get_settings_ws(sheet_id: str):
 
 @st.cache_data(ttl=60)
 def load_settings(sheet_id: str):
-    """
-    Lädt alle Settings als Dict für das angegebene Sheet.
-    """
     try:
         ws = get_settings_ws(sheet_id)
         rows = ws.get_all_records()
@@ -376,16 +365,15 @@ def set_setting(key: str, value):
     value_str = str(value)
 
     if key in keys:
-        row_idx = keys.index(key) + 2  # +2 wegen Headerzeile + 1-basiert
+        row_idx = keys.index(key) + 2
         ws.update(f"A{row_idx}:C{row_idx}", [[key, value_str, now]])
     else:
         ws.append_row([key, value_str, now])
 
-    # Cache invalidieren
     load_settings.clear()
 
 
-@st.cache_data(ttl=300)  # 5 Minuten Cache für Admin / Historie
+@st.cache_data(ttl=300)
 def get_data_admin(sheet_id: str):
     try:
         ws = get_gspread_client().open_by_key(sheet_id).sheet1
@@ -394,7 +382,7 @@ def get_data_admin(sheet_id: str):
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=30)  # 30 Sekunden Cache für Event-Ansicht
+@st.cache_data(ttl=30)
 def get_data_event(sheet_id: str):
     try:
         ws = get_gspread_client().open_by_key(sheet_id).sheet1
@@ -404,9 +392,6 @@ def get_data_event(sheet_id: str):
 
 
 def get_data(sheet_id: str, event_mode: bool):
-    """
-    Wrapper, der je nach Ansicht das passende Cache-Profil benutzt.
-    """
     if event_mode:
         return get_data_event(sheet_id)
     else:
@@ -436,18 +421,37 @@ def log_reset_event(package_size: int, note: str = ""):
         meta_ws.append_row(
             [datetime.datetime.now().isoformat(timespec="seconds"), package_size, note]
         )
+
+        try:
+            get_last_reset_info.clear()
+        except Exception:
+            pass
+
     except Exception as e:
         st.warning(f"Reset konnte nicht im Meta-Log gespeichert werden: {e}")
+
+
+@st.cache_data(ttl=60)
+def get_last_reset_info(sheet_id: str):
+    try:
+        sh = get_gspread_client().open_by_key(sheet_id)
+        try:
+            meta_ws = sh.worksheet("Meta")
+        except WorksheetNotFound:
+            return None
+
+        rows = meta_ws.get_all_records()
+        if not rows:
+            return None
+        return rows[-1]
+    except Exception:
+        return None
 
 
 # --------------------------------------------------------------------
 # FLOTTE OVERVIEW
 # --------------------------------------------------------------------
 def render_fleet_overview():
-    """
-    Zeigt einen groben Überblick über alle konfigurierten Fotoboxen.
-    Nutzt nur die letzte Zeile aus der jeweiligen Tabelle.
-    """
     st.subheader("Alle Fotoboxen")
 
     printers_secrets = st.secrets.get("printers", {})
@@ -516,11 +520,7 @@ st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="centered"
 
 CUSTOM_CSS = """
 <style>
-.settings-wrapper {
-  margin-top: 0.75rem;
-}
-
-/* generische Karten-Optik (für Device-Cards) */
+.settings-wrapper { margin-top: 0.75rem; }
 .control-card {
   border-radius: 16px;
   padding: 14px 18px;
@@ -529,8 +529,6 @@ CUSTOM_CSS = """
   box-shadow: 0 18px 45px rgba(15,23,42,0.08);
   margin-bottom: 12px;
 }
-
-/* kleine Überschrift über der Karte */
 .control-header-label {
   font-size: 0.8rem;
   text-transform: uppercase;
@@ -538,8 +536,6 @@ CUSTOM_CSS = """
   color:#9ca3af;
   margin-bottom: 2px;
 }
-
-/* Hauptzeile mit Icon + Text */
 .control-headline {
   font-size: 1.05rem;
   font-weight: 600;
@@ -549,8 +545,6 @@ CUSTOM_CSS = """
   gap: 0.4rem;
   margin-bottom: 6px;
 }
-
-/* Status-Badge */
 .status-pill {
   margin-top: 4px;
   padding: 4px 10px;
@@ -561,41 +555,17 @@ CUSTOM_CSS = """
   align-items:center;
   gap:4px;
 }
-.status-pill--ok {
-  background:#dcfce7;
-  color:#166534;
-}
-.status-pill--muted {
-  background:#e5e7eb;
-  color:#374151;
-}
-.status-pill--warn {
-  background:#fef3c7;
-  color:#92400e;
-}
-
-/* Zusatzinfos unten */
+.status-pill--ok { background:#dcfce7; color:#166534; }
+.status-pill--muted { background:#e5e7eb; color:#374151; }
+.status-pill--warn { background:#fef3c7; color:#92400e; }
 .control-meta {
   margin-top: 6px;
   font-size: 0.7rem;
   color:#9ca3af;
 }
+.segment-wrapper { display:flex; justify-content:flex-end; align-items:center; }
+.control-card .stRadio > div { padding-top: 0; }
 
-/* rechte Spalte – wir brauchen nur ein sauberes Layout für das Radio */
-.segment-wrapper {
-  display:flex;
-  justify-content:flex-end;
-  align-items:center;
-}
-
-/* horizontales Radio etwas kompakter */
-.control-card .stRadio > div {
-  padding-top: 0;
-}
-
-/* ----------------------------------------------------
-   Admin-Karte
-   ---------------------------------------------------- */
 .admin-card {
   border-radius:18px;
   border:1px solid #e5e7eb;
@@ -604,32 +574,27 @@ CUSTOM_CSS = """
   padding:18px 20px 20px 20px;
   margin-bottom:20px;
 }
-
 .admin-card-header {
   display:flex;
   justify-content:space-between;
   align-items:baseline;
   margin-bottom:14px;
 }
-
 .admin-card-title {
   font-size:16px;
   font-weight:600;
   color:#111827;
 }
-
 .admin-card-subtitle {
   font-size:12px;
   color:#9ca3af;
 }
-
 .admin-section-title {
   font-size:15px;
   font-weight:600;
   color:#111827;
   margin-bottom:6px;
 }
-
 .admin-label-pill {
   font-size:11px;
   text-transform:uppercase;
@@ -638,19 +603,12 @@ CUSTOM_CSS = """
   margin-top:10px;
   margin-bottom:4px;
 }
-
-.admin-spacer-xs {
-  height:4px;
-}
-
-.admin-spacer-sm {
-  height:8px;
-}
+.admin-spacer-xs { height:4px; }
+.admin-spacer-sm { height:8px; }
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# Session-State Defaults (nur Dinge, die wir nicht über Settings steuern)
 if "confirm_reset" not in st.session_state:
     st.session_state.confirm_reset = False
 if "last_warn_status" not in st.session_state:
@@ -666,10 +624,8 @@ if "socket_state" not in st.session_state:
 if "socket_debug" not in st.session_state:
     st.session_state.socket_debug = None
 if "lockscreen_state" not in st.session_state:
-    # Wir kennen den echten Status nicht → nur "letzte Aktion"
     st.session_state.lockscreen_state = "off"
 
-# Sidebar – Ansicht wählen + Drucker-Auswahl
 st.sidebar.header("Einstellungen")
 
 view_mode = st.sidebar.radio(
@@ -677,24 +633,18 @@ view_mode = st.sidebar.radio(
     ["Einzelne Fotobox", "Alle Boxen"],
 )
 
-# Wenn Flottenübersicht gewählt ist: nur Übersicht anzeigen und Rest abbrechen
 if view_mode == "Alle Boxen":
     render_fleet_overview()
     st.stop()
 
-# Ab hier: Logik für einzelne Fotobox wie bisher
 printer_name = st.sidebar.selectbox("Fotobox auswählen", list(PRINTERS.keys()))
 printer_cfg = PRINTERS[printer_name]
 
-# Konfigurierbarer Faktor für Rohwerte -> echte Drucke
 MEDIA_FACTOR = printer_cfg.get("media_factor", 2)
-
-# Capability-Flags je Fotobox
 printer_has_admin = printer_cfg.get("has_admin", True)
 printer_has_aqara = printer_cfg.get("has_aqara", False)
 printer_has_dsr = printer_cfg.get("has_dsr", False)
 
-# Zuordnung auf secrets.printers.<key>
 printer_key = printer_cfg["key"]
 printers_secrets = st.secrets.get("printers", {})
 printer_secret = printers_secrets.get(printer_key, {})
@@ -709,31 +659,23 @@ if not sheet_id:
     )
     st.stop()
 
-# Sheet-bezogener State (wird von Settings-Helfern benutzt)
 st.session_state.sheet_id = sheet_id
 st.session_state.ntfy_topic = ntfy_topic
 
 WARNING_THRESHOLD = printer_cfg.get("warning_threshold", 20)
 COST_PER_ROLL_EUR = printer_cfg.get("cost_per_roll_eur")
 
-
-# --------------------------------------------------------------------
-# NACH DEM LADEN DER SHEETS: PRINTER-ABHÄNGIGE DEFAULTS AUS SETTINGS
-# --------------------------------------------------------------------
-# State aktualisieren, wenn anderer Drucker gewählt wurde
 if st.session_state.selected_printer != printer_name:
     st.session_state.selected_printer = printer_name
     st.session_state.last_warn_status = None
     st.session_state.last_sound_status = None
 
-    # Paketgröße aus Settings holen (oder Standard)
     try:
         pkg = get_setting("package_size", printer_cfg["default_max_prints"])
         st.session_state.max_prints = int(pkg)
     except Exception:
         st.session_state.max_prints = printer_cfg["default_max_prints"]
 
-# ntfy_active (Push on/off) aus Settings holen
 if "ntfy_active" not in st.session_state:
     try:
         default_ntfy = get_setting("ntfy_active", str(NTFY_ACTIVE_DEFAULT))
@@ -741,7 +683,6 @@ if "ntfy_active" not in st.session_state:
     except Exception:
         st.session_state.ntfy_active = NTFY_ACTIVE_DEFAULT
 
-# Event-Ansicht Default aus Settings
 if "event_mode" not in st.session_state:
     try:
         default_view = get_setting("default_view", "admin")
@@ -749,11 +690,9 @@ if "event_mode" not in st.session_state:
     except Exception:
         st.session_state.event_mode = False
 
-# Sound bleibt nur session-basiert (kein Persist)
 if "sound_enabled" not in st.session_state:
     st.session_state.sound_enabled = False
 
-# Sidebar – Toggles mit Settings-Defaults
 event_mode = st.sidebar.toggle(
     "Event-Ansicht (nur Status)",
     value=st.session_state.event_mode,
@@ -767,7 +706,6 @@ ntfy_active_ui = st.sidebar.toggle(
     value=st.session_state.ntfy_active,
 )
 
-# Änderungen in den Settings speichern
 if event_mode != st.session_state.event_mode:
     st.session_state.event_mode = event_mode
     try:
@@ -782,8 +720,8 @@ if ntfy_active_ui != st.session_state.ntfy_active:
     except Exception:
         pass
 
-# Sound nur in Session merken
 st.session_state.sound_enabled = sound_enabled
+
 
 # --------------------------------------------------------------------
 # PUSH FUNKTIONEN
@@ -811,10 +749,6 @@ def send_ntfy_push(title, message, tags="warning", priority="default"):
 
 
 def send_dsr_command(cmd: str):
-    """
-    Schickt einen einfachen Steuerbefehl ('lock_on' / 'lock_off')
-    an das ntfy-Topic, das der Agent am Surface abonniert.
-    """
     if not DSR_ENABLED or not DSR_CONTROL_TOPIC:
         return
     try:
@@ -834,7 +768,6 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
     prev_status = st.session_state.last_warn_status
     raw_status_l = (raw_status or "").lower().strip()
 
-    # --- Gruppen laut Drucker-Status ---
     hard_errors = [
         "paper end",
         "ribbon end",
@@ -849,48 +782,35 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
     printing_kw = ["printing", "processing", "drucken"]
     idle_kw = ["idle", "standby mode"]
 
-    # 1) Harte Fehler
     if any(k in raw_status_l for k in hard_errors):
         status_mode = "error"
         display_text = f"🔴 STÖRUNG: {raw_status}"
         display_color = "red"
-
-    # 2) Cover Open
     elif any(k in raw_status_l for k in cover_open_kw):
         status_mode = "cover_open"
         display_text = "⚠️ Deckel offen!"
         display_color = "orange"
-
-    # 3) Druckkopf kühlt ab
     elif any(k in raw_status_l for k in cooldown_kw):
         status_mode = "cooldown"
         display_text = "⏳ Druckkopf kühlt ab…"
         display_color = "orange"
-
-    # 4) Papier fast leer (nur wenn kein Fehler)
     elif media_remaining <= WARNING_THRESHOLD:
         status_mode = "low_paper"
         display_text = f"⚠️ Papier fast leer! ({media_remaining} Stk)"
         display_color = "orange"
-
-    # 5) Druckt gerade
     elif any(k in raw_status_l for k in printing_kw):
         status_mode = "printing"
         display_text = "🖨️ Druckt gerade…"
         display_color = "blue"
-
-    # 6) Leerlauf
     elif any(k in raw_status_l for k in idle_kw) or raw_status_l == "":
         status_mode = "ready"
         display_text = "✅ Bereit"
         display_color = "green"
-
     else:
         status_mode = "ready"
         display_text = f"✅ Bereit ({raw_status})"
         display_color = "green"
 
-    # HEARTBEAT
     minutes_diff = None
     LOCAL_TZ = pytz.timezone("Europe/Vienna")
     ts_parsed = pd.to_datetime(timestamp, errors="coerce")
@@ -910,14 +830,11 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
             display_text = "⚠️ Keine aktuellen Daten"
             display_color = "orange"
 
-    # PUSH LOGIK
     critical_states = ["error", "cover_open", "low_paper", "stale"]
     push = None
 
-    # Bisherige "Warn-Signatur" aus Session holen
     prev_sig = st.session_state.get("last_warn_signature")
 
-    # Neue Signatur definieren – hier kannst du steuern, was "neu" bedeutet
     current_sig = {
         "status_mode": status_mode,
         "raw_status": raw_status_l,
@@ -926,7 +843,6 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
     }
 
     if status_mode in critical_states:
-        # Nur Push, wenn sich die Signatur geändert hat
         if prev_sig != current_sig:
             title_map = {
                 "error": "🔴 Fehler",
@@ -942,16 +858,11 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str):
             }
             push = (title_map[status_mode], msg_map[status_mode], "warning")
 
-        # Signatur merken
         st.session_state.last_warn_signature = current_sig
-
-    # Extra-Case: Störung behoben (Wechsel *weg* von error)
     elif prev_sig is not None and prev_sig.get("status_mode") == "error":
         push = ("✅ Störung behoben", "Drucker läuft wieder.", "white_check_mark")
-        # Reset, damit nächster Fehler wieder eine Push auslöst
         st.session_state.last_warn_signature = None
 
-    # Für evtl. andere Zwecke den "plain" Status noch merken
     st.session_state.last_warn_status = status_mode
 
     return status_mode, display_text, display_color, push, minutes_diff
@@ -982,9 +893,6 @@ def maybe_play_sound(status_mode: str, sound_enabled: bool):
 # HISTORIE & STATS
 # --------------------------------------------------------------------
 def _prepare_history_df(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Timestamp in Datetime umwandeln, nach Zeit sortieren und Zeilen ohne Timestamp / MediaRemaining rauswerfen.
-    """
     if df.empty:
         return df
 
@@ -1009,11 +917,6 @@ def compute_print_stats(
     window_min: int = 30,
     media_factor: int = 2,
 ) -> dict:
-    """
-    Berechnet Kennzahlen aus dem Verlauf in "echten" Drucken.
-    Der Rohwert vom Drucker wird mit media_factor multipliziert
-    (z.B. 2 für altes Papier, 1 für neues Papier).
-    """
     result = {
         "prints_total": 0,
         "duration_min": 0,
@@ -1028,7 +931,6 @@ def compute_print_stats(
     first_media_raw = df["MediaRemaining"].iloc[0]
     last_media_raw = df["MediaRemaining"].iloc[-1]
 
-    # Differenz in Roh-Einheiten, dann * media_factor für echte Drucke
     prints_total = max(0, (first_media_raw - last_media_raw) * media_factor)
     duration_min = (df.index[-1] - df.index[0]).total_seconds() / 60.0
 
@@ -1038,7 +940,6 @@ def compute_print_stats(
     if duration_min > 0 and prints_total > 0:
         result["ppm_overall"] = prints_total / duration_min
 
-    # Fenster (z.B. letzte 30 Minuten)
     window_start = df.index[-1] - datetime.timedelta(minutes=window_min)
     dfw = df[df.index >= window_start]
     if len(dfw) >= 2:
@@ -1053,9 +954,6 @@ def compute_print_stats(
 
 
 def humanize_minutes(minutes: float) -> str:
-    """
-    Formatiert Minuten als schönen String.
-    """
     if minutes is None or minutes <= 0:
         return "0 Min."
     m = int(minutes)
@@ -1086,11 +984,6 @@ def render_toggle_card(
     btn_left_key: str,
     btn_right_key: str,
 ):
-    """
-    Zeichnet eine Status-Karte mit zwei Buttons (links/rechts).
-    Gibt (clicked_left, clicked_right) zurück.
-    state: "on" | "off" | "unknown"
-    """
     if state == "on":
         bg = "#ecfdf3"
         border = "#bbf7d0"
@@ -1186,7 +1079,6 @@ def render_toggle_card(
 def render_health_overview():
     items = []
 
-    # Google Sheets
     sheets_ok = False
     try:
         _ = get_spreadsheet()
@@ -1195,14 +1087,10 @@ def render_health_overview():
         sheets_ok = False
     items.append(("Google Sheets", sheets_ok, "Verbindung zur Log-Tabelle"))
 
-    # ntfy
     ntfy_ok = bool(st.session_state.get("ntfy_topic")) and st.session_state.ntfy_active
     items.append(("ntfy Push", ntfy_ok, "Benachrichtigungen für Probleme"))
 
-    # Aqara
     items.append(("Aqara", AQARA_ENABLED, "Steckdose der Fotobox"))
-
-    # dsrBooth
     items.append(("dsrBooth", DSR_ENABLED, "Lockscreen-Steuerung"))
 
     st.markdown("#### Systemstatus")
@@ -1238,41 +1126,19 @@ def render_status_help():
             f"""
 **Druckerstatus**
 
-- `✅ Bereit`  
-  Drucker ist verbunden und meldet keinen Fehler.
-
-- `⚠️ Papier fast leer`  
-  Weniger als **{WARNING_THRESHOLD}** verbleibende Drucke laut Zähler.
-
-- `⚠️ Deckel offen`  
-  Der Druckerdeckel ist nicht geschlossen – bitte Deckel prüfen und erneut testen.
-
-- `⏳ Druckkopf kühlt ab…`  
-  Der Drucker pausiert kurz, weil der Kopf zu heiß ist. In der Regel reicht es, kurz zu warten.
-
-- `⚠️ Keine aktuellen Daten`  
-  Seit mehr als **{HEARTBEAT_WARN_MINUTES}** Minuten ist kein neuer Eintrag vom Fotobox-Skript eingegangen.  
-  → Prüfen: Fotobox-PC an? Script läuft? Internet/Google Sheets erreichbar?
-
-- `🔴 STÖRUNG`  
-  Harte Fehler wie „paper end“, „ribbon end“, „paper jam“, „data error“ usw.  
-  → Papier/Rolle prüfen, Drucker-Display checken, ggf. Papier neu einlegen.
-
----
+- `✅ Bereit` – Drucker verbunden, keine Fehler  
+- `⚠️ Papier fast leer` – weniger als **{WARNING_THRESHOLD}** Drucke  
+- `⚠️ Deckel offen` – Druckerdeckel prüfen  
+- `⏳ Druckkopf kühlt ab…` – kurz warten  
+- `⚠️ Keine aktuellen Daten` – seit > **{HEARTBEAT_WARN_MINUTES}** Min kein Signal  
+- `🔴 STÖRUNG` – harte Fehler wie paper end, ribbon end, paper jam …
 
 **Geräte-Steuerung**
 
-- **Aqara Steckdose Fotobox**  
-  Schaltet die Stromversorgung der Fotobox komplett ein/aus.  
-  `Ein` = Fotobox bekommt Strom, `Aus` = Fotobox stromlos.
-
-- **dsrBooth – Gästelockscreen**  
-  `Sperren` aktiviert den Gästelockscreen (Gäste können keine Fotos starten).  
-  `Freigeben` deaktiviert ihn.  
-  Der angezeigte Status basiert nur auf der *letzten gesendeten Aktion*, nicht auf einem echten Status-Request.
+- Aqara: Strom der Fotobox ein/aus  
+- dsrBooth: Gästelockscreen sperren/freigeben (Status = letzte Aktion)
             """
         )
-
 
 
 # --------------------------------------------------------------------
@@ -1289,18 +1155,21 @@ def show_live_status(sound_enabled: bool = False, event_mode: bool = False):
         st.caption("Noch keine Druckdaten empfangen.")
         return
 
+    # Event-Infos aus Settings
+    event_name = get_setting("event_name", "")
+    event_note = get_setting("event_note", "")
+    last_reset = get_last_reset_info(st.session_state.sheet_id)
+
     try:
         last = df.iloc[-1]
         timestamp = str(last.get("Timestamp", ""))
         raw_status = str(last.get("Status", ""))
 
-        # Rohwert vom Drucker -> wird mit MEDIA_FACTOR in echte Drucke umgerechnet
         try:
             media_remaining_raw = int(last.get("MediaRemaining", 0))
         except Exception:
             media_remaining_raw = 0
 
-        # Echte verbleibende Drucke (für Anzeige & Berechnung)
         media_remaining = media_remaining_raw * MEDIA_FACTOR
 
         (
@@ -1321,17 +1190,44 @@ def show_live_status(sound_enabled: bool = False, event_mode: bool = False):
         if minutes_diff is not None:
             heartbeat_info = f" (vor {minutes_diff} Min)"
 
+        reset_info_html = ""
+        if last_reset:
+            reset_ts = last_reset.get("Timestamp", "")
+            reset_pkg = last_reset.get("PackageSize", "")
+            reset_note = last_reset.get("Note", "")
+            reset_info_html = (
+                f"<div style='color:#9ca3af; font-size:12px; margin-top:2px;'>"
+                f"Letzter Papierwechsel: {reset_ts} – {reset_pkg}er Rolle"
+                f"{' – ' + reset_note if reset_note else ''}"
+                f"</div>"
+            )
+
+        event_html = ""
+        if event_name or event_note:
+            event_html = "<div style='margin-bottom:6px;'>"
+            if event_name:
+                event_html += (
+                    f"<div style='font-weight:600; font-size:15px;'>{event_name}</div>"
+                )
+            if event_note:
+                event_html += (
+                    f"<div style='font-size:12px; color:#6b7280;'>{event_note}</div>"
+                )
+            event_html += "</div>"
+
         header_html = f"""
         <div style='text-align: left; margin-top: 0;'>
             <h2 style='color:{display_color}; font-weight: 700; margin-bottom: 4px;'>
                 {display_text}
             </h2>
-            <div style='color: #666; font-size: 14px; margin-bottom: 12px;'>
+            {event_html}
+            <div style='color: #666; font-size: 14px; margin-bottom: 4px;'>
                 Letztes Signal: {timestamp}{heartbeat_info}
             </div>
-            <div style='color: #888; font-size: 12px; margin-bottom: 20px;'>
+            <div style='color: #888; font-size: 12px; margin-bottom: 8px;'>
                  Statusmeldung: {raw_status}
             </div>
+            {reset_info_html}
         </div>
         """
         st.markdown(header_html, unsafe_allow_html=True)
@@ -1341,13 +1237,18 @@ def show_live_status(sound_enabled: bool = False, event_mode: bool = False):
         elif status_mode == "stale":
             st.warning("Seit einigen Minuten keine Daten – Verbindung / Script prüfen.")
 
-        # Papierstatus
+        if status_mode == "error":
+            with st.expander("Details / letzte Statusmeldungen"):
+                try:
+                    df_tail = df.tail(15)[["Timestamp", "Status"]]
+                    st.dataframe(df_tail, use_container_width=True)
+                except Exception:
+                    st.info("Keine Detaildaten verfügbar.")
+
         st.markdown("### Papierstatus")
 
-        # Drucke seit Reset: max_prints (echte Drucke) - media_remaining (echte Drucke)
         prints_since_reset = max(0, (st.session_state.max_prints or 0) - media_remaining)
 
-        # Restlaufzeit aus Historie (alles in echten Drucken dank compute_print_stats)
         stats = compute_print_stats(df, window_min=30, media_factor=MEDIA_FACTOR)
         forecast = "–"
 
@@ -1359,7 +1260,6 @@ def show_live_status(sound_enabled: bool = False, event_mode: bool = False):
                 minutes_left = media_remaining / ppm
                 forecast = humanize_minutes(minutes_left)
             elif media_remaining > 0:
-                # Fallback: 1 Druck/Min
                 minutes_left = media_remaining * 1.0
                 forecast = humanize_minutes(minutes_left)
             else:
@@ -1379,7 +1279,6 @@ def show_live_status(sound_enabled: bool = False, event_mode: bool = False):
         else:
             colC.metric("Kosten seit Reset", "–")
 
-        # Progress-Bar
         if status_mode == "error" and media_remaining == 0:
             bar_color = "red"
             progress_val = 0
@@ -1428,13 +1327,11 @@ def show_history():
         return
 
     df_hist = df_hist.copy()
-    # Echte verbleibende Drucke
     df_hist["RemainingPrints"] = df_hist["MediaRemaining"] * MEDIA_FACTOR
 
     st.markdown("#### Medienverlauf (echte Drucke)")
     st.line_chart(df_hist["RemainingPrints"], use_container_width=True)
 
-    # Kennzahlen
     stats = compute_print_stats(df, window_min=30, media_factor=MEDIA_FACTOR)
 
     last_remaining = int(df_hist["RemainingPrints"].iloc[-1])
@@ -1476,7 +1373,6 @@ def show_history():
 # --------------------------------------------------------------------
 # RENDER MAIN VIEW
 # --------------------------------------------------------------------
-# Für Boxen ohne Admin erzwingen wir Event-Ansicht
 view_event_mode = event_mode or not printer_has_admin
 
 if view_event_mode:
@@ -1497,6 +1393,41 @@ st.markdown("---")
 # --------------------------------------------------------------------
 if (not view_event_mode) and printer_has_admin:
     with st.expander("🛠️ Admin & Einstellungen"):
+
+        # ------------------------------------------------------------
+        # EVENT-INFOS (Name & Notiz) – werden in Settings gespeichert
+        # ------------------------------------------------------------
+        st.markdown("### Event-Infos")
+        col_ev1, col_ev2 = st.columns(2)
+
+        with col_ev1:
+            event_name_current = get_setting("event_name", "")
+            event_name_input = st.text_input(
+                "Event-Name",
+                value=event_name_current,
+                key="event_name_input",
+                placeholder="z.B. Hochzeit Anna & Max",
+            )
+        with col_ev2:
+            event_note_current = get_setting("event_note", "")
+            event_note_input = st.text_input(
+                "Event-Notiz",
+                value=event_note_current,
+                key="event_note_input",
+                placeholder="z.B. Start 20:00 Uhr, 400er Rolle",
+            )
+
+        if st.button("Event-Infos speichern", use_container_width=True):
+            try:
+                set_setting("event_name", event_name_input)
+                set_setting("event_note", event_note_input)
+                st.success("Event-Infos gespeichert.")
+                time.sleep(0.3)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Event-Infos konnten nicht gespeichert werden: {e}")
+
+        st.markdown("---")
 
         # ============================================================
         # ADMIN-KARTE: Schnellzugriff & Papierwechsel
@@ -1639,7 +1570,6 @@ if (not view_event_mode) and printer_has_admin:
             y, n = st.columns(2)
             if y.button("Ja", use_container_width=True):
                 st.session_state.max_prints = st.session_state.temp_package_size
-                # Paketgröße in Settings persistieren
                 try:
                     set_setting("package_size", st.session_state.max_prints)
                 except Exception:
