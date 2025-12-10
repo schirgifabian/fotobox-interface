@@ -435,11 +435,9 @@ CUSTOM_CSS = """
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# Session-State Defaults
+# Session-State Defaults (nur Dinge, die wir nicht über Settings steuern)
 if "confirm_reset" not in st.session_state:
     st.session_state.confirm_reset = False
-if "ntfy_active" not in st.session_state:
-    st.session_state.ntfy_active = NTFY_ACTIVE_DEFAULT
 if "last_warn_status" not in st.session_state:
     st.session_state.last_warn_status = None
 if "last_sound_status" not in st.session_state:
@@ -456,12 +454,9 @@ if "lockscreen_state" not in st.session_state:
     # Wir kennen den echten Status nicht → nur "letzte Aktion"
     st.session_state.lockscreen_state = "off"
 
-# Sidebar
+# Sidebar – zuerst nur Drucker-Auswahl
 st.sidebar.header("Einstellungen")
 printer_name = st.sidebar.selectbox("Fotobox auswählen", list(PRINTERS.keys()))
-event_mode = st.sidebar.toggle("Event-Ansicht (nur Status)", value=False)
-sound_enabled = st.sidebar.toggle("Sound bei Warnungen", value=False)
-
 printer_cfg = PRINTERS[printer_name]
 
 # Konfigurierbarer Faktor für Rohwerte -> echte Drucke
@@ -487,59 +482,12 @@ if not sheet_id:
     )
     st.stop()
 
-# State aktualisieren
-if st.session_state.selected_printer != printer_name:
-    st.session_state.selected_printer = printer_name
-    st.session_state.last_warn_status = None
-    st.session_state.last_sound_status = None
-    st.session_state.max_prints = printer_cfg["default_max_prints"]
-
+# Sheet-bezogener State (wird von Settings-Helfern benutzt)
 st.session_state.sheet_id = sheet_id
 st.session_state.ntfy_topic = ntfy_topic
+
 WARNING_THRESHOLD = printer_cfg.get("warning_threshold", 20)
 COST_PER_ROLL_EUR = printer_cfg.get("cost_per_roll_eur")
-
-
-# --------------------------------------------------------------------
-# PUSH FUNKTIONEN
-# --------------------------------------------------------------------
-def send_ntfy_push(title, message, tags="warning", priority="default"):
-    if not st.session_state.ntfy_active:
-        return
-    topic = st.session_state.get("ntfy_topic")
-    if not topic:
-        return
-    try:
-        headers = {
-            "Title": title,
-            "Tags": tags,
-            "Priority": priority,
-        }
-        requests.post(
-            f"https://ntfy.sh/{topic}",
-            data=message.encode("utf-8"),
-            headers=headers,
-            timeout=5,
-        )
-    except Exception:
-        pass
-
-
-def send_dsr_command(cmd: str):
-    """
-    Schickt einen einfachen Steuerbefehl ('lock_on' / 'lock_off')
-    an das ntfy-Topic, das der Agent am Surface abonniert.
-    """
-    if not DSR_ENABLED or not DSR_CONTROL_TOPIC:
-        return
-    try:
-        requests.post(
-            f"https://ntfy.sh/{DSR_CONTROL_TOPIC}",
-            data=cmd.encode("utf-8"),
-            timeout=5,
-        )
-    except Exception:
-        pass
 
 
 # --------------------------------------------------------------------
@@ -561,6 +509,59 @@ def get_spreadsheet():
 
 def get_main_worksheet():
     return get_spreadsheet().sheet1
+
+
+# --- SETTINGS-HELPER -------------------------------------------------
+def get_settings_ws(sheet_id: str):
+    sh = get_gspread_client().open_by_key(sheet_id)
+    try:
+        return sh.worksheet("Settings")
+    except WorksheetNotFound:
+        ws = sh.add_worksheet(title="Settings", rows=100, cols=3)
+        ws.append_row(["Key", "Value", "UpdatedAt"])
+        return ws
+
+
+@st.cache_data(ttl=60)
+def load_settings(sheet_id: str):
+    """
+    Lädt alle Settings als Dict für das angegebene Sheet.
+    """
+    try:
+        ws = get_settings_ws(sheet_id)
+        rows = ws.get_all_records()
+        return {row.get("Key"): row.get("Value") for row in rows if row.get("Key")}
+    except Exception:
+        return {}
+
+
+def get_setting(key: str, default=None):
+    sheet_id_local = st.session_state.get("sheet_id")
+    if not sheet_id_local:
+        return default
+    data = load_settings(sheet_id_local)
+    return data.get(key, default)
+
+
+def set_setting(key: str, value):
+    sheet_id_local = st.session_state.get("sheet_id")
+    if not sheet_id_local:
+        return
+    ws = get_settings_ws(sheet_id_local)
+    all_rows = ws.get_all_records()
+    keys = [r.get("Key") for r in all_rows]
+
+    now = datetime.datetime.now().isoformat(timespec="seconds")
+    value_str = str(value)
+
+    if key in keys:
+        row_idx = keys.index(key) + 2  # +2 wegen Headerzeile + 1-basiert
+        ws.update(f"A{row_idx}:C{row_idx}", [[key, value_str, now]])
+    else:
+        ws.append_row([key, value_str, now])
+
+    # Cache invalidieren
+    load_settings.clear()
 
 
 @st.cache_data(ttl=300)  # 5 Minuten Cache für Admin / Historie
@@ -616,6 +617,116 @@ def log_reset_event(package_size: int, note: str = ""):
         )
     except Exception as e:
         st.warning(f"Reset konnte nicht im Meta-Log gespeichert werden: {e}")
+
+
+# --------------------------------------------------------------------
+# NACH DEM LADEN DER SHEETS: PRINTER-ABHÄNGIGE DEFAULTS AUS SETTINGS
+# --------------------------------------------------------------------
+# State aktualisieren, wenn anderer Drucker gewählt wurde
+if st.session_state.selected_printer != printer_name:
+    st.session_state.selected_printer = printer_name
+    st.session_state.last_warn_status = None
+    st.session_state.last_sound_status = None
+
+    # Paketgröße aus Settings holen (oder Standard)
+    try:
+        pkg = get_setting("package_size", printer_cfg["default_max_prints"])
+        st.session_state.max_prints = int(pkg)
+    except Exception:
+        st.session_state.max_prints = printer_cfg["default_max_prints"]
+
+# ntfy_active (Push on/off) aus Settings holen
+if "ntfy_active" not in st.session_state:
+    try:
+        default_ntfy = get_setting("ntfy_active", str(NTFY_ACTIVE_DEFAULT))
+        st.session_state.ntfy_active = str(default_ntfy).lower() == "true"
+    except Exception:
+        st.session_state.ntfy_active = NTFY_ACTIVE_DEFAULT
+
+# Event-Ansicht Default aus Settings
+if "event_mode" not in st.session_state:
+    try:
+        default_view = get_setting("default_view", "admin")
+        st.session_state.event_mode = default_view == "event"
+    except Exception:
+        st.session_state.event_mode = False
+
+# Sound bleibt nur session-basiert (kein Persist)
+if "sound_enabled" not in st.session_state:
+    st.session_state.sound_enabled = False
+
+# Sidebar – Toggles mit Settings-Defaults
+event_mode = st.sidebar.toggle(
+    "Event-Ansicht (nur Status)",
+    value=st.session_state.event_mode,
+)
+sound_enabled = st.sidebar.toggle(
+    "Sound bei Warnungen",
+    value=st.session_state.sound_enabled,
+)
+ntfy_active_ui = st.sidebar.toggle(
+    "Push-Benachrichtigungen aktiv",
+    value=st.session_state.ntfy_active,
+)
+
+# Änderungen in den Settings speichern
+if event_mode != st.session_state.event_mode:
+    st.session_state.event_mode = event_mode
+    try:
+        set_setting("default_view", "event" if event_mode else "admin")
+    except Exception:
+        pass
+
+if ntfy_active_ui != st.session_state.ntfy_active:
+    st.session_state.ntfy_active = ntfy_active_ui
+    try:
+        set_setting("ntfy_active", ntfy_active_ui)
+    except Exception:
+        pass
+
+# Sound nur in Session merken
+st.session_state.sound_enabled = sound_enabled
+
+# --------------------------------------------------------------------
+# PUSH FUNKTIONEN
+# --------------------------------------------------------------------
+def send_ntfy_push(title, message, tags="warning", priority="default"):
+    if not st.session_state.ntfy_active:
+        return
+    topic = st.session_state.get("ntfy_topic")
+    if not topic:
+        return
+    try:
+        headers = {
+            "Title": title,
+            "Tags": tags,
+            "Priority": priority,
+        }
+        requests.post(
+            f"https://ntfy.sh/{topic}",
+            data=message.encode("utf-8"),
+            headers=headers,
+            timeout=5,
+        )
+    except Exception:
+        pass
+
+
+def send_dsr_command(cmd: str):
+    """
+    Schickt einen einfachen Steuerbefehl ('lock_on' / 'lock_off')
+    an das ntfy-Topic, das der Agent am Surface abonniert.
+    """
+    if not DSR_ENABLED or not DSR_CONTROL_TOPIC:
+        return
+    try:
+        requests.post(
+            f"https://ntfy.sh/{DSR_CONTROL_TOPIC}",
+            data=cmd.encode("utf-8"),
+            timeout=5,
+        )
+    except Exception:
+        pass
 
 
 # --------------------------------------------------------------------
@@ -1333,11 +1444,17 @@ if (not view_event_mode) and printer_has_admin:
                     '<div class="admin-label-pill">Paketgröße</div>',
                     unsafe_allow_html=True,
                 )
+                size_options = [200, 400]
+                try:
+                    current_size = int(st.session_state.max_prints or printer_cfg["default_max_prints"])
+                except Exception:
+                    current_size = printer_cfg["default_max_prints"]
+                idx = 0 if current_size == 200 else 1
                 size = st.radio(
                     "",
-                    [200, 400],
+                    size_options,
                     horizontal=True,
-                    index=1 if st.session_state.max_prints == 400 else 0,
+                    index=idx,
                     label_visibility="collapsed",
                 )
 
@@ -1380,6 +1497,11 @@ if (not view_event_mode) and printer_has_admin:
             y, n = st.columns(2)
             if y.button("Ja", use_container_width=True):
                 st.session_state.max_prints = st.session_state.temp_package_size
+                # Paketgröße in Settings persistieren
+                try:
+                    set_setting("package_size", st.session_state.max_prints)
+                except Exception:
+                    pass
                 clear_google_sheet()
                 log_reset_event(
                     st.session_state.temp_package_size,
