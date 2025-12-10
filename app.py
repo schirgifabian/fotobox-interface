@@ -1491,22 +1491,22 @@ def show_live_status(sound_enabled: bool = False, event_mode: bool = False):
                 )
             event_html += "</div>"
 
-        header_html = f"""
-        <div style='text-align: left; margin-top: 0;'>
-            <h2 style='color:{display_color}; font-weight: 700; margin-bottom: 4px;'>
-                {display_text}
-            </h2>
-            {event_html}
-            <div style='color: #666; font-size: 14px; margin-bottom: 4px;'>
-                Letztes Signal: {timestamp}{heartbeat_info}
-            </div>
-            <div style='color: #888; font-size: 12px; margin-bottom: 8px;'>
-                 Statusmeldung: {raw_status}
-            </div>
-            {reset_info_html}
-        </div>
-        """
-        st.markdown(header_html, unsafe_allow_html=True)
+header_html = f"""
+<div style='text-align: left; margin-top: 0;'>
+  <h2 style='color:{display_color}; font-weight: 700; margin-bottom: 4px;'>
+    {display_text}
+  </h2>
+  {event_html}
+  <div style='color: #666; font-size: 14px; margin-bottom: 4px;'>
+    Letztes Signal: {timestamp}{heartbeat_info}
+  </div>
+  <div style='color: #888; font-size: 12px; margin-bottom: 8px;'>
+    Statusmeldung: {raw_status}
+  </div>
+  {reset_info_html}
+</div>
+"""
+st.markdown(header_html, unsafe_allow_html=True)
 
         if status_mode == "error":
             st.error("Bitte Drucker und Papier prüfen (Störung aktiv).")
