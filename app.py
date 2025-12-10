@@ -284,7 +284,7 @@ APP_ICON_URL = "https://www.fabianschirgi.com/uploads/tx_bh/710/icon-dashboard.p
 
 # Konfigurationen, die NICHT geheim sind, bleiben im Code
 PRINTERS = {
-    "Standard Fotobox": {
+    "die Fotobox": {
         "key": "standard",   # -> secrets.printers.standard
         "warning_threshold": 20,
         "default_max_prints": 400,
@@ -311,13 +311,144 @@ NTFY_ACTIVE_DEFAULT = True
 ALERT_SOUND_URL = "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
 
 
+# --------------------------------------------------------------------
+# GOOGLE SHEETS (NACH OBEN GEZOGEN, DAMIT render_fleet_overview SIE KENNT)
+# --------------------------------------------------------------------
+def get_gspread_client():
+    secrets = st.secrets["gcp_service_account"]
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    creds = Credentials.from_service_account_info(secrets, scopes=scopes)
+    gc = gspread.authorize(creds)
+    return gc
 
+
+def get_spreadsheet():
+    gc = get_gspread_client()
+    sheet_id_local = st.session_state.sheet_id
+    return gc.open_by_key(sheet_id_local)
+
+
+def get_main_worksheet():
+    return get_spreadsheet().sheet1
+
+
+# --- SETTINGS-HELPER -------------------------------------------------
+def get_settings_ws(sheet_id: str):
+    sh = get_gspread_client().open_by_key(sheet_id)
+    try:
+        return sh.worksheet("Settings")
+    except WorksheetNotFound:
+        ws = sh.add_worksheet(title="Settings", rows=100, cols=3)
+        ws.append_row(["Key", "Value", "UpdatedAt"])
+        return ws
+
+
+@st.cache_data(ttl=60)
+def load_settings(sheet_id: str):
+    """
+    Lädt alle Settings als Dict für das angegebene Sheet.
+    """
+    try:
+        ws = get_settings_ws(sheet_id)
+        rows = ws.get_all_records()
+        return {row.get("Key"): row.get("Value") for row in rows if row.get("Key")}
+    except Exception:
+        return {}
+
+
+def get_setting(key: str, default=None):
+    sheet_id_local = st.session_state.get("sheet_id")
+    if not sheet_id_local:
+        return default
+    data = load_settings(sheet_id_local)
+    return data.get(key, default)
+
+
+def set_setting(key: str, value):
+    sheet_id_local = st.session_state.get("sheet_id")
+    if not sheet_id_local:
+        return
+    ws = get_settings_ws(sheet_id_local)
+    all_rows = ws.get_all_records()
+    keys = [r.get("Key") for r in all_rows]
+
+    now = datetime.datetime.now().isoformat(timespec="seconds")
+    value_str = str(value)
+
+    if key in keys:
+        row_idx = keys.index(key) + 2  # +2 wegen Headerzeile + 1-basiert
+        ws.update(f"A{row_idx}:C{row_idx}", [[key, value_str, now]])
+    else:
+        ws.append_row([key, value_str, now])
+
+    # Cache invalidieren
+    load_settings.clear()
+
+
+@st.cache_data(ttl=300)  # 5 Minuten Cache für Admin / Historie
+def get_data_admin(sheet_id: str):
+    try:
+        ws = get_gspread_client().open_by_key(sheet_id).sheet1
+        return pd.DataFrame(ws.get_all_records())
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=30)  # 30 Sekunden Cache für Event-Ansicht
+def get_data_event(sheet_id: str):
+    try:
+        ws = get_gspread_client().open_by_key(sheet_id).sheet1
+        return pd.DataFrame(ws.get_all_records())
+    except Exception:
+        return pd.DataFrame()
+
+
+def get_data(sheet_id: str, event_mode: bool):
+    """
+    Wrapper, der je nach Ansicht das passende Cache-Profil benutzt.
+    """
+    if event_mode:
+        return get_data_event(sheet_id)
+    else:
+        return get_data_admin(sheet_id)
+
+
+def clear_google_sheet():
+    try:
+        ws = get_main_worksheet()
+        ws.batch_clear(["A2:Z10000"])
+        get_data_admin.clear()
+        get_data_event.clear()
+        st.toast("Log erfolgreich zurückgesetzt!", icon="♻️")
+    except Exception as e:
+        st.error(f"Fehler beim Reset: {e}")
+
+
+def log_reset_event(package_size: int, note: str = ""):
+    try:
+        sh = get_spreadsheet()
+        try:
+            meta_ws = sh.worksheet("Meta")
+        except WorksheetNotFound:
+            meta_ws = sh.add_worksheet(title="Meta", rows=1000, cols=10)
+            meta_ws.append_row(["Timestamp", "PackageSize", "Note"])
+
+        meta_ws.append_row(
+            [datetime.datetime.now().isoformat(timespec="seconds"), package_size, note]
+        )
+    except Exception as e:
+        st.warning(f"Reset konnte nicht im Meta-Log gespeichert werden: {e}")
+
+
+# --------------------------------------------------------------------
+# FLOTTE OVERVIEW
+# --------------------------------------------------------------------
 def render_fleet_overview():
     """
     Zeigt einen groben Überblick über alle konfigurierten Fotoboxen.
     Nutzt nur die letzte Zeile aus der jeweiligen Tabelle.
     """
-    st.subheader("Flottenübersicht (alle Fotoboxen)")
+    st.subheader("Alle Fotoboxen")
 
     printers_secrets = st.secrets.get("printers", {})
     cols = st.columns(max(1, min(3, len(PRINTERS))))
@@ -584,135 +715,6 @@ st.session_state.ntfy_topic = ntfy_topic
 
 WARNING_THRESHOLD = printer_cfg.get("warning_threshold", 20)
 COST_PER_ROLL_EUR = printer_cfg.get("cost_per_roll_eur")
-
-
-# --------------------------------------------------------------------
-# GOOGLE SHEETS
-# --------------------------------------------------------------------
-def get_gspread_client():
-    secrets = st.secrets["gcp_service_account"]
-    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-    creds = Credentials.from_service_account_info(secrets, scopes=scopes)
-    gc = gspread.authorize(creds)
-    return gc
-
-
-def get_spreadsheet():
-    gc = get_gspread_client()
-    sheet_id_local = st.session_state.sheet_id
-    return gc.open_by_key(sheet_id_local)
-
-
-def get_main_worksheet():
-    return get_spreadsheet().sheet1
-
-
-# --- SETTINGS-HELPER -------------------------------------------------
-def get_settings_ws(sheet_id: str):
-    sh = get_gspread_client().open_by_key(sheet_id)
-    try:
-        return sh.worksheet("Settings")
-    except WorksheetNotFound:
-        ws = sh.add_worksheet(title="Settings", rows=100, cols=3)
-        ws.append_row(["Key", "Value", "UpdatedAt"])
-        return ws
-
-
-@st.cache_data(ttl=60)
-def load_settings(sheet_id: str):
-    """
-    Lädt alle Settings als Dict für das angegebene Sheet.
-    """
-    try:
-        ws = get_settings_ws(sheet_id)
-        rows = ws.get_all_records()
-        return {row.get("Key"): row.get("Value") for row in rows if row.get("Key")}
-    except Exception:
-        return {}
-
-
-def get_setting(key: str, default=None):
-    sheet_id_local = st.session_state.get("sheet_id")
-    if not sheet_id_local:
-        return default
-    data = load_settings(sheet_id_local)
-    return data.get(key, default)
-
-
-def set_setting(key: str, value):
-    sheet_id_local = st.session_state.get("sheet_id")
-    if not sheet_id_local:
-        return
-    ws = get_settings_ws(sheet_id_local)
-    all_rows = ws.get_all_records()
-    keys = [r.get("Key") for r in all_rows]
-
-    now = datetime.datetime.now().isoformat(timespec="seconds")
-    value_str = str(value)
-
-    if key in keys:
-        row_idx = keys.index(key) + 2  # +2 wegen Headerzeile + 1-basiert
-        ws.update(f"A{row_idx}:C{row_idx}", [[key, value_str, now]])
-    else:
-        ws.append_row([key, value_str, now])
-
-    # Cache invalidieren
-    load_settings.clear()
-
-
-@st.cache_data(ttl=300)  # 5 Minuten Cache für Admin / Historie
-def get_data_admin(sheet_id: str):
-    try:
-        ws = get_gspread_client().open_by_key(sheet_id).sheet1
-        return pd.DataFrame(ws.get_all_records())
-    except Exception:
-        return pd.DataFrame()
-
-
-@st.cache_data(ttl=30)  # 30 Sekunden Cache für Event-Ansicht
-def get_data_event(sheet_id: str):
-    try:
-        ws = get_gspread_client().open_by_key(sheet_id).sheet1
-        return pd.DataFrame(ws.get_all_records())
-    except Exception:
-        return pd.DataFrame()
-
-
-def get_data(sheet_id: str, event_mode: bool):
-    """
-    Wrapper, der je nach Ansicht das passende Cache-Profil benutzt.
-    """
-    if event_mode:
-        return get_data_event(sheet_id)
-    else:
-        return get_data_admin(sheet_id)
-
-
-def clear_google_sheet():
-    try:
-        ws = get_main_worksheet()
-        ws.batch_clear(["A2:Z10000"])
-        get_data_admin.clear()
-        get_data_event.clear()
-        st.toast("Log erfolgreich zurückgesetzt!", icon="♻️")
-    except Exception as e:
-        st.error(f"Fehler beim Reset: {e}")
-
-
-def log_reset_event(package_size: int, note: str = ""):
-    try:
-        sh = get_spreadsheet()
-        try:
-            meta_ws = sh.worksheet("Meta")
-        except WorksheetNotFound:
-            meta_ws = sh.add_worksheet(title="Meta", rows=1000, cols=10)
-            meta_ws.append_row(["Timestamp", "PackageSize", "Note"])
-
-        meta_ws.append_row(
-            [datetime.datetime.now().isoformat(timespec="seconds"), package_size, note]
-        )
-    except Exception as e:
-        st.warning(f"Reset konnte nicht im Meta-Log gespeichert werden: {e}")
 
 
 # --------------------------------------------------------------------
