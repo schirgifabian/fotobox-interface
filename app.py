@@ -789,25 +789,39 @@ st.session_state.sound_enabled = sound_enabled
 # PUSH FUNKTIONEN
 # --------------------------------------------------------------------
 def send_ntfy_push(title, message, tags="warning", priority="default"):
-    if not st.session_state.ntfy_active:
+    # --- DEBUG: Status anzeigen ---
+    active = st.session_state.get("ntfy_active", None)
+    topic = st.session_state.get("ntfy_topic", None)
+
+    st.toast(f"DEBUG ntfy: active={active}, topic={topic}", icon="🪵")
+
+    if not active:
+        st.toast("Push NICHT gesendet: ntfy_active = False", icon="⚠️")
         return
-    topic = st.session_state.get("ntfy_topic")
+
     if not topic:
+        st.toast("Push NICHT gesendet: kein ntfy_topic gesetzt", icon="⚠️")
         return
+
     try:
         headers = {
             "Title": title,
             "Tags": tags,
             "Priority": priority,
         }
-        requests.post(
+        resp = requests.post(
             f"https://ntfy.sh/{topic}",
             data=message.encode("utf-8"),
             headers=headers,
             timeout=5,
         )
-    except Exception:
-        pass
+
+        # --- DEBUG: HTTP-Ergebnis anzeigen ---
+        st.toast(f"ntfy Response: {resp.status_code}", icon="📡")
+        if not resp.ok:
+            st.error(f"ntfy Fehler: {resp.status_code} – {resp.text[:200]}")
+    except Exception as e:
+        st.error(f"Exception bei ntfy: {e}")
 
 
 def send_dsr_command(cmd: str):
