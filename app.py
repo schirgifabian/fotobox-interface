@@ -6,17 +6,15 @@ import datetime
 import re
 import unicodedata
 
-import pandas as pd
-import pytz
 import requests
 import streamlit as st
 import extra_streamlit_components as stx
+import pandas as pd
 
 from aqara_client import AqaraClient
 from sheets_helpers import (
     get_data,
     get_data_admin,
-    get_main_worksheet,
     get_setting,
     set_setting,
     clear_google_sheet,
@@ -27,7 +25,7 @@ from status_logic import (
     maybe_play_sound,
     compute_print_stats,
     humanize_minutes,
-    _prepare_history_df,  # nur intern genutzt – okay
+    _prepare_history_df,
 )
 from ui_components import (
     inject_custom_css,
@@ -38,120 +36,15 @@ from ui_components import (
 )
 
 # --------------------------------------------------------------------
-# LOGIN / PIN
-# --------------------------------------------------------------------
-
-
-def get_manager():
-    return stx.CookieManager(key="fotobox_auth")
-
-
-def check_login():
-    # 1. PIN aus Secrets laden
-    try:
-        secret_pin = str(st.secrets["general"]["app_pin"])
-    except FileNotFoundError:
-        st.error("Secrets nicht gefunden. Bitte .streamlit/secrets.toml prüfen.")
-        st.stop()
-        return
-
-    # 2. Cookie Manager initialisieren
-    cookie_manager = get_manager()
-
-    cookie_val = cookie_manager.get("auth_pin")
-
-    if st.session_state.get("is_logged_in", False):
-        return True
-
-    if cookie_val is not None and str(cookie_val) == secret_pin:
-        st.session_state["is_logged_in"] = True
-        return True
-
-    st.title("Dashboard dieFotobox.")
-
-    msg_placeholder = st.empty()
-
-    with st.form("login_form"):
-        user_input = st.text_input("Bitte PIN eingeben:", type="password")
-        submitted = st.form_submit_button("Login")
-
-        if submitted:
-            if str(user_input) == secret_pin:
-                st.session_state["is_logged_in"] = True
-
-                expires = datetime.datetime.now() + datetime.timedelta(days=30)
-                cookie_manager.set("auth_pin", user_input, expires_at=expires)
-
-                msg_placeholder.success("Login korrekt! Lade neu...")
-                time.sleep(0.5)
-                st.rerun()
-            else:
-                msg_placeholder.error("Falscher PIN!")
-
-    st.stop()
-
-
-check_login()
-
-if st.sidebar.button("Logout"):
-    stx.CookieManager(key="fotobox_auth").delete("auth_pin")
-    st.session_state["is_logged_in"] = False
-    st.rerun()
-
-# --------------------------------------------------------------------
-# DSLRBOOTH STEUERUNG VIA NTFY (nur Topic, kein API-Key hier)
-# --------------------------------------------------------------------
-DSR_ENABLED = False
-DSR_CONTROL_TOPIC = None
-
-try:
-    dsr_cfg = st.secrets["dsrbooth"]
-    DSR_CONTROL_TOPIC = dsr_cfg.get("control_topic")
-    if DSR_CONTROL_TOPIC:
-        DSR_ENABLED = True
-except Exception:
-    DSR_ENABLED = False
-
-# --------------------------------------------------------------------
-# AQARA KONFIG AUS SECRETS
-# --------------------------------------------------------------------
-AQARA_ENABLED = False
-aqara_client = None
-AQARA_ACCESS_TOKEN = None
-AQARA_SOCKET_DEVICE_ID = None
-AQARA_SOCKET_RESOURCE_ID = "4.1.85"
-
-try:
-    aqara_cfg = st.secrets["aqara"]
-    AQARA_APP_ID = aqara_cfg["app_id"]
-    AQARA_KEY_ID = aqara_cfg["key_id"]
-    AQARA_APP_SECRET = aqara_cfg["app_secret"]
-    AQARA_ACCESS_TOKEN = aqara_cfg["access_token"]
-
-    AQARA_SOCKET_DEVICE_ID = aqara_cfg["socket_device_id"]
-    AQARA_SOCKET_RESOURCE_ID = aqara_cfg.get("socket_resource_id", "4.1.85")
-
-    aqara_client = AqaraClient(
-        app_id=AQARA_APP_ID,
-        key_id=AQARA_KEY_ID,
-        app_secret=AQARA_APP_SECRET,
-        region="ger",
-    )
-    AQARA_ENABLED = True
-except Exception:
-    AQARA_ENABLED = False
-
-# --------------------------------------------------------------------
-# GLOBAL KONFIG
+# GRUNDKONFIG
 # --------------------------------------------------------------------
 PAGE_TITLE = "Fotobox Drucker Status"
 PAGE_ICON = "🖨️"
-
-APP_ICON_URL = "https://www.fabianschirgi.com/uploads/tx_bh/710/icon-dashboard.png"
+NTFY_ACTIVE_DEFAULT = True
 
 PRINTERS = {
     "die Fotobox": {
-        "key": "standard",   # -> secrets.printers.standard
+        "key": "standard",
         "warning_threshold": 20,
         "default_max_prints": 400,
         "cost_per_roll_eur": 46.59,
@@ -172,135 +65,72 @@ PRINTERS = {
     },
 }
 
-NTFY_ACTIVE_DEFAULT = True
-
-st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="centered")
-inject_custom_css()
-
 # --------------------------------------------------------------------
-# SESSION STATE DEFAULTS
+# LOGIN
 # --------------------------------------------------------------------
-if "confirm_reset" not in st.session_state:
-    st.session_state.confirm_reset = False
-if "last_warn_status" not in st.session_state:
-    st.session_state.last_warn_status = None
-if "last_sound_status" not in st.session_state:
-    st.session_state.last_sound_status = None
-if "max_prints" not in st.session_state:
-    st.session_state.max_prints = None
-if "selected_printer" not in st.session_state:
-    st.session_state.selected_printer = None
-if "socket_state" not in st.session_state:
-    st.session_state.socket_state = "unknown"
-if "socket_debug" not in st.session_state:
-    st.session_state.socket_debug = None
-if "lockscreen_state" not in st.session_state:
-    st.session_state.lockscreen_state = "off"
+def get_cookie_manager():
+    return stx.CookieManager(key="fotobox_auth")
 
-# Sidebar – Ansicht wählen + Drucker-Auswahl
-st.sidebar.header("Einstellungen")
 
-view_mode = st.sidebar.radio(
-    "Ansicht",
-    ["Einzelne Fotobox", "Alle Boxen"],
-)
+def check_login():
+    try:
+        secret_pin = str(st.secrets["general"]["app_pin"])
+    except FileNotFoundError:
+        st.error("Secrets nicht gefunden. Bitte .streamlit/secrets.toml prüfen.")
+        st.stop()
+        return
 
-if view_mode == "Alle Boxen":
-    render_fleet_overview(PRINTERS)
+    cookie_manager = get_cookie_manager()
+    cookie_val = cookie_manager.get("auth_pin")
+
+    # Session schon freigeschaltet
+    if st.session_state.get("is_logged_in", False):
+        return True
+
+    # Korrektes Cookie vorhanden
+    if cookie_val is not None and str(cookie_val) == secret_pin:
+        st.session_state["is_logged_in"] = True
+        return True
+
+    # Login-Form anzeigen
+    st.title("Dashboard dieFotobox.")
+    msg_placeholder = st.empty()
+
+    with st.form("login_form"):
+        user_input = st.text_input("Bitte PIN eingeben:", type="password")
+        submitted = st.form_submit_button("Login")
+
+        if submitted:
+            if str(user_input) == secret_pin:
+                st.session_state["is_logged_in"] = True
+                expires = datetime.datetime.now() + datetime.timedelta(days=30)
+                cookie_manager.set("auth_pin", user_input, expires_at=expires)
+                msg_placeholder.success("Login korrekt! Lade neu...")
+                time.sleep(0.5)
+                st.rerun()
+            else:
+                msg_placeholder.error("Falscher PIN!")
+
     st.stop()
 
-# Einzelne Box
-printer_name = st.sidebar.selectbox("Fotobox auswählen", list(PRINTERS.keys()))
-printer_cfg = PRINTERS[printer_name]
 
-MEDIA_FACTOR = printer_cfg.get("media_factor", 2)
-printer_has_admin = printer_cfg.get("has_admin", True)
-printer_has_aqara = printer_cfg.get("has_aqara", False)
-printer_has_dsr = printer_cfg.get("has_dsr", False)
+def render_logout_button():
+    if st.sidebar.button("Logout"):
+        get_cookie_manager().delete("auth_pin")
+        st.session_state["is_logged_in"] = False
+        st.rerun()
 
-printer_key = printer_cfg["key"]
-printers_secrets = st.secrets.get("printers", {})
-printer_secret = printers_secrets.get(printer_key, {})
-
-sheet_id = printer_secret.get("sheet_id")
-ntfy_topic = printer_secret.get("ntfy_topic")
-
-if not sheet_id:
-    st.error(
-        f"Keine 'sheet_id' für '{printer_name}' in secrets.toml gefunden "
-        f"(Sektion [printers.{printer_key}])."
-    )
-    st.stop()
-
-st.session_state.sheet_id = sheet_id
-st.session_state.ntfy_topic = ntfy_topic
-
-WARNING_THRESHOLD = printer_cfg.get("warning_threshold", 20)
-COST_PER_ROLL_EUR = printer_cfg.get("cost_per_roll_eur")
 
 # --------------------------------------------------------------------
-# SETTINGS / STATE AUS GOOGLE SHEETS
+# NTFY & DSR – BENACHRICHTIGUNGEN / STEUERUNG
 # --------------------------------------------------------------------
-if st.session_state.selected_printer != printer_name:
-    st.session_state.selected_printer = printer_name
-    st.session_state.last_warn_status = None
-    st.session_state.last_sound_status = None
-
-    try:
-        pkg = get_setting("package_size", printer_cfg["default_max_prints"])
-        st.session_state.max_prints = int(pkg)
-    except Exception:
-        st.session_state.max_prints = printer_cfg["default_max_prints"]
-
-if "ntfy_active" not in st.session_state:
-    try:
-        default_ntfy = get_setting("ntfy_active", str(NTFY_ACTIVE_DEFAULT))
-        st.session_state.ntfy_active = str(default_ntfy).lower() == "true"
-    except Exception:
-        st.session_state.ntfy_active = NTFY_ACTIVE_DEFAULT
-
-if "event_mode" not in st.session_state:
-    try:
-        default_view = get_setting("default_view", "admin")
-        st.session_state.event_mode = default_view == "event"
-    except Exception:
-        st.session_state.event_mode = False
-
-if "sound_enabled" not in st.session_state:
-    st.session_state.sound_enabled = False
-
-event_mode = st.sidebar.toggle(
-    "Event-Ansicht (nur Status)",
-    value=st.session_state.event_mode,
-)
-sound_enabled = st.sidebar.toggle(
-    "Sound bei Warnungen",
-    value=st.session_state.sound_enabled,
-)
-ntfy_active_ui = st.sidebar.toggle(
-    "Push-Benachrichtigungen aktiv",
-    value=st.session_state.ntfy_active,
-)
-
-if event_mode != st.session_state.event_mode:
-    st.session_state.event_mode = event_mode
-    try:
-        set_setting("default_view", "event" if event_mode else "admin")
-    except Exception:
-        pass
-
-if ntfy_active_ui != st.session_state.ntfy_active:
-    st.session_state.ntfy_active = ntfy_active_ui
-    try:
-        set_setting("ntfy_active", ntfy_active_ui)
-    except Exception:
-        pass
-
-st.session_state.sound_enabled = sound_enabled
-
-# --------------------------------------------------------------------
-# PUSH / NTFY
-# --------------------------------------------------------------------
+try:
+    dsr_cfg = st.secrets["dsrbooth"]
+    DSR_CONTROL_TOPIC = dsr_cfg.get("control_topic")
+    DSR_ENABLED = bool(DSR_CONTROL_TOPIC)
+except Exception:
+    DSR_CONTROL_TOPIC = None
+    DSR_ENABLED = False
 
 
 def _sanitize_header_value(val: str, default: str = "ntfy") -> str:
@@ -343,7 +173,6 @@ def send_ntfy_push(title, message, tags="warning", priority="default"):
             headers=headers,
             timeout=5,
         )
-
         if not resp.ok:
             st.error(f"ntfy Fehler: {resp.status_code} – {resp.text[:200]}")
     except Exception as e:
@@ -364,13 +193,49 @@ def send_dsr_command(cmd: str):
 
 
 # --------------------------------------------------------------------
-# UI START
+# AQARA – KONFIG
 # --------------------------------------------------------------------
-st.title(f"{PAGE_ICON} {PAGE_TITLE}")
+def init_aqara():
+    try:
+        aqara_cfg = st.secrets["aqara"]
+        client = AqaraClient(
+            app_id=aqara_cfg["app_id"],
+            key_id=aqara_cfg["key_id"],
+            app_secret=aqara_cfg["app_secret"],
+            region="ger",
+        )
+        return True, client, aqara_cfg["access_token"], aqara_cfg["socket_device_id"], aqara_cfg.get("socket_resource_id", "4.1.85")
+    except Exception:
+        return False, None, None, None, "4.1.85"
 
 
+AQARA_ENABLED, aqara_client, AQARA_ACCESS_TOKEN, AQARA_SOCKET_DEVICE_ID, AQARA_SOCKET_RESOURCE_ID = init_aqara()
+
+
+# --------------------------------------------------------------------
+# SESSION INITIALISIERUNG
+# --------------------------------------------------------------------
+def init_session_state():
+    defaults = {
+        "confirm_reset": False,
+        "last_warn_status": None,
+        "last_sound_status": None,
+        "max_prints": None,
+        "selected_printer": None,
+        "socket_state": "unknown",
+        "socket_debug": None,
+        "lockscreen_state": "off",
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+
+# --------------------------------------------------------------------
+# LIVE-STATUS VIEW
+# --------------------------------------------------------------------
 @st.fragment(run_every=10)
-def show_live_status(sound_enabled: bool = False, event_mode: bool = False):
+def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: bool, event_mode: bool):
     df = get_data(st.session_state.sheet_id, event_mode=event_mode)
     if df.empty:
         st.info("System wartet auf Start…")
@@ -387,15 +252,11 @@ def show_live_status(sound_enabled: bool = False, event_mode: bool = False):
         except Exception:
             media_remaining_raw = 0
 
-        media_remaining = media_remaining_raw * MEDIA_FACTOR
+        media_remaining = media_remaining_raw * media_factor
 
-        (
-            status_mode,
-            display_text,
-            display_color,
-            push,
-            minutes_diff,
-        ) = evaluate_status(raw_status, media_remaining, timestamp)
+        status_mode, display_text, display_color, push, minutes_diff = evaluate_status(
+            raw_status, media_remaining, timestamp
+        )
 
         if push is not None:
             title, msg, tags = push
@@ -403,35 +264,36 @@ def show_live_status(sound_enabled: bool = False, event_mode: bool = False):
 
         maybe_play_sound(status_mode, sound_enabled)
 
-        heartbeat_info = ""
-        if minutes_diff is not None:
-            heartbeat_info = f" (vor {minutes_diff} Min)"
+        heartbeat_info = f" (vor {minutes_diff} Min)" if minutes_diff is not None else ""
 
-        header_html = f"""
-        <div style='text-align: left; margin-top: 0;'>
-            <h2 style='color:{display_color}; font-weight: 700; margin-bottom: 4px;'>
-                {display_text}
-            </h2>
-            <div style='color: #666; font-size: 14px; margin-bottom: 12px;'>
-                Letztes Signal: {timestamp}{heartbeat_info}
+        st.markdown(
+            f"""
+            <div style='text-align: left; margin-top: 0;'>
+                <h2 style='color:{display_color}; font-weight: 700; margin-bottom: 4px;'>
+                    {display_text}
+                </h2>
+                <div style='color: #666; font-size: 14px; margin-bottom: 12px;'>
+                    Letztes Signal: {timestamp}{heartbeat_info}
+                </div>
+                <div style='color: #888; font-size: 12px; margin-bottom: 20px;'>
+                    Statusmeldung: {raw_status}
+                </div>
             </div>
-            <div style='color: #888; font-size: 12px; margin-bottom: 20px;'>
-                 Statusmeldung: {raw_status}
-            </div>
-        </div>
-        """
-        st.markdown(header_html, unsafe_allow_html=True)
+            """,
+            unsafe_allow_html=True,
+        )
 
         if status_mode == "error":
             st.error("Bitte Drucker und Papier prüfen (Störung aktiv).")
         elif status_mode == "stale":
             st.warning("Seit einigen Minuten keine Daten – Verbindung / Script prüfen.")
 
+        # Papierstatus
         st.markdown("### Papierstatus")
 
         prints_since_reset = max(0, (st.session_state.max_prints or 0) - media_remaining)
 
-        stats = compute_print_stats(df, window_min=30, media_factor=MEDIA_FACTOR)
+        stats = compute_print_stats(df, window_min=30, media_factor=media_factor)
         forecast = "–"
 
         if status_mode == "error":
@@ -451,9 +313,9 @@ def show_live_status(sound_enabled: bool = False, event_mode: bool = False):
         colA.metric("Verbleibend", f"{media_remaining} Stk", f"von {st.session_state.max_prints}")
         colB.metric("Restlaufzeit (geschätzt)", forecast)
 
-        if COST_PER_ROLL_EUR and (st.session_state.max_prints or 0) > 0:
+        if cost_per_roll and (st.session_state.max_prints or 0) > 0:
             try:
-                cost_per_print = COST_PER_ROLL_EUR / st.session_state.max_prints
+                cost_per_print = cost_per_roll / st.session_state.max_prints
                 cost_used = prints_since_reset * cost_per_print
                 colC.metric("Kosten seit Reset", f"{cost_used:0.2f} €")
             except Exception:
@@ -461,6 +323,7 @@ def show_live_status(sound_enabled: bool = False, event_mode: bool = False):
         else:
             colC.metric("Kosten seit Reset", "–")
 
+        # Progress-Bar
         if status_mode == "error" and media_remaining == 0:
             bar_color = "red"
             progress_val = 0
@@ -495,7 +358,10 @@ def show_live_status(sound_enabled: bool = False, event_mode: bool = False):
         st.error(f"Fehler bei der Datenverarbeitung: {e}")
 
 
-def show_history():
+# --------------------------------------------------------------------
+# HISTORIE VIEW
+# --------------------------------------------------------------------
+def show_history(media_factor: int, cost_per_roll: float):
     df = get_data_admin(st.session_state.sheet_id)
     if df.empty:
         st.info("Noch keine Daten für die Historie.")
@@ -509,12 +375,12 @@ def show_history():
         return
 
     df_hist = df_hist.copy()
-    df_hist["RemainingPrints"] = df_hist["MediaRemaining"] * MEDIA_FACTOR
+    df_hist["RemainingPrints"] = df_hist["MediaRemaining"] * media_factor
 
     st.markdown("#### Medienverlauf (echte Drucke)")
     st.line_chart(df_hist["RemainingPrints"], use_container_width=True)
 
-    stats = compute_print_stats(df, window_min=30, media_factor=MEDIA_FACTOR)
+    stats = compute_print_stats(df, window_min=30, media_factor=media_factor)
 
     last_remaining = int(df_hist["RemainingPrints"].iloc[-1])
     prints_since_reset = max(0, (st.session_state.max_prints or 0) - last_remaining)
@@ -535,9 +401,9 @@ def show_history():
 
     st.markdown("#### Kostenabschätzung")
     col_cost1, col_cost2 = st.columns(2)
-    if COST_PER_ROLL_EUR and (st.session_state.max_prints or 0) > 0:
+    if cost_per_roll and (st.session_state.max_prints or 0) > 0:
         try:
-            cost_per_print = COST_PER_ROLL_EUR / st.session_state.max_prints
+            cost_per_print = cost_per_roll / st.session_state.max_prints
             cost_used = prints_since_reset * cost_per_print
             col_cost1.metric("Kosten seit Reset", f"{cost_used:0.2f} €")
             col_cost2.metric("Kosten pro Druck (ca.)", f"{cost_per_print:0.3f} €")
@@ -553,30 +419,16 @@ def show_history():
 
 
 # --------------------------------------------------------------------
-# RENDER MAIN VIEW
+# ADMIN PANEL
 # --------------------------------------------------------------------
-view_event_mode = event_mode or not printer_has_admin
+def render_admin_panel(printer_cfg, warning_threshold):
+    printer_has_aqara = printer_cfg.get("has_aqara", False)
+    printer_has_dsr = printer_cfg.get("has_dsr", False)
+    cost_per_roll = printer_cfg.get("cost_per_roll_eur")
 
-if view_event_mode:
-    show_live_status(sound_enabled, event_mode=True)
-    render_status_help(WARNING_THRESHOLD)
-else:
-    tab_live, tab_hist = st.tabs(["Live-Status", "Historie & Analyse"])
-    with tab_live:
-        show_live_status(sound_enabled, event_mode=False)
-        render_status_help(WARNING_THRESHOLD)
-    with tab_hist:
-        show_history()
-
-st.markdown("---")
-
-# --------------------------------------------------------------------
-# ADMIN
-# --------------------------------------------------------------------
-if (not view_event_mode) and printer_has_admin:
     with st.expander("🛠️ Admin & Einstellungen"):
 
-        # ADMIN-KARTE: Schnellzugriff & Papierwechsel
+        # Karte oben
         st.markdown(
             """
             <div class="admin-card">
@@ -594,6 +446,7 @@ if (not view_event_mode) and printer_has_admin:
 
         col1, col2 = st.columns(2)
 
+        # LINKS / NTFY
         with col1:
             st.markdown(
                 '<div class="admin-section-title">Externe Links</div>',
@@ -648,6 +501,7 @@ if (not view_event_mode) and printer_has_admin:
                     maybe_play_sound("stale", st.session_state.sound_enabled)
                 st.toast("Simulation gesendet")
 
+        # PAPIER / RESET
         with col2:
             st.markdown(
                 '<div class="admin-section-title">Neuer Auftrag / Papierwechsel</div>',
@@ -703,6 +557,7 @@ if (not view_event_mode) and printer_has_admin:
 
         st.markdown("</div>", unsafe_allow_html=True)
 
+        # Reset-Bestätigung
         if st.session_state.confirm_reset:
             st.warning(
                 f"Log löschen & auf {st.session_state.temp_package_size}er Rolle setzen?",
@@ -747,9 +602,8 @@ if (not view_event_mode) and printer_has_admin:
 
             if current_state in ("on", "off"):
                 st.session_state.socket_state = current_state
-            else:
-                if st.session_state.socket_state not in ("on", "off"):
-                    st.session_state.socket_state = "unknown"
+            elif st.session_state.socket_state not in ("on", "off"):
+                st.session_state.socket_state = "unknown"
 
             state = st.session_state.socket_state
 
@@ -770,11 +624,7 @@ if (not view_event_mode) and printer_has_admin:
                 btn_right_key="aqara_btn_off",
             )
 
-            desired_state = None
-            if click_on:
-                desired_state = True
-            elif click_off:
-                desired_state = False
+            desired_state = True if click_on else False if click_off else None
 
             if desired_state is not None and desired_state != (state == "on"):
                 res = aqara_client.switch_socket(
@@ -799,7 +649,7 @@ if (not view_event_mode) and printer_has_admin:
 
         st.markdown("---")
 
-        # DSRBOOTH
+        # dsrBooth
         st.write("### dsrBooth Lockscreen")
 
         if not printer_has_dsr:
@@ -832,11 +682,7 @@ if (not view_event_mode) and printer_has_admin:
                 btn_right_key="dsr_btn_off",
             )
 
-            desired_state = None
-            if click_on:
-                desired_state = True
-            elif click_off:
-                desired_state = False
+            desired_state = True if click_on else False if click_off else None
 
             if desired_state is not None and desired_state != (state == "on"):
                 cmd = "lock_on" if desired_state else "lock_off"
@@ -848,6 +694,134 @@ if (not view_event_mode) and printer_has_admin:
                     else "Lockscreen-Befehl gesendet (deaktivieren)."
                 )
 
-        # st.markdown("---")
+        st.markdown("---")
 
-        # render_health_overview(aqara_enabled=AQARA_ENABLED, dsr_enabled=DSR_ENABLED)
+        # Systemstatus (falls du ihn doch behalten willst – sonst einfach rausnehmen)
+        render_health_overview(aqara_enabled=AQARA_ENABLED, dsr_enabled=DSR_ENABLED)
+
+
+# --------------------------------------------------------------------
+# MAIN
+# --------------------------------------------------------------------
+def main():
+    st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="centered")
+    inject_custom_css()
+    init_session_state()
+    check_login()
+    render_logout_button()
+
+    st.sidebar.header("Einstellungen")
+
+    view_mode = st.sidebar.radio("Ansicht", ["Einzelne Fotobox", "Alle Boxen"])
+
+    if view_mode == "Alle Boxen":
+        render_fleet_overview(PRINTERS)
+        return
+
+    # einzelne Box
+    printer_name = st.sidebar.selectbox("Fotobox auswählen", list(PRINTERS.keys()))
+    printer_cfg = PRINTERS[printer_name]
+
+    media_factor = printer_cfg.get("media_factor", 2)
+    cost_per_roll = printer_cfg.get("cost_per_roll_eur")
+    warning_threshold = printer_cfg.get("warning_threshold", 20)
+    printer_has_admin = printer_cfg.get("has_admin", True)
+
+    printer_key = printer_cfg["key"]
+    printers_secrets = st.secrets.get("printers", {})
+    printer_secret = printers_secrets.get(printer_key, {})
+
+    sheet_id = printer_secret.get("sheet_id")
+    ntfy_topic = printer_secret.get("ntfy_topic")
+
+    if not sheet_id:
+        st.error(
+            f"Keine 'sheet_id' für '{printer_name}' in secrets.toml gefunden "
+            f"(Sektion [printers.{printer_key}])."
+        )
+        st.stop()
+
+    # sheet-bezogene Infos im State
+    st.session_state.sheet_id = sheet_id
+    st.session_state.ntfy_topic = ntfy_topic
+
+    # Settings laden (max_prints, ntfy_active, default_view)
+    if st.session_state.selected_printer != printer_name:
+        st.session_state.selected_printer = printer_name
+        st.session_state.last_warn_status = None
+        st.session_state.last_sound_status = None
+
+        try:
+            pkg = get_setting("package_size", printer_cfg["default_max_prints"])
+            st.session_state.max_prints = int(pkg)
+        except Exception:
+            st.session_state.max_prints = printer_cfg["default_max_prints"]
+
+    if "ntfy_active" not in st.session_state:
+        try:
+            default_ntfy = get_setting("ntfy_active", str(NTFY_ACTIVE_DEFAULT))
+            st.session_state.ntfy_active = str(default_ntfy).lower() == "true"
+        except Exception:
+            st.session_state.ntfy_active = NTFY_ACTIVE_DEFAULT
+
+    if "event_mode" not in st.session_state:
+        try:
+            default_view = get_setting("default_view", "admin")
+            st.session_state.event_mode = default_view == "event"
+        except Exception:
+            st.session_state.event_mode = False
+
+    if "sound_enabled" not in st.session_state:
+        st.session_state.sound_enabled = False
+
+    event_mode = st.sidebar.toggle(
+        "Event-Ansicht (nur Status)",
+        value=st.session_state.event_mode,
+    )
+    sound_enabled = st.sidebar.toggle(
+        "Sound bei Warnungen",
+        value=st.session_state.sound_enabled,
+    )
+    ntfy_active_ui = st.sidebar.toggle(
+        "Push-Benachrichtigungen aktiv",
+        value=st.session_state.ntfy_active,
+    )
+
+    if event_mode != st.session_state.event_mode:
+        st.session_state.event_mode = event_mode
+        try:
+            set_setting("default_view", "event" if event_mode else "admin")
+        except Exception:
+            pass
+
+    if ntfy_active_ui != st.session_state.ntfy_active:
+        st.session_state.ntfy_active = ntfy_active_ui
+        try:
+            set_setting("ntfy_active", ntfy_active_ui)
+        except Exception:
+            pass
+
+    st.session_state.sound_enabled = sound_enabled
+
+    # ---------------- UI ----------------
+    st.title(f"{PAGE_ICON} {PAGE_TITLE}")
+
+    view_event_mode = event_mode or not printer_has_admin
+
+    if view_event_mode:
+        show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=True)
+        render_status_help(warning_threshold)
+    else:
+        tab_live, tab_hist = st.tabs(["Live-Status", "Historie & Analyse"])
+        with tab_live:
+            show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=False)
+            render_status_help(warning_threshold)
+        with tab_hist:
+            show_history(media_factor, cost_per_roll)
+
+        st.markdown("---")
+        render_admin_panel(printer_cfg, warning_threshold)
+
+
+if __name__ == "__main__":
+    main()
