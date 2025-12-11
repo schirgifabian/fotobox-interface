@@ -848,6 +848,6 @@ if (not view_event_mode) and printer_has_admin:
                     else "Lockscreen-Befehl gesendet (deaktivieren)."
                 )
 
-        st.markdown("---")
+        # st.markdown("---")
 
-        render_health_overview(aqara_enabled=AQARA_ENABLED, dsr_enabled=DSR_ENABLED)
+        # render_health_overview(aqara_enabled=AQARA_ENABLED, dsr_enabled=DSR_ENABLED)
