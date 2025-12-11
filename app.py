@@ -31,7 +31,6 @@ from ui_components import (
     inject_custom_css,
     render_toggle_card,
     render_fleet_overview,
-    render_health_overview,
     render_status_help,
 )
 
@@ -419,99 +418,30 @@ def show_history(media_factor: int, cost_per_roll: float):
 
 
 # --------------------------------------------------------------------
-# ADMIN PANEL
+# ADMIN PANEL (neue, aufgeräumte Version)
 # --------------------------------------------------------------------
 def render_admin_panel(printer_cfg, warning_threshold):
+    """
+    Admin-Bereich in 3 klare Blöcke:
+    1) Papierwechsel
+    2) Benachrichtigungen & Tests
+    3) Gerätesteuerung (Aqara / dsrBooth)
+    """
+
     printer_has_aqara = printer_cfg.get("has_aqara", False)
     printer_has_dsr = printer_cfg.get("has_dsr", False)
-    cost_per_roll = printer_cfg.get("cost_per_roll_eur")
 
     with st.expander("🛠️ Admin & Einstellungen"):
 
-        # Karte oben
-        st.markdown(
-            """
-            <div class="admin-card">
-                <div class="admin-card-header">
-                    <div class="admin-card-title">
-                        Schnellzugriff & Papierwechsel
-                    </div>
-                    <div class="admin-card-subtitle">
-                        Links, Benachrichtigungen und Rollenwechsel
-                    </div>
-                </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        # ------------------------------------------------------------------
+        # 1) NEUER AUFTRAG / PAPIERWECHSEL
+        # ------------------------------------------------------------------
+        st.markdown("### Neuer Auftrag / Papierwechsel")
 
-        col1, col2 = st.columns(2)
+        col_size, col_note = st.columns([1, 2])
 
-        # LINKS / NTFY
-        with col1:
-            st.markdown(
-                '<div class="admin-section-title">Externe Links</div>',
-                unsafe_allow_html=True,
-            )
-            st.link_button(
-                "🔗 Fotoshare Cloud",
-                "https://fotoshare.co/admin/index",
-                use_container_width=True,
-            )
-
-            st.markdown(
-                '<div class="admin-label-pill">Benachrichtigungen</div>',
-                unsafe_allow_html=True,
-            )
-            st.text_input(
-                "",
-                value=st.session_state.ntfy_topic
-                or "(kein Topic konfiguriert)",
-                key="ntfy_topic_display",
-                disabled=True,
-                label_visibility="collapsed",
-            )
-
-            st.markdown(
-                '<div class="admin-spacer-sm"></div>', unsafe_allow_html=True
-            )
-
-            if st.button("Test Push 🔔", use_container_width=True):
-                send_ntfy_push("Test", "Test erfolgreich", tags="tada")
-                st.toast("Test gesendet!")
-
-            st.markdown(
-                '<div class="admin-label-pill">Status-Simulation</div>',
-                unsafe_allow_html=True,
-            )
-            sim_option = st.selectbox(
-                "",
-                ["Keine", "Fehler", "Papier fast leer", "Keine Daten"],
-                label_visibility="collapsed",
-                key="status_sim_option",
-            )
-            if st.button("Simulation auslösen", use_container_width=True):
-                if sim_option == "Fehler":
-                    send_ntfy_push("🔴 Fehler (Test)", "Simulierter Fehlerzustand", tags="rotating_light")
-                    maybe_play_sound("error", st.session_state.sound_enabled)
-                elif sim_option == "Papier fast leer":
-                    send_ntfy_push("⚠️ Papier fast leer (Test)", "Simulierter Low-Paper-Status", tags="warning")
-                    maybe_play_sound("low_paper", st.session_state.sound_enabled)
-                elif sim_option == "Keine Daten":
-                    send_ntfy_push("⚠️ Keine aktuellen Daten (Test)", "Simulierter Stale-Status", tags="hourglass")
-                    maybe_play_sound("stale", st.session_state.sound_enabled)
-                st.toast("Simulation gesendet")
-
-        # PAPIER / RESET
-        with col2:
-            st.markdown(
-                '<div class="admin-section-title">Neuer Auftrag / Papierwechsel</div>',
-                unsafe_allow_html=True,
-            )
-
-            st.markdown(
-                '<div class="admin-label-pill">Paketgröße</div>',
-                unsafe_allow_html=True,
-            )
+        with col_size:
+            st.caption("Paketgröße")
             size_options = [200, 400]
             try:
                 current_size = int(
@@ -521,183 +451,248 @@ def render_admin_panel(printer_cfg, warning_threshold):
                 current_size = printer_cfg["default_max_prints"]
             idx = 0 if current_size == 200 else 1
             size = st.radio(
-                "",
+                "Paketgröße",
                 size_options,
                 horizontal=True,
                 index=idx,
                 label_visibility="collapsed",
             )
 
-            st.markdown(
-                '<div class="admin-label-pill">Notiz zum Papierwechsel (optional)</div>',
-                unsafe_allow_html=True,
-            )
+        with col_note:
+            st.caption("Notiz zum Papierwechsel (optional)")
             reset_note = st.text_input(
-                "",
+                "Notiz zum Papierwechsel",
                 key="reset_note",
                 label_visibility="collapsed",
                 placeholder="z.B. neue 400er Rolle eingelegt",
             )
 
-            st.markdown(
-                '<div class="admin-spacer-sm"></div>', unsafe_allow_html=True
-            )
-
+        st.markdown("")
+        col_btn, _ = st.columns([1, 3])
+        with col_btn:
             if not st.session_state.confirm_reset:
                 if st.button(
-                    "Papierwechsel durchgeführt (Reset) 🔄",
+                    "Papierwechsel durchführen & Zähler zurücksetzen 🔄",
                     use_container_width=True,
                 ):
+                    # Schritt 1: nur vormerken, nicht sofort löschen
                     st.session_state.confirm_reset = True
                     st.session_state.temp_package_size = size
                     st.session_state.temp_reset_note = reset_note
                     st.rerun()
             else:
-                st.info("Bestätigung unten abschließen …")
+                st.info("Bitte unten bestätigen oder abbrechen.")
 
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        # Reset-Bestätigung
+        # Bestätigungsbereich nur anzeigen, wenn confirm_reset = True
         if st.session_state.confirm_reset:
             st.warning(
-                f"Log löschen & auf {st.session_state.temp_package_size}er Rolle setzen?",
+                f"Möchtest du wirklich das Log löschen und auf eine {st.session_state.temp_package_size}er Rolle zurücksetzen?"
             )
-            y, n = st.columns(2)
-            if y.button("Ja", use_container_width=True):
-                st.session_state.max_prints = st.session_state.temp_package_size
-                try:
-                    set_setting("package_size", st.session_state.max_prints)
-                except Exception:
-                    pass
-                clear_google_sheet()
-                log_reset_event(
-                    st.session_state.temp_package_size,
-                    st.session_state.temp_reset_note,
-                )
-                st.session_state.confirm_reset = False
-                st.session_state.last_warn_status = None
-                st.rerun()
-            if n.button("Nein", use_container_width=True):
-                st.session_state.confirm_reset = False
-                st.rerun()
+            col_yes, col_no = st.columns(2)
+            with col_yes:
+                if st.button("Ja, zurücksetzen ✅", use_container_width=True):
+                    # Paketgröße übernehmen & in Settings speichern
+                    st.session_state.max_prints = st.session_state.temp_package_size
+                    try:
+                        set_setting("package_size", st.session_state.max_prints)
+                    except Exception:
+                        pass
+                    # Log löschen & Meta-Log-Eintrag
+                    clear_google_sheet()
+                    log_reset_event(
+                        st.session_state.temp_package_size,
+                        st.session_state.temp_reset_note,
+                    )
+                    st.session_state.confirm_reset = False
+                    st.session_state.last_warn_status = None
+                    st.rerun()
+            with col_no:
+                if st.button("Abbrechen ❌", use_container_width=True):
+                    st.session_state.confirm_reset = False
+                    st.rerun()
 
         st.markdown("---")
 
-        # AQARA
-        st.write("### Aqara Steckdose Fotobox")
+        # ------------------------------------------------------------------
+        # 2) BENACHRICHTIGUNGEN & TESTS
+        # ------------------------------------------------------------------
+        st.markdown("### Benachrichtigungen & Tests")
 
-        if not printer_has_aqara:
-            st.info("Für diese Fotobox ist keine Aqara-Steckdose hinterlegt.")
-        elif not AQARA_ENABLED:
-            st.info(
-                "Aqara ist nicht konfiguriert. Bitte [aqara] in secrets.toml setzen."
-            )
-        else:
-            current_state, debug_data = aqara_client.get_socket_state(
-                AQARA_ACCESS_TOKEN,
-                AQARA_SOCKET_DEVICE_ID,
-                AQARA_SOCKET_RESOURCE_ID,
-            )
-            st.session_state.socket_debug = debug_data
+        col_left, col_right = st.columns([2, 1])
 
-            if current_state in ("on", "off"):
-                st.session_state.socket_state = current_state
-            elif st.session_state.socket_state not in ("on", "off"):
-                st.session_state.socket_state = "unknown"
-
-            state = st.session_state.socket_state
-
-            click_on, click_off = render_toggle_card(
-                section_title="Fotobox-Steckdose",
-                description="Schaltet die Stromversorgung der Fotobox über die Aqara-Steckdose.",
-                state=state,
-                title_on="EINGESCHALTET",
-                title_off="AUSGESCHALTET",
-                title_unknown="STATUS UNBEKANNT",
-                badge_prefix="Zustand",
-                icon_on="🟢",
-                icon_off="⚪️",
-                icon_unknown="⚠️",
-                btn_left_label="Ein",
-                btn_right_label="Aus",
-                btn_left_key="aqara_btn_on",
-                btn_right_key="aqara_btn_off",
+        with col_left:
+            st.caption("ntfy Topic (nur zur Info)")
+            st.text_input(
+                "ntfy Topic",
+                value=st.session_state.ntfy_topic or "(kein Topic konfiguriert)",
+                key="ntfy_topic_display",
+                disabled=True,
+                label_visibility="collapsed",
             )
 
-            desired_state = True if click_on else False if click_off else None
+            if st.button("Test-Push senden 🔔", use_container_width=True):
+                send_ntfy_push("Test", "Test erfolgreich", tags="tada")
+                st.toast("Test wurde gesendet.")
 
-            if desired_state is not None and desired_state != (state == "on"):
-                res = aqara_client.switch_socket(
+        with col_right:
+            st.caption("Status-Simulation")
+            sim_option = st.selectbox(
+                "Status simulieren",
+                ["Keine", "Fehler", "Papier fast leer", "Keine Daten"],
+                label_visibility="collapsed",
+                key="status_sim_option",
+            )
+
+            if st.button("Simulation auslösen", use_container_width=True):
+                if sim_option == "Fehler":
+                    send_ntfy_push(
+                        "🔴 Fehler (Test)",
+                        "Simulierter Fehlerzustand",
+                        tags="rotating_light",
+                    )
+                    maybe_play_sound("error", st.session_state.sound_enabled)
+                elif sim_option == "Papier fast leer":
+                    send_ntfy_push(
+                        "⚠️ Papier fast leer (Test)",
+                        "Simulierter Low-Paper-Status",
+                        tags="warning",
+                    )
+                    maybe_play_sound("low_paper", st.session_state.sound_enabled)
+                elif sim_option == "Keine Daten":
+                    send_ntfy_push(
+                        "⚠️ Keine aktuellen Daten (Test)",
+                        "Simulierter Stale-Status",
+                        tags="hourglass",
+                    )
+                    maybe_play_sound("stale", st.session_state.sound_enabled)
+                st.toast("Simulation gesendet.")
+
+        st.markdown("---")
+
+        # ------------------------------------------------------------------
+        # 3) GERÄTESTEUERUNG (Aqara & dsrBooth)
+        # ------------------------------------------------------------------
+        st.markdown("### Gerätesteuerung")
+
+        if not printer_has_aqara and not printer_has_dsr:
+            st.info("Für diese Fotobox sind keine Geräte-Steuerungen konfiguriert.")
+            return
+
+        col_aqara, col_dsr = st.columns(2)
+
+        # --- Aqara Steckdose ------------------------------------------------
+        with col_aqara:
+            st.subheader("Aqara Steckdose", anchor=False)
+
+            if not printer_has_aqara:
+                st.info("Keine Aqara-Steckdose für diese Box hinterlegt.")
+            elif not AQARA_ENABLED:
+                st.info(
+                    "Aqara ist nicht konfiguriert. Bitte [aqara] in secrets.toml setzen."
+                )
+            else:
+                current_state, debug_data = aqara_client.get_socket_state(
                     AQARA_ACCESS_TOKEN,
                     AQARA_SOCKET_DEVICE_ID,
-                    turn_on=desired_state,
-                    resource_id=AQARA_SOCKET_RESOURCE_ID,
-                    mode="state",
+                    AQARA_SOCKET_RESOURCE_ID,
                 )
-                if res.get("code") == 0:
-                    st.session_state.socket_state = "on" if desired_state else "off"
-                    st.success(
-                        "Steckdose eingeschaltet."
-                        if desired_state
-                        else "Steckdose ausgeschaltet."
+                st.session_state.socket_debug = debug_data
+
+                if current_state in ("on", "off"):
+                    st.session_state.socket_state = current_state
+                elif st.session_state.socket_state not in ("on", "off"):
+                    st.session_state.socket_state = "unknown"
+
+                state = st.session_state.socket_state
+
+                click_on, click_off = render_toggle_card(
+                    section_title="Fotobox-Steckdose",
+                    description=(
+                        "Schaltet die Stromversorgung der Fotobox über die Aqara-Steckdose."
+                    ),
+                    state=state,
+                    title_on="EINGESCHALTET",
+                    title_off="AUSGESCHALTET",
+                    title_unknown="STATUS UNBEKANNT",
+                    badge_prefix="Zustand",
+                    icon_on="🟢",
+                    icon_off="⚪️",
+                    icon_unknown="⚠️",
+                    btn_left_label="Ein",
+                    btn_right_label="Aus",
+                    btn_left_key="aqara_btn_on",
+                    btn_right_key="aqara_btn_off",
+                )
+
+                desired_state = True if click_on else False if click_off else None
+
+                if desired_state is not None and desired_state != (state == "on"):
+                    res = aqara_client.switch_socket(
+                        AQARA_ACCESS_TOKEN,
+                        AQARA_SOCKET_DEVICE_ID,
+                        turn_on=desired_state,
+                        resource_id=AQARA_SOCKET_RESOURCE_ID,
+                        mode="state",
                     )
-                    time.sleep(0.5)
-                    st.rerun()
-                else:
-                    st.error("Fehler beim Schalten der Steckdose:")
-                    st.code(json.dumps(res, indent=2))
+                    if res.get("code") == 0:
+                        st.session_state.socket_state = "on" if desired_state else "off"
+                        st.success(
+                            "Steckdose eingeschaltet."
+                            if desired_state
+                            else "Steckdose ausgeschaltet."
+                        )
+                        time.sleep(0.5)
+                        st.rerun()
+                    else:
+                        st.error("Fehler beim Schalten der Steckdose:")
+                        st.code(json.dumps(res, indent=2))
 
-        st.markdown("---")
+        # --- dsrBooth Lockscreen -------------------------------------------
+        with col_dsr:
+            st.subheader("dsrBooth Lockscreen", anchor=False)
 
-        # dsrBooth
-        st.write("### dsrBooth Lockscreen")
+            if not printer_has_dsr:
+                st.info("Kein dsrBooth-Lockscreen für diese Box hinterlegt.")
+            elif not DSR_ENABLED:
+                st.info(
+                    "dsrBooth-Steuerung ist nicht konfiguriert. "
+                    "Bitte [dsrbooth] mit control_topic in secrets.toml setzen."
+                )
+            else:
+                state = st.session_state.get("lockscreen_state", "off")
 
-        if not printer_has_dsr:
-            st.info("Für diese Fotobox ist kein dsrBooth-Lockscreen hinterlegt.")
-        elif not DSR_ENABLED:
-            st.info(
-                "dsrBooth-Steuerung ist nicht konfiguriert. Bitte [dsrbooth] mit control_topic in secrets.toml setzen."
-            )
-        else:
-            state = st.session_state.get("lockscreen_state", "off")
-
-            click_on, click_off = render_toggle_card(
-                section_title="dsrBooth – Gästelockscreen",
-                description=(
-                    "Sperrt oder gibt den Gästemodus in dsrBooth frei. "
-                    "Der Status basiert nur auf der letzten Aktion, da die API keinen "
-                    "Status-Endpunkt bereitstellt."
-                ),
-                state=state,
-                title_on="LOCKSCREEN AKTIV",
-                title_off="LOCKSCREEN INAKTIV",
-                title_unknown="STATUS UNBEKANNT",
-                badge_prefix="Zustand (letzte Aktion)",
-                icon_on="🔒",
-                icon_off="🔓",
-                icon_unknown="⚠️",
-                btn_left_label="Sperren",
-                btn_right_label="Freigeben",
-                btn_left_key="dsr_btn_on",
-                btn_right_key="dsr_btn_off",
-            )
-
-            desired_state = True if click_on else False if click_off else None
-
-            if desired_state is not None and desired_state != (state == "on"):
-                cmd = "lock_on" if desired_state else "lock_off"
-                send_dsr_command(cmd)
-                st.session_state.lockscreen_state = "on" if desired_state else "off"
-                st.success(
-                    "Lockscreen-Befehl gesendet (aktivieren)."
-                    if desired_state
-                    else "Lockscreen-Befehl gesendet (deaktivieren)."
+                click_on, click_off = render_toggle_card(
+                    section_title="dsrBooth – Gästelockscreen",
+                    description=(
+                        "Sperrt oder gibt den Gästemodus in dsrBooth frei. "
+                        "Der Status basiert nur auf der letzten Aktion, da die API keinen "
+                        "Status-Endpunkt bereitstellt."
+                    ),
+                    state=state,
+                    title_on="LOCKSCREEN AKTIV",
+                    title_off="LOCKSCREEN INAKTIV",
+                    title_unknown="STATUS UNBEKANNT",
+                    badge_prefix="Zustand (letzte Aktion)",
+                    icon_on="🔒",
+                    icon_off="🔓",
+                    icon_unknown="⚠️",
+                    btn_left_label="Sperren",
+                    btn_right_label="Freigeben",
+                    btn_left_key="dsr_btn_on",
+                    btn_right_key="dsr_btn_off",
                 )
 
-        st.markdown("---")
+                desired_state = True if click_on else False if click_off else None
 
-        # Systemstatus (falls du ihn doch behalten willst – sonst einfach rausnehmen)
-        render_health_overview(aqara_enabled=AQARA_ENABLED, dsr_enabled=DSR_ENABLED)
+                if desired_state is not None and desired_state != (state == "on"):
+                    cmd = "lock_on" if desired_state else "lock_off"
+                    send_dsr_command(cmd)
+                    st.session_state.lockscreen_state = "on" if desired_state else "off"
+                    st.success(
+                        "Lockscreen-Befehl gesendet (aktivieren)."
+                        if desired_state
+                        else "Lockscreen-Befehl gesendet (deaktivieren)."
+                    )
 
 
 # --------------------------------------------------------------------
@@ -714,11 +709,12 @@ def main():
 
     view_mode = st.sidebar.radio("Ansicht", ["Einzelne Fotobox", "Alle Boxen"])
 
+    # Flottenübersicht
     if view_mode == "Alle Boxen":
         render_fleet_overview(PRINTERS)
         return
 
-    # einzelne Box
+    # Einzelne Box
     printer_name = st.sidebar.selectbox("Fotobox auswählen", list(PRINTERS.keys()))
     printer_cfg = PRINTERS[printer_name]
 
