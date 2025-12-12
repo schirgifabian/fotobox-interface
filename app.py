@@ -807,11 +807,21 @@ def main():
     if view_event_mode:
         show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=True)
         render_status_help(warning_threshold)
+        
+        # NEUER BUTTON
+        st.write("")
+        st.link_button("☁️ Fotoshare Cloud", "https://fotoshare.co/admin/", use_container_width=True)
+
     else:
         tab_live, tab_hist = st.tabs(["Live-Status", "Historie & Analyse"])
         with tab_live:
             show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=False)
             render_status_help(warning_threshold)
+            
+            # NEUER BUTTON
+            st.write("")
+            st.link_button("☁️ Fotoshare Cloud", "https://fotoshare.co/admin/", use_container_width=True)
+
         with tab_hist:
             show_history(media_factor, cost_per_roll)
 
