@@ -196,19 +196,20 @@ def send_dsr_command(cmd: str):
 # --------------------------------------------------------------------
 def init_aqara():
     try:
+        if "aqara" not in st.secrets:
+            return False, None, None, "4.1.85"
+            
         aqara_cfg = st.secrets["aqara"]
-        client = AqaraClient(
-            app_id=aqara_cfg["app_id"],
-            key_id=aqara_cfg["key_id"],
-            app_secret=aqara_cfg["app_secret"],
-            region="ger",
-        )
-        return True, client, aqara_cfg["access_token"], aqara_cfg["socket_device_id"], aqara_cfg.get("socket_resource_id", "4.1.85")
-    except Exception:
-        return False, None, None, None, "4.1.85"
+        # Keine Argumente mehr, Client liest Secrets/Datei selbst
+        client = AqaraClient()
+        
+        return True, client, aqara_cfg["device_id"], aqara_cfg.get("resource_id", "4.1.85")
+    except Exception as e:
+        print(f"Aqara Init Fehler: {e}")
+        return False, None, None, "4.1.85"
 
-
-AQARA_ENABLED, aqara_client, AQARA_ACCESS_TOKEN, AQARA_SOCKET_DEVICE_ID, AQARA_SOCKET_RESOURCE_ID = init_aqara()
+# Beachte: AQARA_ACCESS_TOKEN ist hier weggefallen!
+AQARA_ENABLED, aqara_client, AQARA_SOCKET_DEVICE_ID, AQARA_SOCKET_RESOURCE_ID = init_aqara()
 
 
 # --------------------------------------------------------------------
@@ -592,10 +593,10 @@ def render_admin_panel(printer_cfg, warning_threshold):
                 )
             else:
                 current_state, debug_data = aqara_client.get_socket_state(
-                    AQARA_ACCESS_TOKEN,
-                    AQARA_SOCKET_DEVICE_ID,
-                    AQARA_SOCKET_RESOURCE_ID,
+                AQARA_SOCKET_DEVICE_ID,
+                AQARA_SOCKET_RESOURCE_ID,
                 )
+
                 st.session_state.socket_debug = debug_data
 
                 if current_state in ("on", "off"):
@@ -628,11 +629,11 @@ def render_admin_panel(printer_cfg, warning_threshold):
 
                 if desired_state is not None and desired_state != (state == "on"):
                     res = aqara_client.switch_socket(
-                        AQARA_ACCESS_TOKEN,
-                        AQARA_SOCKET_DEVICE_ID,
-                        turn_on=desired_state,
-                        resource_id=AQARA_SOCKET_RESOURCE_ID,
-                        mode="state",
+                    AQARA_SOCKET_DEVICE_ID,
+                    turn_on=desired_state,
+                    resource_id=AQARA_SOCKET_RESOURCE_ID
+                )
+
                     )
                     if res.get("code") == 0:
                         st.session_state.socket_state = "on" if desired_state else "off"
