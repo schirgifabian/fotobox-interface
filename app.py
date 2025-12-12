@@ -634,7 +634,6 @@ def render_admin_panel(printer_cfg, warning_threshold):
                     resource_id=AQARA_SOCKET_RESOURCE_ID
                 )
 
-                    )
                     if res.get("code") == 0:
                         st.session_state.socket_state = "on" if desired_state else "off"
                         st.success(
