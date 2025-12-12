@@ -1,32 +1,34 @@
-import streamlit as st
 import time
 import uuid
 import hashlib
 import requests
 import json
 import os
+import streamlit as st
 
-# --- KONFIGURATION ---
 TOKEN_FILE = "tokens.json"
 
-# --- KLASSE ---
 class AqaraClient:
     def __init__(self):
-        # Daten aus secrets.toml laden
+        # 1. Config direkt aus secrets holen
         self.app_id = st.secrets["aqara"]["app_id"]
         self.key_id = st.secrets["aqara"]["key_id"]
         self.app_secret = st.secrets["aqara"]["app_secret"]
+        # Basis URL
         self.root_url = "https://open-ger.aqara.com/v3.0/open"
         
-        # Dynamische Tokens laden
+        # 2. Token laden (oder leere Struktur wenn neue Datei)
         self.tokens = self._load_tokens()
 
     def _load_tokens(self):
         if not os.path.exists(TOKEN_FILE):
-            st.error(f"❌ Datei '{TOKEN_FILE}' fehlt!")
+            # Falls Datei fehlt, leeres Gerüst
+            return {"access_token": "", "refresh_token": ""}
+        try:
+            with open(TOKEN_FILE, "r") as f:
+                return json.load(f)
+        except:
             return {}
-        with open(TOKEN_FILE, "r") as f:
-            return json.load(f)
 
     def _save_tokens(self, access_token, refresh_token):
         self.tokens["access_token"] = access_token
@@ -38,7 +40,6 @@ class AqaraClient:
         nonce = str(uuid.uuid4().hex)
         timestamp = str(int(time.time() * 1000))
         
-        # Signatur erstellen
         sign_parts = []
         if access_token:
             sign_parts.append(f"AccessToken={access_token}")
@@ -65,12 +66,11 @@ class AqaraClient:
         return headers
 
     def _refresh_token(self):
-        """Erneuert das Token automatisch"""
         url = f"{self.root_url}/auth/refreshToken"
         current_refresh = self.tokens.get("refresh_token")
         
         if not current_refresh:
-            st.error("Kein Refresh Token gefunden!")
+            print("❌ Kein Refresh Token vorhanden!")
             return False
 
         headers = self._generate_headers(access_token=None)
@@ -80,73 +80,56 @@ class AqaraClient:
             r = requests.post(url, headers=headers, json=payload)
             data = r.json()
             if data["code"] == 0:
-                new_acc = data["result"]["accessToken"]
-                new_ref = data["result"]["refreshToken"]
-                self._save_tokens(new_acc, new_ref)
-                print("♻️ Token erfolgreich erneuert")
+                self._save_tokens(data["result"]["accessToken"], data["result"]["refreshToken"])
                 return True
-            else:
-                st.error(f"Refresh fehlgeschlagen: {data}")
-                return False
-        except Exception as e:
-            st.error(f"Netzwerkfehler: {e}")
+            return False
+        except:
             return False
 
-    def send_request(self, endpoint, payload):
-        """Sendet Anfrage und kümmert sich um Fehler 108"""
+    def _post_request(self, endpoint, payload):
+        """Wrapper für Auto-Refresh"""
         url = f"{self.root_url}{endpoint}"
         
-        # 1. Versuch
+        # Try 1
         headers = self._generate_headers(self.tokens.get("access_token"))
-        response = requests.post(url, headers=headers, json=payload)
-        data = response.json()
-        
-        # Fehler 108 = Token abgelaufen
+        try:
+            response = requests.post(url, headers=headers, json=payload)
+            data = response.json()
+        except Exception as e:
+            return {"code": -1, "message": str(e)}
+
+        # Fehler 108 -> Token erneuern
         if data.get("code") == 108:
-            print("⚠️ Token abgelaufen. Starte Refresh...")
+            print("🔄 Token Refresh...")
             if self._refresh_token():
-                # 2. Versuch mit neuem Token
+                # Try 2
                 headers = self._generate_headers(self.tokens.get("access_token"))
                 response = requests.post(url, headers=headers, json=payload)
                 data = response.json()
         
         return data
 
-    def toggle_plug(self, turn_on: bool):
-        """Steuert deine spezifische Steckdose"""
-        val = "1" if turn_on else "0"
-        
-        # Lade IDs aus secrets
-        dev_id = st.secrets["aqara"]["device_id"]
-        res_id = st.secrets["aqara"]["resource_id"]
+    # --- METHODEN FÜR DEINE APP.PY ---
 
+    def get_socket_state(self, device_id, resource_id="4.1.85"):
+        # Achtung: Kein access_token Parameter mehr nötig!
         payload = {
-            "resources": [
-                {"subjectId": dev_id, "resourceId": res_id, "value": val}
-            ]
+            "resources": [{"subjectId": device_id, "resourceId": resource_id}]
         }
-        res = self.send_request("/api/resource/update", payload)
-        return res
+        data = self._post_request("/api/resource/query", payload)
+        
+        state = "unknown"
+        if data.get("code") == 0 and data.get("result"):
+            val = data["result"][0]["value"]
+            if val == "1": state = "on"
+            elif val == "0": state = "off"
+            
+        return state, data
 
-# --- STREAMLIT GUI ---
-st.title("💡 Aqara Smart Plug Control")
-
-aqara = AqaraClient()
-
-col1, col2 = st.columns(2)
-
-with col1:
-    if st.button("Strom AN 🟢"):
-        res = aqara.toggle_plug(True)
-        if res.get("code") == 0:
-            st.success("Steckdose eingeschaltet!")
-        else:
-            st.error(f"Fehler: {res}")
-
-with col2:
-    if st.button("Strom AUS 🔴"):
-        res = aqara.toggle_plug(False)
-        if res.get("code") == 0:
-            st.warning("Steckdose ausgeschaltet!")
-        else:
-            st.error(f"Fehler: {res}")
+    def switch_socket(self, device_id, turn_on: bool, resource_id="4.1.85", mode="state"):
+        # Achtung: Kein access_token Parameter mehr nötig!
+        val = "1" if turn_on else "0"
+        payload = {
+            "resources": [{"subjectId": device_id, "resourceId": resource_id, "value": val}]
+        }
+        return self._post_request("/api/resource/update", payload)
