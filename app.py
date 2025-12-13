@@ -834,7 +834,7 @@ def main():
             
             # NEUER BUTTON
             st.write("")
-            st.link_button("☁️ Fotoshare Cloud", "https://fotoshare.co/admin/", use_container_width=True)
+            st.link_button("☁️ Fotoshare Cloud", "https://fotoshare.co/admin/index", use_container_width=True)
 
         with tab_hist:
             show_history(media_factor, cost_per_roll)
