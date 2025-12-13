@@ -647,52 +647,38 @@ def render_admin_panel(printer_cfg, warning_threshold):
                         st.error("Fehler beim Schalten der Steckdose:")
                         st.code(json.dumps(res, indent=2))
 
-        # --- dsrBooth Lockscreen -------------------------------------------
-        with col_dsr:
-            st.subheader("dsrBooth Lockscreen", anchor=False)
+# --- dsrBooth Lockscreen -------------------------------------------
+with col_dsr:
+    st.subheader("dsrBooth Lockscreen", anchor=False)
 
-            if not printer_has_dsr:
-                st.info("Kein dsrBooth-Lockscreen für diese Box hinterlegt.")
-            elif not DSR_ENABLED:
-                st.info(
-                    "dsrBooth-Steuerung ist nicht konfiguriert. "
-                    "Bitte [dsrbooth] mit control_topic in secrets.toml setzen."
-                )
-            else:
-                state = st.session_state.get("lockscreen_state", "off")
+    if not printer_has_dsr:
+        st.info("Kein dsrBooth-Lockscreen für diese Box hinterlegt.")
+    elif not DSR_ENABLED:
+        st.info(
+            "dsrBooth-Steuerung ist nicht konfiguriert. "
+            "Bitte [dsrbooth] mit control_topic in secrets.toml setzen."
+        )
+    else:
+        st.markdown(
+            """
+            **dsrBooth – Gästelockscreen**  
+            Sperrt oder gibt den Gästemodus in dsrBooth frei.  
+            *Da die API keinen Status-Endpunkt bereitstellt, werden die Befehle direkt gesendet.*
+            """
+        )
 
-                click_on, click_off = render_toggle_card(
-                    section_title="dsrBooth – Gästelockscreen",
-                    description=(
-                        "Sperrt oder gibt den Gästemodus in dsrBooth frei. "
-                        "Der Status basiert nur auf der letzten Aktion, da die API keinen "
-                        "Status-Endpunkt bereitstellt."
-                    ),
-                    state=state,
-                    title_on="LOCKSCREEN AKTIV",
-                    title_off="LOCKSCREEN INAKTIV",
-                    title_unknown="STATUS UNBEKANNT",
-                    badge_prefix="Zustand (letzte Aktion)",
-                    icon_on="🔒",
-                    icon_off="🔓",
-                    icon_unknown="⚠️",
-                    btn_left_label="Sperren",
-                    btn_right_label="Freigeben",
-                    btn_left_key="dsr_btn_on",
-                    btn_right_key="dsr_btn_off",
-                )
+        col1, col2 = st.columns(2)
 
-                desired_state = True if click_on else False if click_off else None
+        with col1:
+            if st.button("🔒 Sperren (lock_on)", key="dsr_btn_on", use_container_width=True):
+                send_dsr_command("lock_on")
+                st.success("Lockscreen-Befehl 'lock_on' gesendet.")
 
-                if desired_state is not None and desired_state != (state == "on"):
-                    cmd = "lock_on" if desired_state else "lock_off"
-                    send_dsr_command(cmd)
-                    st.session_state.lockscreen_state = "on" if desired_state else "off"
-                    st.success(
-                        "Lockscreen-Befehl gesendet (aktivieren)."
-                        if desired_state
-                        else "Lockscreen-Befehl gesendet (deaktivieren)."
-                    )
+        with col2:
+            if st.button("🔓 Freigeben (lock_off)", key="dsr_btn_off", use_container_width=True):
+                send_dsr_command("lock_off")
+                st.success("Lockscreen-Befehl 'lock_off' gesendet.")
+
 
 
 # --------------------------------------------------------------------
