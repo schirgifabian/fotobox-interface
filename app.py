@@ -593,8 +593,8 @@ def render_admin_panel(printer_cfg, warning_threshold):
                 )
             else:
                 current_state, debug_data = aqara_client.get_socket_state(
-                AQARA_SOCKET_DEVICE_ID,
-                AQARA_SOCKET_RESOURCE_ID,
+                    AQARA_SOCKET_DEVICE_ID,
+                    AQARA_SOCKET_RESOURCE_ID,
                 )
 
                 st.session_state.socket_debug = debug_data
