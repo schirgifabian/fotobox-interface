@@ -824,7 +824,7 @@ def main():
         
         # NEUER BUTTON
         st.write("")
-        st.link_button("☁️ Fotoshare Cloud", "https://fotoshare.co/admin/", use_container_width=True)
+        st.link_button("☁️ Fotoshare Cloud", "https://fotoshare.co/admin/index", use_container_width=True)
 
     else:
         tab_live, tab_hist = st.tabs(["Live-Status", "Historie & Analyse"])
