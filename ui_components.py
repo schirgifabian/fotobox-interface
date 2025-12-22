@@ -90,7 +90,7 @@ div[data-testid="stMetric"] {
 
 div[data-testid="stMetricLabel"] {
     font-size: 0.8rem !important;
-    font-weight: 600 !important;
+    font-weight: 400 !important;
     color: #94A3B8 !important;
     text-transform: uppercase !important;
     letter-spacing: 0.05em !important;
@@ -98,14 +98,14 @@ div[data-testid="stMetricLabel"] {
 }
 div[data-testid="stMetricValue"] {
     font-size: 1.8rem !important;
-    font-weight: 700 !important;
+    font-weight: 400 !important;
     color: #0F172A !important;
 }
 /* Delta Indikator (die kleine Pille) */
 div[data-testid="stMetricDelta"] {
     font-size: 0.8rem !important;
     margin-top: 8px !important;
-    font-weight: 500 !important;
+    font-weight: 400 !important;
 }
 
 /* 7. DEVICE CARD STYLES */
