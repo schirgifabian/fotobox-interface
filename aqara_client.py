@@ -93,11 +93,9 @@ class AqaraClient:
             print("❌ Kein Refresh Token vorhanden.")
             return False
 
-        # WICHTIG: Wir nutzen jetzt den Intent-Endpoint, nicht mehr /auth/refreshToken
         url = f"{self.root_url}/api"
         headers = self._generate_headers(access_token=None)
         
-        # Neuer Intent für Refresh
         payload = {
             "intent": "config.auth.refreshToken",
             "data": {
@@ -107,10 +105,8 @@ class AqaraClient:
         
         data = self._request_with_retry(url, headers, payload)
         
-        # Aqara antwortet oft mit einer Liste im 'result'
         if data.get("code") == 0:
             try:
-                # Ergebnis parsen (manchmal Liste, manchmal Dict)
                 res = data.get("result")
                 if isinstance(res, list) and len(res) > 0:
                     res = res[0]
@@ -133,7 +129,6 @@ class AqaraClient:
         
         acc_token = self.tokens.get("access_token")
         
-        # Falls kein Token da ist, versuche direkt Refresh (da wir ja einen manuellen Refresh Token haben)
         if not acc_token:
             if self._refresh_token():
                 acc_token = self.tokens.get("access_token")
@@ -143,7 +138,6 @@ class AqaraClient:
         headers = self._generate_headers(acc_token)
         data = self._request_with_retry(url, headers, payload)
 
-        # Fehler 108: Token abgelaufen -> Refresh & Retry
         if data.get("code") == 108:
             print("🔄 Token abgelaufen (Code 108). Refresh...")
             if self._refresh_token():
@@ -184,16 +178,15 @@ class AqaraClient:
     def switch_socket(self, device_id: str, turn_on: bool, resource_id: str = "4.1.85", mode: str = "state") -> Dict:
         value = "2" if mode == "toggle" else ("1" if turn_on else "0")
         
+        # HIER WAR DER FEHLER: Für 'write' senden wir die Liste DIREKT in 'data'
         payload = {
             "intent": "write.resource.device",
-            "data": {
-                "resources": [
-                    {
-                        "subjectId": device_id,
-                        "resourceId": resource_id,
-                        "value": value
-                    }
-                ]
-            }
+            "data": [
+                {
+                    "subjectId": device_id,
+                    "resourceId": resource_id,
+                    "value": value
+                }
+            ]
         }
         return self._post_request("/api", payload)
