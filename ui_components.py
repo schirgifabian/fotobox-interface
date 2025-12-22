@@ -72,7 +72,7 @@ div.stButton > button:hover {
    NEU: DASHBOARD STYLES (Hero Card & Animationen)
    -------------------------------------------------------------------------- */
 
-/* Pulsierende Animation für Status-Punkte */
+/* Pulsierende Animationen für ALLE Farben */
 @keyframes pulse-green {
     0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
     70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
@@ -83,6 +83,21 @@ div.stButton > button:hover {
     70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
     100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
 }
+@keyframes pulse-orange {
+    0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+@keyframes pulse-red {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+@keyframes pulse-gray {
+    0% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(100, 116, 139, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0); }
+}
 
 .status-dot {
     height: 12px;
@@ -92,6 +107,8 @@ div.stButton > button:hover {
     margin-right: 8px;
     flex-shrink: 0;
 }
+
+/* Klassenzuweisung der Animationen */
 .status-pulse-green {
     background-color: #10B981;
     animation: pulse-green 2s infinite;
@@ -100,8 +117,17 @@ div.stButton > button:hover {
     background-color: #3B82F6;
     animation: pulse-blue 2s infinite;
 }
-.status-static-red {
+.status-pulse-orange {
+    background-color: #F59E0B;
+    animation: pulse-orange 2s infinite;
+}
+.status-pulse-red {
     background-color: #EF4444;
+    animation: pulse-red 2s infinite;
+}
+.status-pulse-gray {
+    background-color: #64748B;
+    animation: pulse-gray 2s infinite;
 }
 
 /* Die große Dashboard-Karte */
@@ -217,6 +243,7 @@ def render_hero_card(
     
     # 1. Icon & Animation Logic
     pulse_class = ""
+    dot_color = ""
     
     if status_mode == "printing":
         pulse_class = "status-pulse-blue"
@@ -225,12 +252,17 @@ def render_hero_card(
         pulse_class = "status-pulse-green"
         dot_color = "#10B981"
     elif status_mode == "error":
-        pulse_class = "status-static-red"
+        pulse_class = "status-pulse-red" # Jetzt auch animiert
         dot_color = "#EF4444"
     else:
-        # Fallback
-        pulse_class = "status-dot" 
-        dot_color = "#F59E0B" if "orange" in display_color or "yellow" in display_color else "#64748B"
+        # Check ob Warnung (orange/yellow) vorliegt
+        if "orange" in display_color or "yellow" in display_color:
+            pulse_class = "status-pulse-orange"
+            dot_color = "#F59E0B"
+        else:
+            # Fallback (z.B. Offline/Unbekannt) jetzt auch animiert (Grau)
+            pulse_class = "status-pulse-gray" 
+            dot_color = "#64748B"
 
     clean_text = display_text.replace('✅ ', '').replace('🔴 ', '').replace('⚠️ ', '').replace('🖨️ ', '').replace('⏳ ', '')
 
@@ -252,13 +284,13 @@ def render_hero_card(
 
     icon_bg = f"{dot_color}15" 
 
-    # 3. HTML Zusammenbauen (Ohne Einrückung im String, um Code-Blocks zu verhindern)
+    # 3. HTML Zusammenbauen
     html_content = f"""
 <div class="dashboard-card">
     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
         <div>
             <div style="display: flex; align-items: center; margin-bottom: 8px;">
-                <span class="{pulse_class} status-dot" style="{ 'background-color:' + dot_color if 'pulse' not in pulse_class else '' }"></span>
+                <span class="{pulse_class} status-dot"></span>
                 <span style="font-size: 0.8rem; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em;">System Status</span>
             </div>
             <div style="font-size: 2rem; font-weight: 800; color: #1E293B; line-height: 1.1; margin-bottom: 6px;">
@@ -302,8 +334,6 @@ def render_hero_card(
 </div>
 """
     
-    # Da wir oben den String ohne Einrückung ("flush left") geschrieben haben,
-    # wird er korrekt als HTML interpretiert.
     st.markdown(html_content, unsafe_allow_html=True)
 
 
