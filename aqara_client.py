@@ -41,7 +41,7 @@ class AqaraClient:
         except Exception as e:
             print(f"Fehler beim Speichern der Tokens: {e}")
 
-def _generate_headers(self, access_token: Optional[str] = None) -> Dict[str, str]:
+    def _generate_headers(self, access_token: Optional[str] = None) -> Dict[str, str]:
         nonce = uuid.uuid4().hex
         timestamp = str(int(time.time() * 1000))
         
@@ -54,25 +54,14 @@ def _generate_headers(self, access_token: Optional[str] = None) -> Dict[str, str
         if access_token:
             sign_params["Accesstoken"] = access_token
 
-        # 1. Parameter sortieren und k=v String bauen
-        sorted_params = sorted(sign_params.items(), key=lambda x: x[0])
-        sign_str = "&".join(f"{k}={v}" for k, v in sorted_params)
+        # Parameter sortieren und String bauen
+        sorted_keys = sorted(sign_params.keys())
+        sign_str = "&".join(f"{k}={sign_params[k]}" for k in sorted_keys)
         
-        # 2. String VOR dem Anhängen des Secrets klein machen (außer das Secret selbst!)
-        # Aqara Doku ist hier manchmal widersprüchlich, aber meistens gilt:
-        # Alles lowercase, DANN Secret anhängen, DANN MD5.
-        
-        # Versuch A (Standard V3): String lower, Secret dran, MD5
-        # sign_str_lower = sign_str.lower()
-        # raw_str = sign_str_lower + self.app_secret
-        # sign = hashlib.md5(raw_str.encode("utf-8")).hexdigest()
-
-        # ABER: Dein Code macht "String + Secret", dann alles lower. 
-        # Das funktioniert NUR, wenn dein Secret keine Großbuchstaben hat.
-        
-        # Besserer Weg (wie im Screenshot Debugger impliziert):
-        sign_str_to_hash = (sign_str + self.app_secret).lower()
-        sign = hashlib.md5(sign_str_to_hash.encode("utf-8")).hexdigest()
+        # Signatur berechnen: (String + Secret) -> alles klein -> MD5
+        # Dies ist die robusteste Methode für Aqara V3
+        raw_str = (sign_str + self.app_secret).lower()
+        sign = hashlib.md5(raw_str.encode("utf-8")).hexdigest()
 
         headers = {
             "Content-Type": "application/json",
@@ -147,7 +136,7 @@ def _generate_headers(self, access_token: Optional[str] = None) -> Dict[str, str
         return data
 
     def get_socket_state(self, device_id: str, resource_id: str = "4.1.85") -> Tuple[str, Dict]:
-        device_id = device_id.strip() # Safety trim
+        device_id = device_id.strip() 
         payload = {
             "intent": "query.resource.value",
             "data": {
@@ -164,7 +153,6 @@ def _generate_headers(self, access_token: Optional[str] = None) -> Dict[str, str
             
         if val is None: return "unknown", data
 
-        # Aqara sendet Strings "1"/"0"
         value_str = str(val).lower()
         if value_str in ("1", "true", "on"): return "on", data
         if value_str in ("0", "false", "off"): return "off", data
@@ -172,11 +160,9 @@ def _generate_headers(self, access_token: Optional[str] = None) -> Dict[str, str
         return "unknown", data
 
     def switch_socket(self, device_id: str, turn_on: bool, resource_id: str = "4.1.85", mode: str = "state") -> Dict:
-        # Wert MUSS ein String sein ("0" oder "1"), genau wie im Debugger
         value = "2" if mode == "toggle" else ("1" if turn_on else "0")
-        device_id = device_id.strip() # Wichtig: Leerzeichen entfernen
+        device_id = device_id.strip()
         
-        # Standard V3 Struktur
         payload = {
             "intent": "write.resource.device",
             "data": [
@@ -192,5 +178,4 @@ def _generate_headers(self, access_token: Optional[str] = None) -> Dict[str, str
             ]
         }
         
-        print(f"Sende an Aqara: {json.dumps(payload)}") # Debug Log im Terminal
         return self._post_request("/api", payload)
