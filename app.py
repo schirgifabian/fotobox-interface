@@ -196,18 +196,38 @@ def send_dsr_command(cmd: str) -> None:
 # --------------------------------------------------------------------
 # AQARA – KONFIG (Optimiert 3.B)
 # --------------------------------------------------------------------
+# app.py - Ersetze die bestehende init_aqara Funktion hiermit:
+
 def init_aqara() -> Tuple[bool, Optional[AqaraClient], Optional[str], str]:
     try:
         if "aqara" not in st.secrets:
             return False, None, None, "4.1.85"
             
-        aqara_cfg = st.secrets["aqara"]
-        # Client liest Secrets und Tokens jetzt selbständig
+        # Debugging: Wir probieren den Login manuell und zeigen das Ergebnis
         client = AqaraClient()
         
+        # Test: Haben wir einen Token bekommen?
+        if not client.tokens.get("access_token"):
+            st.error("❌ Aqara Login fehlgeschlagen! Keine tokens.json erstellt.")
+            
+            # Wir machen manuell einen Request, um den Fehler zu sehen
+            url = f"{client.root_url}/auth/token"
+            headers = client._generate_headers(access_token=None)
+            payload = {"intent": 0}
+            data = client._request_with_retry(url, headers, payload)
+            
+            st.code(f"Antwort vom Aqara Server:\n{json.dumps(data, indent=2)}", language="json")
+            
+            if data.get("code") == 302:
+                 st.warning("⚠️ Fehler 302: Signatur falsch. Bitte App ID & Key ID prüfen.")
+            elif data.get("code") == 301:
+                 st.warning("⚠️ Fehler 301: Falsche Region. Ist dein Aqara-Konto auf Europa eingestellt?")
+                 
+        aqara_cfg = st.secrets["aqara"]
         return True, client, aqara_cfg["device_id"], aqara_cfg.get("resource_id", "4.1.85")
+        
     except Exception as e:
-        print(f"Aqara Init Fehler: {e}")
+        st.error(f"Aqara Init Fehler: {e}")
         return False, None, None, "4.1.85"
 
 AQARA_ENABLED, aqara_client, AQARA_SOCKET_DEVICE_ID, AQARA_SOCKET_RESOURCE_ID = init_aqara()
