@@ -51,7 +51,7 @@ PRINTERS = {
         "default_max_prints": 400,
         "cost_per_roll_eur": 46.59,
         "has_admin": True,
-        "has_aqara": True,
+        "has_aqara": False,
         "has_dsr": True,
         "media_factor": 1,
     },
