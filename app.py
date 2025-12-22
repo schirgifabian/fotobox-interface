@@ -266,17 +266,41 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
 
         heartbeat_info = f" (vor {minutes_diff} Min)" if minutes_diff is not None else ""
 
+        # NEUER HERO HEADER IN show_live_status (app.py)
         st.markdown(
             f"""
-            <div style='text-align: left; margin-top: 0;'>
-                <h2 style='color:{display_color}; font-weight: 700; margin-bottom: 4px;'>
-                    {display_text}
-                </h2>
-                <div style='color: #666; font-size: 14px; margin-bottom: 12px;'>
-                    Letztes Signal: {timestamp}{heartbeat_info}
+            <div style="
+                background: linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%);
+                padding: 30px;
+                border-radius: 24px;
+                border: 1px solid #E2E8F0;
+                margin-bottom: 24px;
+                text-align: center;
+                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+            ">
+                <div style="font-size: 1rem; color: #64748B; margin-bottom: 8px; font-weight: 600;">
+                    AKTUELLER STATUS
                 </div>
-                <div style='color: #888; font-size: 12px; margin-bottom: 20px;'>
-                    Statusmeldung: {raw_status}
+                <div style="
+                    font-size: 2.5rem; 
+                    font-weight: 800; 
+                    color: {display_color};
+                    letter-spacing: -0.02em;
+                    margin-bottom: 8px;
+                ">
+                    {display_text.replace('✅ ', '').replace('🔴 ', '').replace('⚠️ ', '')}
+                </div>
+                 <div style="
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    background: #F1F5F9;
+                    padding: 6px 16px;
+                    border-radius: 99px;
+                    color: #475569;
+                    font-size: 0.85rem;
+                ">
+                    <span>🕒</span> Letztes Signal: {timestamp} {heartbeat_info}
                 </div>
             </div>
             """,
