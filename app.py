@@ -34,7 +34,7 @@ from ui_components import (
     inject_custom_css,
     render_toggle_card,
     render_fleet_overview,
-    # render_status_help wurde entfernt
+    render_hero_card,
 )
 
 # --------------------------------------------------------------------
@@ -267,130 +267,57 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
 
         heartbeat_info = f" (vor {minutes_diff} Min)" if minutes_diff is not None else ""
 
-        # HERO HEADER (Modernes Design)
-        st.markdown(
-            f"""
-            <div style="
-                background: linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%);
-                padding: 30px;
-                border-radius: 24px;
-                border: 1px solid #E2E8F0;
-                margin-bottom: 24px;
-                text-align: center;
-                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
-            ">
-                <div style="font-size: 1rem; color: #64748B; margin-bottom: 8px; font-weight: 600;">
-                    AKTUELLER STATUS
-                </div>
-                <div style="
-                    font-size: 2.5rem; 
-                    font-weight: 800; 
-                    color: {display_color};
-                    letter-spacing: -0.02em;
-                    margin-bottom: 8px;
-                ">
-                    {display_text.replace('✅ ', '').replace('🔴 ', '').replace('⚠️ ', '')}
-                </div>
-                 <div style="
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 6px;
-                    background: #F1F5F9;
-                    padding: 6px 16px;
-                    border-radius: 99px;
-                    color: #475569;
-                    font-size: 0.85rem;
-                ">
-                    <span>🕒</span> Letztes Signal: {timestamp} {heartbeat_info}
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        if status_mode == "error":
-            st.error("Bitte Drucker und Papier prüfen (Störung aktiv).")
-        elif status_mode == "stale":
-            st.warning("Seit einigen Minuten keine Daten – Verbindung / Script prüfen.")
-
-        # PAPIER STATUS & INTELLIGENTE REICHWEITE (Feature 2.C)
-        st.markdown("### Papierstatus")
-
-        prints_since_reset = max(0, (st.session_state.max_prints or 0) - media_remaining)
-
+        # --- BERECHNUNGEN VORZIEHEN (für Unified Card) ---
         stats = compute_print_stats(df, window_min=30, media_factor=media_factor)
+        prints_since_reset = max(0, (st.session_state.max_prints or 0) - media_remaining)
         
+        # Prognose berechnen
         forecast_str = "–"
         end_time_str = ""
-
         if status_mode == "error":
             forecast_str = "Gestört"
         else:
             ppm = stats.get("ppm_window") or stats.get("ppm_overall")
-            # Fallback Annahme, wenn kein Durchsatz
             if ppm and ppm > 0 and media_remaining > 0:
                 minutes_left = media_remaining / ppm
-                
-                # Berechne voraussichtliche Endzeit
                 now = datetime.datetime.now()
                 end_time = now + datetime.timedelta(minutes=minutes_left)
                 end_time_formatted = end_time.strftime("%H:%M")
                 
                 forecast_str = humanize_minutes(minutes_left)
                 end_time_str = f" (bis ca. {end_time_formatted} Uhr)"
-                
             elif media_remaining > 0:
                 forecast_str = "Warte auf Drucke..."
             else:
                 forecast_str = "0 Min."
-
-        colA, colB, colC = st.columns(3)
-        colA.metric("Verbleibend", f"{media_remaining} Stk", f"von {st.session_state.max_prints}")
-        # Hier wird die neue Uhrzeit angezeigt
-        colB.metric("Restlaufzeit", forecast_str, end_time_str)
-
+        
+        # Kosten berechnen
         cost_txt = "–"
         if cost_per_roll and (st.session_state.max_prints or 0) > 0:
             try:
                 cost_per_print = cost_per_roll / st.session_state.max_prints
                 cost_used = prints_since_reset * cost_per_print
                 cost_txt = f"{cost_used:0.2f} €"
-                colC.metric("Kosten (live)", cost_txt)
-            except Exception:
-                colC.metric("Kosten (live)", "–")
-        else:
-            colC.metric("Kosten (live)", "–")
+            except Exception: pass
 
-        # Progress-Bar
-        if status_mode == "error" and media_remaining == 0:
-            bar_color = "red"
-            progress_val = 0
-        else:
-            if not st.session_state.max_prints:
-                progress_val = 0
-            else:
-                progress_val = max(
-                    0.0, min(1.0, media_remaining / st.session_state.max_prints)
-                )
-
-            if progress_val < 0.1:
-                bar_color = "red"
-            elif progress_val < 0.25:
-                bar_color = "orange"
-            else:
-                bar_color = "blue"
-
-        st.markdown(
-            f"""
-            <style>
-            .stProgress > div > div > div > div {{
-                background-color: {bar_color};
-            }}
-            </style>
-            """,
-            unsafe_allow_html=True,
+        # --- NEUES UI RENDERN ---
+        render_hero_card(
+            status_mode=status_mode,
+            display_text=display_text,
+            display_color=display_color,
+            timestamp=timestamp,
+            heartbeat_info=heartbeat_info,
+            media_remaining=media_remaining,
+            max_prints=st.session_state.max_prints or 400,
+            forecast_str=forecast_str,
+            end_time_str=end_time_str,
+            cost_txt=cost_txt
         )
-        st.progress(progress_val)
+
+        if status_mode == "error":
+            st.error("Bitte Drucker und Papier prüfen (Störung aktiv).")
+        elif status_mode == "stale":
+            st.warning("Seit einigen Minuten keine Daten – Verbindung / Script prüfen.")
 
     except Exception as e:
         st.error(f"Fehler bei der Datenverarbeitung: {e}")
