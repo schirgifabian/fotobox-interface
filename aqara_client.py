@@ -19,14 +19,9 @@ class AqaraClient:
             st.error(f"Aqara Secrets fehlen: {e}")
             raise e
         
-        # Basis-URL für Europa
         self.root_url = "https://open-ger.aqara.com/v3.0/open"
         self.tokens: Dict[str, str] = self._load_tokens()
         
-        if not self.tokens.get("access_token"):
-            print("⚠️ Keine Tokens gefunden. Versuche initialen Login...")
-            self._get_new_token()
-
     def _load_tokens(self) -> Dict[str, str]:
         if not os.path.exists(TOKEN_FILE):
             return {}
@@ -42,6 +37,7 @@ class AqaraClient:
         try:
             with open(TOKEN_FILE, "w") as f:
                 json.dump(self.tokens, f)
+            print("✅ Tokens erfolgreich gespeichert.")
         except Exception as e:
             print(f"Fehler beim Speichern der Tokens: {e}")
 
@@ -77,11 +73,9 @@ class AqaraClient:
         return headers
 
     def _request_with_retry(self, url: str, headers: Dict, payload: Dict, retries: int = 3) -> Dict[str, Any]:
-        """Hilfsfunktion: Führt Request mit Exponential Backoff aus"""
         for i in range(retries):
             try:
-                response = requests.post(url, headers=headers, json=payload, timeout=5)
-                # Bei 5xx Server Errors auch retryen, sonst json decoden
+                response = requests.post(url, headers=headers, json=payload, timeout=10)
                 if 500 <= response.status_code < 600:
                     raise requests.exceptions.RequestException(f"Server Error {response.status_code}")
                 return response.json()
@@ -89,58 +83,67 @@ class AqaraClient:
                 wait_time = 2 ** i 
                 print(f"Request Error ({e}). Retry in {wait_time}s...")
                 time.sleep(wait_time)
-        
         return {"code": -1, "message": "Max retries exceeded"}
 
-    def _get_new_token(self) -> bool:
-        # Auth Endpoint ist direkt erreichbar
-        url = f"{self.root_url}/auth/token"
-        headers = self._generate_headers(access_token=None)
-        payload = {"intent": 0}
-        
-        data = self._request_with_retry(url, headers, payload)
-        
-        if data.get("code") == 0:
-            print("✅ Neuer Token erfolgreich empfangen.")
-            res = data["result"]
-            self._save_tokens(res["accessToken"], res["refreshToken"])
-            return True
-        else:
-            print(f"❌ Fehler beim Token-Holen: {data}")
-            return False
-
     def _refresh_token(self) -> bool:
-        url = f"{self.root_url}/auth/refreshToken"
+        print("🔄 Versuche Token zu erneuern (Refresh)...")
         current_refresh = self.tokens.get("refresh_token")
         
         if not current_refresh:
-            return self._get_new_token()
+            print("❌ Kein Refresh Token vorhanden.")
+            return False
 
+        # WICHTIG: Wir nutzen jetzt den Intent-Endpoint, nicht mehr /auth/refreshToken
+        url = f"{self.root_url}/api"
         headers = self._generate_headers(access_token=None)
-        payload = {"refreshToken": current_refresh}
+        
+        # Neuer Intent für Refresh
+        payload = {
+            "intent": "config.auth.refreshToken",
+            "data": {
+                "refreshToken": current_refresh
+            }
+        }
         
         data = self._request_with_retry(url, headers, payload)
         
+        # Aqara antwortet oft mit einer Liste im 'result'
         if data.get("code") == 0:
-            res = data["result"]
-            self._save_tokens(res["accessToken"], res["refreshToken"])
-            return True
+            try:
+                # Ergebnis parsen (manchmal Liste, manchmal Dict)
+                res = data.get("result")
+                if isinstance(res, list) and len(res) > 0:
+                    res = res[0]
+                
+                new_access = res.get("accessToken")
+                new_refresh = res.get("refreshToken")
+                
+                if new_access and new_refresh:
+                    self._save_tokens(new_access, new_refresh)
+                    print("✅ Token erfolgreich erneuert!")
+                    return True
+            except Exception as e:
+                print(f"Fehler beim Parsen der Refresh-Antwort: {e}")
         
-        print("Refresh fehlgeschlagen, versuche neuen Token...")
-        return self._get_new_token()
+        print(f"❌ Refresh fehlgeschlagen: {data}")
+        return False
 
     def _post_request(self, endpoint: str, payload: Dict) -> Dict[str, Any]:
         url = f"{self.root_url}{endpoint}"
         
-        if not self.tokens.get("access_token"):
-            self._get_new_token()
-
         acc_token = self.tokens.get("access_token")
-        headers = self._generate_headers(acc_token)
         
+        # Falls kein Token da ist, versuche direkt Refresh (da wir ja einen manuellen Refresh Token haben)
+        if not acc_token:
+            if self._refresh_token():
+                acc_token = self.tokens.get("access_token")
+            else:
+                return {"code": 108, "message": "No token available"}
+
+        headers = self._generate_headers(acc_token)
         data = self._request_with_retry(url, headers, payload)
 
-        # Fehler 108: Token Expired -> Refresh & Retry
+        # Fehler 108: Token abgelaufen -> Refresh & Retry
         if data.get("code") == 108:
             print("🔄 Token abgelaufen (Code 108). Refresh...")
             if self._refresh_token():
@@ -151,20 +154,17 @@ class AqaraClient:
         return data
 
     def get_socket_state(self, device_id: str, resource_id: str = "4.1.85") -> Tuple[str, Dict]:
-        # KORREKTUR: Nutzung des 'query.resource.value' Intent über /api
         payload = {
             "intent": "query.resource.value",
             "data": {
                 "resources": [{"subjectId": device_id, "resourceId": resource_id}]
             }
         }
-        # Endpoint ist immer /api für Intents
         data = self._post_request("/api", payload)
         
         val = None
         try:
             result_list = data.get("result", [])
-            # result ist oft eine Liste von Dicts
             if result_list and isinstance(result_list, list):
                 val = result_list[0].get("value")
         except Exception:
@@ -184,7 +184,6 @@ class AqaraClient:
     def switch_socket(self, device_id: str, turn_on: bool, resource_id: str = "4.1.85", mode: str = "state") -> Dict:
         value = "2" if mode == "toggle" else ("1" if turn_on else "0")
         
-        # KORREKTUR: Nutzung des 'write.resource.device' Intent über /api
         payload = {
             "intent": "write.resource.device",
             "data": {
@@ -197,5 +196,4 @@ class AqaraClient:
                 ]
             }
         }
-        # Endpoint ist immer /api für Intents
         return self._post_request("/api", payload)
