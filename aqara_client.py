@@ -41,7 +41,7 @@ class AqaraClient:
         except Exception as e:
             print(f"Fehler beim Speichern der Tokens: {e}")
 
-    def _generate_headers(self, access_token: Optional[str] = None) -> Dict[str, str]:
+def _generate_headers(self, access_token: Optional[str] = None) -> Dict[str, str]:
         nonce = uuid.uuid4().hex
         timestamp = str(int(time.time() * 1000))
         
@@ -52,13 +52,27 @@ class AqaraClient:
             "Time": timestamp,
         }
         if access_token:
-            # WICHTIG: API erwartet oft 'Accesstoken' (Case sensitive signature check)
             sign_params["Accesstoken"] = access_token
 
-        sign_str = "&".join(f"{k}={sign_params[k]}" for k in sorted(sign_params.keys()))
-        sign_str += self.app_secret
+        # 1. Parameter sortieren und k=v String bauen
+        sorted_params = sorted(sign_params.items(), key=lambda x: x[0])
+        sign_str = "&".join(f"{k}={v}" for k, v in sorted_params)
         
-        sign = hashlib.md5(sign_str.lower().encode("utf-8")).hexdigest()
+        # 2. String VOR dem Anhängen des Secrets klein machen (außer das Secret selbst!)
+        # Aqara Doku ist hier manchmal widersprüchlich, aber meistens gilt:
+        # Alles lowercase, DANN Secret anhängen, DANN MD5.
+        
+        # Versuch A (Standard V3): String lower, Secret dran, MD5
+        # sign_str_lower = sign_str.lower()
+        # raw_str = sign_str_lower + self.app_secret
+        # sign = hashlib.md5(raw_str.encode("utf-8")).hexdigest()
+
+        # ABER: Dein Code macht "String + Secret", dann alles lower. 
+        # Das funktioniert NUR, wenn dein Secret keine Großbuchstaben hat.
+        
+        # Besserer Weg (wie im Screenshot Debugger impliziert):
+        sign_str_to_hash = (sign_str + self.app_secret).lower()
+        sign = hashlib.md5(sign_str_to_hash.encode("utf-8")).hexdigest()
 
         headers = {
             "Content-Type": "application/json",
