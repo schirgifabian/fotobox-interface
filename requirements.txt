@@ -5,6 +5,6 @@ requests
 streamlit-lottie
 streamlit-autorefresh
 extra-streamlit-components
-fpdf
+fpdf2
 matplotlib
 numpy
