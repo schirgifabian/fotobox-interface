@@ -3,10 +3,9 @@
 import streamlit as st
 import textwrap
 from sheets_helpers import get_data_event, get_spreadsheet, get_fleet_data_parallel
-from status_logic import HEARTBEAT_WARN_MINUTES
 
 # -----------------------------------------------------------------------------
-# GLOBAL STYLING (PERFEKTIONIERT)
+# GLOBAL STYLING (PERFEKTIONIERT + DASHBOARD UI)
 # -----------------------------------------------------------------------------
 MODERN_CSS = """
 <style>
@@ -69,45 +68,103 @@ div.stButton > button:hover {
     transform: translateY(-1px);
 }
 
-/* 6. Metrics (Papierstatus) - HÖHE REPARIERT */
-div[data-testid="stMetric"] {
-    background-color: #FFFFFF !important;
-    border: 1px solid #E2E8F0 !important;
-    border-radius: 16px !important;
-    padding: 24px 16px !important;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.02) !important;
-    text-align: center !important;
-    
-    /* FIX: Flexible Höhe für Mobile */
-    min-height: 160px !important; 
-    height: auto !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: center !important;
-    align-items: center !important;
+/* --------------------------------------------------------------------------
+   NEU: DASHBOARD STYLES (Hero Card & Animationen)
+   -------------------------------------------------------------------------- */
+
+/* Pulsierende Animation für Status-Punkte */
+@keyframes pulse-green {
+    0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+@keyframes pulse-blue {
+    0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
 }
 
-div[data-testid="stMetricLabel"] {
-    font-size: 0.8rem !important;
-    font-weight: 400 !important;
-    color: #94A3B8 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.05em !important;
-    margin-bottom: 4px !important;
+.status-dot {
+    height: 12px;
+    width: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 8px;
+    flex-shrink: 0;
 }
-div[data-testid="stMetricValue"] {
-    font-size: 1.8rem !important;
-    font-weight: 400 !important;
-    color: #0F172A !important;
+.status-pulse-green {
+    background-color: #10B981;
+    animation: pulse-green 2s infinite;
 }
-/* Delta Indikator (die kleine Pille) */
-div[data-testid="stMetricDelta"] {
-    font-size: 0.8rem !important;
-    margin-top: 8px !important;
-    font-weight: 400 !important;
+.status-pulse-blue {
+    background-color: #3B82F6;
+    animation: pulse-blue 2s infinite;
+}
+.status-static-red {
+    background-color: #EF4444;
 }
 
-/* 7. DEVICE CARD STYLES */
+/* Die große Dashboard-Karte */
+.dashboard-card {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    margin-bottom: 24px;
+}
+
+/* Grid Layout für Metriken innerhalb der Karte */
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid #F1F5F9;
+}
+
+.metric-item {
+    text-align: center;
+}
+
+.metric-label {
+    font-size: 0.75rem;
+    color: #94A3B8;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.metric-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #1E293B;
+}
+
+.metric-sub {
+    font-size: 0.7rem;
+    color: #64748B;
+    margin-top: 2px;
+}
+
+/* Custom Progress Bar */
+.progress-bg {
+    background-color: #F1F5F9;
+    border-radius: 99px;
+    height: 12px;
+    width: 100%;
+    margin-top: 8px;
+    overflow: hidden;
+}
+.progress-fill {
+    height: 100%;
+    border-radius: 99px;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Device Cards Styles (Legacy) */
 .device-card {
     background: white;
     border-radius: 16px;
@@ -116,83 +173,19 @@ div[data-testid="stMetricDelta"] {
     border: 1px solid #E2E8F0;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
     position: relative;
-    
-    /* Layout Fixes */
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    
-    /* FIX: Flexible Höhe statt fixer Höhe für Mobile-Optimierung (4.A) */
     min-height: 190px; 
     height: auto;
-}
-
-.device-header {
-    display: flex;
-    align-items: flex-start; 
-    margin-bottom: 12px;
-    padding-right: 0px; 
-}
-
-.device-icon-box {
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 24px;
-    margin-right: 16px;
-    flex-shrink: 0;
-}
-
-.device-content {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    padding-top: 2px;
 }
-
-.device-title-label {
-    font-size: 0.7rem; 
-    color: #94A3B8; 
-    text-transform: uppercase; 
-    letter-spacing: 0.08em; 
-    font-weight: 600;
-    margin-bottom: 4px;
-}
-
-.device-status-text {
-    font-size: 1.1rem; 
-    font-weight: 700; 
-    color: #1E293B;
-    line-height: 1.2;
-}
-
-.device-description {
-    font-size: 0.85rem; 
-    color: #64748B; 
-    line-height: 1.5;
-    font-weight: 400;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-
-/* Badge absolut oben rechts */
-.status-badge-absolute {
-    position: absolute;
-    top: 24px;
-    right: 24px;
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-size: 0.7rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    background: #F1F5F9;
-}
+.device-header { display: flex; align-items: flex-start; margin-bottom: 12px; padding-right: 0px; }
+.device-icon-box { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-right: 16px; flex-shrink: 0; }
+.device-content { display: flex; flex-direction: column; justify-content: center; padding-top: 2px; }
+.device-title-label { font-size: 0.7rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; margin-bottom: 4px; }
+.device-status-text { font-size: 1.1rem; font-weight: 700; color: #1E293B; line-height: 1.2; }
+.device-description { font-size: 0.85rem; color: #64748B; line-height: 1.5; font-weight: 400; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.status-badge-absolute { position: absolute; top: 24px; right: 24px; padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; background: #F1F5F9; }
 
 </style>
 """
@@ -202,8 +195,125 @@ def inject_custom_css():
 
 
 # -----------------------------------------------------------------------------
-# HELPER COMPONENTS
+# CORE COMPONENTS
 # -----------------------------------------------------------------------------
+
+def render_hero_card(
+    status_mode: str,
+    display_text: str,
+    display_color: str,
+    timestamp: str,
+    heartbeat_info: str,
+    media_remaining: int,
+    max_prints: int,
+    forecast_str: str,
+    end_time_str: str,
+    cost_txt: str
+):
+    """
+    Rendert EINE große Karte (Hero Widget), die Status, Metriken und Progress Bar vereint.
+    Ersetzt separate st.metric und st.markdown Aufrufe.
+    """
+    
+    # 1. Icon & Animation Logic
+    pulse_class = ""
+    # display_color ist z.B. "green", "blue", "red" aus der Logic, oder Hex
+    
+    if status_mode == "printing":
+        pulse_class = "status-pulse-blue"
+        dot_color = "#3B82F6"
+    elif status_mode == "ready":
+        pulse_class = "status-pulse-green"
+        dot_color = "#10B981"
+    elif status_mode == "error":
+        pulse_class = "status-static-red"
+        dot_color = "#EF4444"
+    else:
+        # Fallback (Orange etc.)
+        pulse_class = "status-dot" 
+        dot_color = "#F59E0B" if "orange" in display_color or "yellow" in display_color else "#64748B"
+
+    # Text bereinigen (Emojis raus, da wir den Dot haben)
+    clean_text = display_text.replace('✅ ', '').replace('🔴 ', '').replace('⚠️ ', '').replace('🖨️ ', '').replace('⏳ ', '')
+
+    # 2. Progress Bar Logic
+    if not max_prints or max_prints <= 0:
+        pct = 0
+    else:
+        pct = max(0, min(100, int((media_remaining / max_prints) * 100)))
+    
+    # Farbe des Balkens
+    if pct < 10: bar_color = "#EF4444" # Rot
+    elif pct < 25: bar_color = "#F59E0B" # Orange
+    else: bar_color = "#3B82F6" # Blau
+
+    # Icon für rechts oben
+    icon_char = '📸'
+    if status_mode == 'printing': icon_char = '🖨️'
+    elif status_mode == 'error': icon_char = '🔧'
+    elif status_mode == 'low_paper': icon_char = '⚠️'
+    elif status_mode == 'cooldown': icon_char = '❄️'
+
+    # Background-Farbe des Icons leicht transparent basierend auf Status
+    icon_bg = f"{dot_color}15" # 15 = ca 8% opacity hex
+
+    # 3. HTML Zusammenbauen
+    html = f"""
+    <div class="dashboard-card">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+                <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                    <span class="{pulse_class} status-dot" style="{ 'background-color:' + dot_color if 'pulse' not in pulse_class else '' }"></span>
+                    <span style="font-size: 0.8rem; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em;">System Status</span>
+                </div>
+                <div style="font-size: 2rem; font-weight: 800; color: #1E293B; line-height: 1.1; margin-bottom: 6px;">
+                    {clean_text}
+                </div>
+                <div style="font-size: 0.8rem; color: #94A3B8; display: flex; align-items: center; gap: 4px;">
+                    <span>🕒</span> {timestamp} {heartbeat_info}
+                </div>
+            </div>
+            
+            <div style="background: {icon_bg}; color: {dot_color}; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px;">
+                 {icon_char}
+            </div>
+        </div>
+
+        <div style="margin-top: 24px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 6px; font-weight: 500; color: #475569;">
+                <span>Verbrauch ({pct}%)</span>
+                <span>{media_remaining} / {max_prints} Bilder</span>
+            </div>
+            <div class="progress-bg">
+                <div class="progress-fill" style="width: {pct}%; background-color: {bar_color};"></div>
+            </div>
+        </div>
+
+        <div class="metrics-grid">
+            <div class="metric-item">
+                <div class="metric-label">Papier</div>
+                <div class="metric-value" style="color: {bar_color}">{media_remaining}</div>
+                <div class="metric-sub">Verbleibend</div>
+            </div>
+            
+            <div class="metric-item" style="border-left: 1px solid #F1F5F9; border-right: 1px solid #F1F5F9;">
+                <div class="metric-label">Prognose</div>
+                <div class="metric-value">{forecast_str.split(' ')[0]}</div>
+                <div class="metric-sub">{ " ".join(forecast_str.split(' ')[1:]) if 'Min' in forecast_str else forecast_str }</div>
+                <div class="metric-sub" style="font-size: 0.65rem; color: #CBD5E1; margin-top:0;">{end_time_str}</div>
+            </div>
+            
+            <div class="metric-item">
+                <div class="metric-label">Kosten</div>
+                <div class="metric-value">{cost_txt}</div>
+                <div class="metric-sub">Laufend</div>
+            </div>
+        </div>
+    </div>
+    """
+    
+    st.markdown(html, unsafe_allow_html=True)
+
 
 def render_toggle_card(
     section_title: str,
@@ -241,7 +351,6 @@ def render_toggle_card(
         status_text = title_unknown
         badge_border = "rgba(217, 119, 6, 0.1)"
 
-    # HTML sicher rendern mit dedent (Verhindert Code-Block-Fehler)
     html_content = textwrap.dedent(f"""
         <div class="device-card">
             <div class="status-badge-absolute" style="background-color:{bg_theme}; color:{color_theme}; border: 1px solid {badge_border};">
@@ -263,7 +372,6 @@ def render_toggle_card(
     """)
     st.markdown(html_content, unsafe_allow_html=True)
 
-    # Buttons
     col1, col2 = st.columns(2)
     with col1:
         click_left = st.button(btn_left_label, key=btn_left_key, use_container_width=True)
@@ -271,32 +379,19 @@ def render_toggle_card(
         click_right = st.button(btn_right_label, key=btn_right_key, use_container_width=True)
     
     st.write("") 
-
     return click_left, click_right
 
 
 def render_fleet_overview(PRINTERS: dict):
-    """
-    Rendert die Übersicht aller Drucker. 
-    Nutzt 'get_fleet_data_parallel' für schnelle Ladezeiten.
-    """
     st.markdown("### 📸 Alle Fotoboxen")
-
     printers_secrets = st.secrets.get("printers", {})
-    
-    # 1. Parallel Load: Alle Daten gleichzeitig holen
-    # Dies verhindert, dass wir N mal warten müssen (N = Anzahl Drucker)
     fleet_data = get_fleet_data_parallel(PRINTERS, printers_secrets)
 
     cols = st.columns(len(PRINTERS))
-    
     idx = 0
     for name, cfg in PRINTERS.items():
-        
-        # Daten aus dem parallelen Fetch holen
         data = fleet_data.get(name)
         
-        # Defaults (falls Fehler oder Offline)
         last_ts = "N/A"
         status_color = "#64748B" # Grau
         status_bg = "#F1F5F9"
@@ -308,17 +403,16 @@ def render_fleet_overview(PRINTERS: dict):
             last_ts = data.get("timestamp", "N/A")
             state = data.get("state", "unknown")
             
-            # Farb-Logik basierend auf dem ermittelten State
             if state == "error":
-                status_color = "#EF4444" # Rot
+                status_color = "#EF4444" 
                 status_bg = "#FEF2F2"
                 status_msg = "Störung"
             elif state == "printing":
-                status_color = "#3B82F6" # Blau
+                status_color = "#3B82F6"
                 status_bg = "#EFF6FF"
                 status_msg = "Druckt"
             elif state == "ready":
-                status_color = "#10B981" # Grün
+                status_color = "#10B981"
                 status_bg = "#ECFDF5"
                 status_msg = "Bereit"
 
@@ -368,7 +462,6 @@ def render_health_overview(aqara_enabled: bool, dsr_enabled: bool):
     sheets_ok = False
     try:
         if st.session_state.get("sheet_id"):
-            # Nur checken, ob das Objekt existiert/geladen werden kann
             _ = get_spreadsheet(st.session_state.get("sheet_id"))
             sheets_ok = True
     except: pass
@@ -383,12 +476,3 @@ def render_health_overview(aqara_enabled: bool, dsr_enabled: bool):
         html_items += f"""<div style="display:flex; align-items:center; gap:6px; margin-right:16px;"><span style="color:{color}; font-size:12px;">●</span><span style="font-size:12px; font-weight:500; color:#475569;">{name}</span></div>"""
         
     st.markdown(f"""<div style="display: flex; flex-wrap: wrap; background: white; padding: 8px 16px; border-radius: 99px; border: 1px solid #E2E8F0; width: fit-content; margin-bottom: 24px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">{html_items}</div>""", unsafe_allow_html=True)
-
-
-def render_status_help(warning_threshold: int):
-    with st.expander("ℹ️  Hilfe & Legende"):
-        st.markdown(f"""
-            <div style="font-size: 0.9rem; color: #475569;">
-            **Status:** <span style="color:#10B981">●</span> Bereit &nbsp; <span style="color:#F59E0B">●</span> Papier < {warning_threshold} &nbsp; <span style="color:#EF4444">●</span> Störung &nbsp; <span style="color:#64748B">●</span> Veraltet
-            </div>
-        """, unsafe_allow_html=True)
