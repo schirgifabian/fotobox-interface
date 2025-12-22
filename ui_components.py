@@ -211,13 +211,12 @@ def render_hero_card(
     cost_txt: str
 ):
     """
-    Rendert EINE große Karte (Hero Widget), die Status, Metriken und Progress Bar vereint.
-    Ersetzt separate st.metric und st.markdown Aufrufe.
+    Rendert EINE große Karte (Hero Widget).
+    FIX: textwrap.dedent verhindert, dass HTML als Code-Block angezeigt wird.
     """
     
     # 1. Icon & Animation Logic
     pulse_class = ""
-    # display_color ist z.B. "green", "blue", "red" aus der Logic, oder Hex
     
     if status_mode == "printing":
         pulse_class = "status-pulse-blue"
@@ -229,11 +228,10 @@ def render_hero_card(
         pulse_class = "status-static-red"
         dot_color = "#EF4444"
     else:
-        # Fallback (Orange etc.)
+        # Fallback
         pulse_class = "status-dot" 
         dot_color = "#F59E0B" if "orange" in display_color or "yellow" in display_color else "#64748B"
 
-    # Text bereinigen (Emojis raus, da wir den Dot haben)
     clean_text = display_text.replace('✅ ', '').replace('🔴 ', '').replace('⚠️ ', '').replace('🖨️ ', '').replace('⏳ ', '')
 
     # 2. Progress Bar Logic
@@ -242,23 +240,21 @@ def render_hero_card(
     else:
         pct = max(0, min(100, int((media_remaining / max_prints) * 100)))
     
-    # Farbe des Balkens
-    if pct < 10: bar_color = "#EF4444" # Rot
-    elif pct < 25: bar_color = "#F59E0B" # Orange
-    else: bar_color = "#3B82F6" # Blau
+    if pct < 10: bar_color = "#EF4444" 
+    elif pct < 25: bar_color = "#F59E0B" 
+    else: bar_color = "#3B82F6" 
 
-    # Icon für rechts oben
     icon_char = '📸'
     if status_mode == 'printing': icon_char = '🖨️'
     elif status_mode == 'error': icon_char = '🔧'
     elif status_mode == 'low_paper': icon_char = '⚠️'
     elif status_mode == 'cooldown': icon_char = '❄️'
 
-    # Background-Farbe des Icons leicht transparent basierend auf Status
-    icon_bg = f"{dot_color}15" # 15 = ca 8% opacity hex
+    icon_bg = f"{dot_color}15" 
 
-    # 3. HTML Zusammenbauen
-    html = f"""
+    # 3. HTML Zusammenbauen (Mit textwrap.dedent!)
+    # WICHTIG: Das f"""...""" muss direkt am Rand stehen oder mit dedent bereinigt werden.
+    html_content = f"""
     <div class="dashboard-card">
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
             <div>
@@ -312,7 +308,8 @@ def render_hero_card(
     </div>
     """
     
-    st.markdown(html, unsafe_allow_html=True)
+    # HIER IST DER FIX:
+    st.markdown(textwrap.dedent(html_content), unsafe_allow_html=True)
 
 
 def render_toggle_card(
