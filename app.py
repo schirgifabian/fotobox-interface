@@ -5,13 +5,16 @@ import json
 import datetime
 import re
 import unicodedata
+from typing import Optional, Tuple, Any, Dict, List
 
 import requests
 import streamlit as st
 import extra_streamlit_components as stx
 import pandas as pd
 
+# Neue Importe für die optimierte Struktur
 from aqara_client import AqaraClient
+from report_generator import generate_event_pdf
 from sheets_helpers import (
     get_data,
     get_data_admin,
@@ -148,7 +151,7 @@ def _sanitize_header_value(val: str, default: str = "ntfy") -> str:
     return val
 
 
-def send_ntfy_push(title, message, tags="warning", priority="default"):
+def send_ntfy_push(title: str, message: str, tags: str = "warning", priority: str = "default") -> None:
     if not st.session_state.get("ntfy_active", False):
         return
 
@@ -166,19 +169,18 @@ def send_ntfy_push(title, message, tags="warning", priority="default"):
             "Tags": safe_tags,
             "Priority": safe_priority,
         }
-        resp = requests.post(
+        # Requests ohne Retry, da Push "Fire & Forget" ist
+        requests.post(
             f"https://ntfy.sh/{topic}",
             data=message.encode("utf-8"),
             headers=headers,
             timeout=5,
         )
-        if not resp.ok:
-            st.error(f"ntfy Fehler: {resp.status_code} – {resp.text[:200]}")
     except Exception as e:
-        st.error(f"Exception bei ntfy: {e}")
+        st.error(f"ntfy Fehler: {e}")
 
 
-def send_dsr_command(cmd: str):
+def send_dsr_command(cmd: str) -> None:
     if not DSR_ENABLED or not DSR_CONTROL_TOPIC:
         return
     try:
@@ -192,15 +194,15 @@ def send_dsr_command(cmd: str):
 
 
 # --------------------------------------------------------------------
-# AQARA – KONFIG
+# AQARA – KONFIG (Optimiert 3.B)
 # --------------------------------------------------------------------
-def init_aqara():
+def init_aqara() -> Tuple[bool, Optional[AqaraClient], Optional[str], str]:
     try:
         if "aqara" not in st.secrets:
             return False, None, None, "4.1.85"
             
         aqara_cfg = st.secrets["aqara"]
-        # Keine Argumente mehr, Client liest Secrets/Datei selbst
+        # Client liest Secrets und Tokens jetzt selbständig
         client = AqaraClient()
         
         return True, client, aqara_cfg["device_id"], aqara_cfg.get("resource_id", "4.1.85")
@@ -208,7 +210,6 @@ def init_aqara():
         print(f"Aqara Init Fehler: {e}")
         return False, None, None, "4.1.85"
 
-# Beachte: AQARA_ACCESS_TOKEN ist hier weggefallen!
 AQARA_ENABLED, aqara_client, AQARA_SOCKET_DEVICE_ID, AQARA_SOCKET_RESOURCE_ID = init_aqara()
 
 
@@ -232,10 +233,10 @@ def init_session_state():
 
 
 # --------------------------------------------------------------------
-# LIVE-STATUS VIEW
+# LIVE-STATUS VIEW (Optimiert 2.C & 4.A)
 # --------------------------------------------------------------------
 @st.fragment(run_every=10)
-def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: bool, event_mode: bool):
+def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: bool, event_mode: bool) -> None:
     df = get_data(st.session_state.sheet_id, event_mode=event_mode)
     if df.empty:
         st.info("System wartet auf Start…")
@@ -266,7 +267,7 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
 
         heartbeat_info = f" (vor {minutes_diff} Min)" if minutes_diff is not None else ""
 
-        # NEUER HERO HEADER IN show_live_status (app.py)
+        # HERO HEADER (Modernes Design)
         st.markdown(
             f"""
             <div style="
@@ -312,40 +313,53 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
         elif status_mode == "stale":
             st.warning("Seit einigen Minuten keine Daten – Verbindung / Script prüfen.")
 
-        # Papierstatus
+        # PAPIER STATUS & INTELLIGENTE REICHWEITE (Feature 2.C)
         st.markdown("### Papierstatus")
 
         prints_since_reset = max(0, (st.session_state.max_prints or 0) - media_remaining)
 
         stats = compute_print_stats(df, window_min=30, media_factor=media_factor)
-        forecast = "–"
+        
+        forecast_str = "–"
+        end_time_str = ""
 
         if status_mode == "error":
-            forecast = "Gestört"
+            forecast_str = "Gestört"
         else:
             ppm = stats.get("ppm_window") or stats.get("ppm_overall")
+            # Fallback Annahme, wenn kein Durchsatz
             if ppm and ppm > 0 and media_remaining > 0:
                 minutes_left = media_remaining / ppm
-                forecast = humanize_minutes(minutes_left)
+                
+                # Berechne voraussichtliche Endzeit
+                now = datetime.datetime.now()
+                end_time = now + datetime.timedelta(minutes=minutes_left)
+                end_time_formatted = end_time.strftime("%H:%M")
+                
+                forecast_str = humanize_minutes(minutes_left)
+                end_time_str = f" (bis ca. {end_time_formatted} Uhr)"
+                
             elif media_remaining > 0:
-                minutes_left = media_remaining * 1.0
-                forecast = humanize_minutes(minutes_left)
+                forecast_str = "Warte auf Drucke..."
             else:
-                forecast = "0 Min."
+                forecast_str = "0 Min."
 
         colA, colB, colC = st.columns(3)
         colA.metric("Verbleibend", f"{media_remaining} Stk", f"von {st.session_state.max_prints}")
-        colB.metric("Restlaufzeit (geschätzt)", forecast)
+        # Hier wird die neue Uhrzeit angezeigt
+        colB.metric("Reichweite", forecast_str, end_time_str)
 
+        cost_txt = "–"
         if cost_per_roll and (st.session_state.max_prints or 0) > 0:
             try:
                 cost_per_print = cost_per_roll / st.session_state.max_prints
                 cost_used = prints_since_reset * cost_per_print
-                colC.metric("Kosten seit Reset", f"{cost_used:0.2f} €")
+                cost_txt = f"{cost_used:0.2f} €"
+                colC.metric("Kosten (live)", cost_txt)
             except Exception:
-                colC.metric("Kosten seit Reset", "–")
+                colC.metric("Kosten (live)", "–")
         else:
-            colC.metric("Kosten seit Reset", "–")
+            colC.metric("Kosten (live)", "–")
 
         # Progress-Bar
         if status_mode == "error" and media_remaining == 0:
@@ -385,7 +399,7 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
 # --------------------------------------------------------------------
 # HISTORIE VIEW
 # --------------------------------------------------------------------
-def show_history(media_factor: int, cost_per_roll: float):
+def show_history(media_factor: int, cost_per_roll: float) -> None:
     df = get_data_admin(st.session_state.sheet_id)
     if df.empty:
         st.info("Noch keine Daten für die Historie.")
@@ -443,14 +457,11 @@ def show_history(media_factor: int, cost_per_roll: float):
 
 
 # --------------------------------------------------------------------
-# ADMIN PANEL (neue, aufgeräumte Version)
+# ADMIN PANEL (Optimiert 2.B & 3.B)
 # --------------------------------------------------------------------
-def render_admin_panel(printer_cfg, warning_threshold):
+def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> None:
     """
-    Admin-Bereich in 3 klare Blöcke:
-    1) Papierwechsel
-    2) Benachrichtigungen & Tests
-    3) Gerätesteuerung (Aqara / dsrBooth)
+    Admin-Bereich: Papierwechsel, PDF-Export, Benachrichtigungen, Gerätesteuerung.
     """
 
     printer_has_aqara = printer_cfg.get("has_aqara", False)
@@ -500,7 +511,7 @@ def render_admin_panel(printer_cfg, warning_threshold):
                     "Papierwechsel durchführen & Zähler zurücksetzen 🔄",
                     use_container_width=True,
                 ):
-                    # Schritt 1: nur vormerken, nicht sofort löschen
+                    # Schritt 1: nur vormerken
                     st.session_state.confirm_reset = True
                     st.session_state.temp_package_size = size
                     st.session_state.temp_reset_note = reset_note
@@ -508,7 +519,7 @@ def render_admin_panel(printer_cfg, warning_threshold):
             else:
                 st.info("Bitte unten bestätigen oder abbrechen.")
 
-        # Bestätigungsbereich nur anzeigen, wenn confirm_reset = True
+        # Bestätigungsbereich
         if st.session_state.confirm_reset:
             st.warning(
                 f"Möchtest du wirklich das Log löschen und auf eine {st.session_state.temp_package_size}er Rolle zurücksetzen?"
@@ -516,13 +527,13 @@ def render_admin_panel(printer_cfg, warning_threshold):
             col_yes, col_no = st.columns(2)
             with col_yes:
                 if st.button("Ja, zurücksetzen ✅", use_container_width=True):
-                    # Paketgröße übernehmen & in Settings speichern
+                    # Paketgröße übernehmen
                     st.session_state.max_prints = st.session_state.temp_package_size
                     try:
                         set_setting("package_size", st.session_state.max_prints)
                     except Exception:
                         pass
-                    # Log löschen & Meta-Log-Eintrag
+                    # Log löschen
                     clear_google_sheet()
                     log_reset_event(
                         st.session_state.temp_package_size,
@@ -535,6 +546,53 @@ def render_admin_panel(printer_cfg, warning_threshold):
                 if st.button("Abbrechen ❌", use_container_width=True):
                     st.session_state.confirm_reset = False
                     st.rerun()
+
+        st.markdown("---")
+
+        # ------------------------------------------------------------------
+        # FEATURE 2.B: EVENT REPORT & PDF EXPORT
+        # ------------------------------------------------------------------
+        st.markdown("### 📊 Event-Abschluss & Report")
+        col_rep1, col_rep2 = st.columns([2, 1])
+        with col_rep1:
+            st.write("Erstelle einen PDF-Bericht über das aktuelle Event (Druckzahlen, Zeiten, etc.).")
+        with col_rep2:
+            if st.button("PDF Bericht erstellen 📄", use_container_width=True):
+                # Daten holen
+                df_rep = get_data_admin(st.session_state.sheet_id)
+                media_factor = printer_cfg.get("media_factor", 1)
+                stats = compute_print_stats(df_rep, media_factor=media_factor)
+                
+                # Prints since reset
+                if not df_rep.empty:
+                    last_val = int(df_rep.iloc[-1].get("MediaRemaining", 0)) * media_factor
+                else:
+                    last_val = 0
+                prints_done = max(0, (st.session_state.max_prints or 0) - last_val)
+                
+                # Kosten
+                cost_str = "N/A"
+                cpr = printer_cfg.get("cost_per_roll_eur")
+                if cpr and st.session_state.max_prints:
+                     c_used = prints_done * (cpr / st.session_state.max_prints)
+                     cost_str = f"{c_used:.2f} EUR"
+
+                # PDF Generieren
+                pdf_bytes = generate_event_pdf(
+                    df=df_rep,
+                    printer_name=st.session_state.selected_printer,
+                    stats=stats,
+                    prints_since_reset=prints_done,
+                    cost_info=cost_str
+                )
+                
+                st.download_button(
+                    label="⬇️ PDF Herunterladen",
+                    data=pdf_bytes,
+                    file_name=f"report_{datetime.date.today()}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
 
         st.markdown("---")
 
@@ -616,6 +674,7 @@ def render_admin_panel(printer_cfg, warning_threshold):
                     "Aqara ist nicht konfiguriert. Bitte [aqara] in secrets.toml setzen."
                 )
             else:
+                # Nutze neuen Client (3.B)
                 current_state, debug_data = aqara_client.get_socket_state(
                     AQARA_SOCKET_DEVICE_ID,
                     AQARA_SOCKET_RESOURCE_ID,
@@ -683,14 +742,13 @@ def render_admin_panel(printer_cfg, warning_threshold):
                     "Bitte [dsrbooth] mit control_topic in secrets.toml setzen."
                 )
             else:
-                # Status aus Session lesen (Default: off/unlocked)
                 state = st.session_state.get("lockscreen_state", "off")
 
                 click_on, click_off = render_toggle_card(
                     section_title="Gäste-Lockscreen",
                     description=(
                         "Sperrt oder gibt den Gästemodus in dsrBooth frei. "
-                        "Status basiert auf letzter Aktion (kein Rückkanal)."
+                        "Status basiert auf letzter Aktion."
                     ),
                     state=state,
                     title_on="GESPERRT",
@@ -706,31 +764,22 @@ def render_admin_panel(printer_cfg, warning_threshold):
                     btn_right_key="dsr_btn_unlock",
                 )
 
-                # Ermitteln, welcher Status gewünscht ist
                 desired_state = None
                 if click_on:
-                    desired_state = True  # Sperren
+                    desired_state = True
                 elif click_off:
-                    desired_state = False # Freigeben
+                    desired_state = False
 
-                # Wenn ein Button geklickt wurde:
                 if desired_state is not None:
                     cmd = "lock_on" if desired_state else "lock_off"
-                    
-                    # 1. Befehl senden
                     send_dsr_command(cmd)
-                    
-                    # 2. Lokalen Status aktualisieren & speichern
                     st.session_state.lockscreen_state = "on" if desired_state else "off"
                     
-                    # 3. Feedback geben & UI aktualisieren
                     action_text = "aktiviert" if desired_state else "deaktiviert"
                     st.success(f"Befehl gesendet: Lockscreen {action_text}.")
                     
                     time.sleep(0.5) 
                     st.rerun()
-
-
 
 
 # --------------------------------------------------------------------
@@ -779,7 +828,7 @@ def main():
     st.session_state.sheet_id = sheet_id
     st.session_state.ntfy_topic = ntfy_topic
 
-    # Settings laden (max_prints, ntfy_active, default_view)
+    # Settings laden
     if st.session_state.selected_printer != printer_name:
         st.session_state.selected_printer = printer_name
         st.session_state.last_warn_status = None
@@ -846,7 +895,6 @@ def main():
         show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=True)
         render_status_help(warning_threshold)
         
-        # NEUER BUTTON
         st.write("")
         st.link_button("☁️ Fotoshare Cloud", "https://fotoshare.co/admin/index", use_container_width=True)
 
@@ -856,7 +904,6 @@ def main():
             show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=False)
             render_status_help(warning_threshold)
             
-            # NEUER BUTTON
             st.write("")
             st.link_button("☁️ Fotoshare Cloud", "https://fotoshare.co/admin/index", use_container_width=True)
 
