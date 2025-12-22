@@ -1,11 +1,12 @@
 # ui_components.py
 
 import streamlit as st
+import textwrap
 from sheets_helpers import get_data_event, get_spreadsheet
 from status_logic import HEARTBEAT_WARN_MINUTES
 
 # -----------------------------------------------------------------------------
-# GLOBAL STYLING (PERFEKTIONIERT & REPARIERT)
+# GLOBAL STYLING (PERFEKTIONIERT)
 # -----------------------------------------------------------------------------
 MODERN_CSS = """
 <style>
@@ -69,30 +70,44 @@ div.stButton > button:hover {
     transform: translateY(-1px);
 }
 
-/* 6. Metrics (Papierstatus) - Design erzwingen */
+/* 6. Metrics (Papierstatus) - HÖHE REPARIERT */
 div[data-testid="stMetric"] {
     background-color: #FFFFFF !important;
-    padding: 16px 20px !important;
-    border-radius: 16px !important;
     border: 1px solid #E2E8F0 !important;
+    border-radius: 16px !important;
+    padding: 24px 16px !important;
     box-shadow: 0 1px 2px rgba(0,0,0,0.02) !important;
     text-align: center !important;
+    
+    /* FIX: Gleiche Höhe erzwingen & Inhalt zentrieren */
+    min-height: 160px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
 }
+
 div[data-testid="stMetricLabel"] {
     font-size: 0.8rem !important;
     font-weight: 600 !important;
     color: #94A3B8 !important;
     text-transform: uppercase !important;
     letter-spacing: 0.05em !important;
+    margin-bottom: 4px !important;
 }
 div[data-testid="stMetricValue"] {
     font-size: 1.8rem !important;
     font-weight: 700 !important;
     color: #0F172A !important;
-    padding-top: 4px !important;
+}
+/* Delta Indikator (die kleine Pille) */
+div[data-testid="stMetricDelta"] {
+    font-size: 0.8rem !important;
+    margin-top: 8px !important;
+    font-weight: 500 !important;
 }
 
-/* 7. DEVICE CARD (Repariert) */
+/* 7. DEVICE CARD STYLES */
 .device-card {
     background: white;
     border-radius: 16px;
@@ -108,12 +123,12 @@ div[data-testid="stMetricValue"] {
     justify-content: center;
     
     /* FIXE HÖHE damit beide Boxen gleich sind */
-    height: 200px; 
+    height: 190px; 
 }
 
 .device-header {
     display: flex;
-    align-items: flex-start; /* Oben ausgerichtet wegen Icon */
+    align-items: flex-start; 
     margin-bottom: 12px;
     padding-right: 0px; 
 }
@@ -158,7 +173,6 @@ div[data-testid="stMetricValue"] {
     color: #64748B; 
     line-height: 1.5;
     font-weight: 400;
-    /* Text begrenzen damit Layout nicht bricht */
     display: -webkit-box;
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
@@ -226,26 +240,26 @@ def render_toggle_card(
         status_text = title_unknown
         badge_border = "rgba(217, 119, 6, 0.1)"
 
-    # HTML OHNE EINRÜCKUNG (WICHTIG!)
-    html_content = f"""
-<div class="device-card">
-    <div class="status-badge-absolute" style="background-color:{bg_theme}; color:{color_theme}; border: 1px solid {badge_border};">
-        {badge_prefix}: {state.upper()}
-    </div>
-    <div class="device-header">
-        <div class="device-icon-box" style="background-color: {bg_theme}; color: {color_theme};">
-            {icon}
+    # HTML sicher rendern mit dedent (Verhindert Code-Block-Fehler)
+    html_content = textwrap.dedent(f"""
+        <div class="device-card">
+            <div class="status-badge-absolute" style="background-color:{bg_theme}; color:{color_theme}; border: 1px solid {badge_border};">
+                {badge_prefix}: {state.upper()}
+            </div>
+            <div class="device-header">
+                <div class="device-icon-box" style="background-color: {bg_theme}; color: {color_theme};">
+                    {icon}
+                </div>
+                <div class="device-content">
+                    <div class="device-title-label">{section_title}</div>
+                    <div class="device-status-text">{status_text}</div>
+                </div>
+            </div>
+            <div class="device-description">
+                {description}
+            </div>
         </div>
-        <div class="device-content">
-            <div class="device-title-label">{section_title}</div>
-            <div class="device-status-text">{status_text}</div>
-        </div>
-    </div>
-    <div class="device-description">
-        {description}
-    </div>
-</div>
-"""
+    """)
     st.markdown(html_content, unsafe_allow_html=True)
 
     # Buttons
@@ -304,44 +318,44 @@ def render_fleet_overview(PRINTERS: dict):
             except: pass
 
         with cols[idx]:
-            # HTML OHNE EINRÜCKUNG
-            card_html = f"""
-<div style="
-    background: white;
-    border: 1px solid #E2E8F0;
-    border-radius: 16px;
-    padding: 20px;
-    text-align: center;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-    height: 180px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-">
-    <div style="font-weight: 700; color: #0F172A; margin-bottom: 12px; font-size: 1rem;">{name}</div>
-    <div style="
-        display: inline-block;
-        background: {status_bg};
-        color: {status_color};
-        padding: 4px 12px;
-        border-radius: 99px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        margin-bottom: 12px;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-    ">
-        {status_msg}
-    </div>
-    <div style="font-size: 0.9rem; color: #334155; margin-bottom: 4px; font-weight: 500;">
-        {media_str}
-    </div>
-    <div style="font-size: 0.7rem; color: #94A3B8;">
-        Update: {last_ts}
-    </div>
-</div>
-"""
+            # Auch hier dedent nutzen
+            card_html = textwrap.dedent(f"""
+                <div style="
+                    background: white;
+                    border: 1px solid #E2E8F0;
+                    border-radius: 16px;
+                    padding: 20px;
+                    text-align: center;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+                    height: 180px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                ">
+                    <div style="font-weight: 700; color: #0F172A; margin-bottom: 12px; font-size: 1rem;">{name}</div>
+                    <div style="
+                        display: inline-block;
+                        background: {status_bg};
+                        color: {status_color};
+                        padding: 4px 12px;
+                        border-radius: 99px;
+                        font-size: 0.75rem;
+                        font-weight: 600;
+                        margin-bottom: 12px;
+                        letter-spacing: 0.05em;
+                        text-transform: uppercase;
+                    ">
+                        {status_msg}
+                    </div>
+                    <div style="font-size: 0.9rem; color: #334155; margin-bottom: 4px; font-weight: 500;">
+                        {media_str}
+                    </div>
+                    <div style="font-size: 0.7rem; color: #94A3B8;">
+                        Update: {last_ts}
+                    </div>
+                </div>
+            """)
             st.markdown(card_html, unsafe_allow_html=True)
         idx += 1
 
