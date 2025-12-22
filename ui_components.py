@@ -38,31 +38,41 @@ section[data-testid="stSidebar"] {
     border-right: 1px solid #F1F5F9;
 }
 
-/* 4. Buttons (Global) */
+/* 4. Cards (Expander) */
+.stExpander {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+div[data-testid="stExpanderDetails"] {
+    background: #FFFFFF;
+}
+
+/* 5. Buttons */
 div.stButton > button {
     width: 100%;
-    border-radius: 12px;
+    border-radius: 8px;
     border: 1px solid #E2E8F0;
     background-color: #FFFFFF;
     color: #475569;
-    font-weight: 600;
-    padding: 0.6rem 1rem;
+    font-weight: 500;
+    padding: 0.5rem 1rem;
     box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-    transition: all 0.2s ease;
+    transition: all 0.15s ease-in-out;
 }
 div.stButton > button:hover {
     border-color: #CBD5E1;
     background-color: #F8FAFC;
-    color: #0F172A;
+    color: #1E293B;
     transform: translateY(-1px);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 
 /* --------------------------------------------------------------------------
-   DASHBOARD STYLES (Hero Card & Mini Cards)
+   NEU: DASHBOARD STYLES (Hero Card & Animationen)
    -------------------------------------------------------------------------- */
 
-/* Pulsierende Animationen */
+/* Pulsierende Animation für Status-Punkte */
 @keyframes pulse-green {
     0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
     70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
@@ -73,74 +83,38 @@ div.stButton > button:hover {
     70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
     100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
 }
-@keyframes pulse-orange {
-    0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
-    70% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
-}
-@keyframes pulse-red {
-    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-    70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-}
-@keyframes pulse-gray {
-    0% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0.4); }
-    70% { box-shadow: 0 0 0 10px rgba(100, 116, 139, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0); }
-}
 
 .status-dot {
-    height: 10px;
-    width: 10px;
+    height: 12px;
+    width: 12px;
     border-radius: 50%;
     display: inline-block;
     margin-right: 8px;
     flex-shrink: 0;
 }
+.status-pulse-green {
+    background-color: #10B981;
+    animation: pulse-green 2s infinite;
+}
+.status-pulse-blue {
+    background-color: #3B82F6;
+    animation: pulse-blue 2s infinite;
+}
+.status-static-red {
+    background-color: #EF4444;
+}
 
-.status-pulse-green { background-color: #10B981; animation: pulse-green 2s infinite; }
-.status-pulse-blue { background-color: #3B82F6; animation: pulse-blue 2s infinite; }
-.status-pulse-orange { background-color: #F59E0B; animation: pulse-orange 2s infinite; }
-.status-pulse-red { background-color: #EF4444; animation: pulse-red 2s infinite; }
-.status-pulse-gray { background-color: #64748B; animation: pulse-gray 2s infinite; }
-
-/* SHARED CARD DESIGN */
-.dashboard-card, .mini-card, .control-card {
+/* Die große Dashboard-Karte */
+.dashboard-card {
     background: #FFFFFF;
     border: 1px solid #E2E8F0;
     border-radius: 20px;
+    padding: 24px;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
     margin-bottom: 24px;
 }
 
-/* HERO CARD SPECIFICS */
-.dashboard-card { padding: 24px; }
-
-/* MINI CARD (Fleet) SPECIFICS */
-.mini-card {
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    height: 100%;
-    min-height: 160px;
-    transition: transform 0.2s ease;
-}
-.mini-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
-}
-
-/* CONTROL CARD (Toggle) SPECIFICS */
-.control-card {
-    padding: 20px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 12px; /* Buttons sind separat darunter */
-}
-
-/* Metrics Grid in Hero */
+/* Grid Layout für Metriken innerhalb der Karte */
 .metrics-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -149,18 +123,39 @@ div.stButton > button:hover {
     padding-top: 24px;
     border-top: 1px solid #F1F5F9;
 }
-.metric-item { text-align: center; }
-.metric-label { font-size: 0.75rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 4px; }
-.metric-value { font-size: 1.25rem; font-weight: 700; color: #1E293B; }
-.metric-sub { font-size: 0.7rem; color: #64748B; margin-top: 2px; }
 
-/* Progress Bar */
+.metric-item {
+    text-align: center;
+}
+
+.metric-label {
+    font-size: 0.75rem;
+    color: #94A3B8;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.metric-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #1E293B;
+}
+
+.metric-sub {
+    font-size: 0.7rem;
+    color: #64748B;
+    margin-top: 2px;
+}
+
+/* Custom Progress Bar */
 .progress-bg {
     background-color: #F1F5F9;
     border-radius: 99px;
-    height: 8px;
+    height: 12px;
     width: 100%;
-    margin-top: 12px;
+    margin-top: 8px;
     overflow: hidden;
 }
 .progress-fill {
@@ -168,6 +163,29 @@ div.stButton > button:hover {
     border-radius: 99px;
     transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+/* Device Cards Styles (Legacy) */
+.device-card {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 12px;
+    border: 1px solid #E2E8F0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+    position: relative;
+    min-height: 190px; 
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.device-header { display: flex; align-items: flex-start; margin-bottom: 12px; padding-right: 0px; }
+.device-icon-box { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-right: 16px; flex-shrink: 0; }
+.device-content { display: flex; flex-direction: column; justify-content: center; padding-top: 2px; }
+.device-title-label { font-size: 0.7rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; margin-bottom: 4px; }
+.device-status-text { font-size: 1.1rem; font-weight: 700; color: #1E293B; line-height: 1.2; }
+.device-description { font-size: 0.85rem; color: #64748B; line-height: 1.5; font-weight: 400; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.status-badge-absolute { position: absolute; top: 24px; right: 24px; padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; background: #F1F5F9; }
 
 </style>
 """
@@ -193,12 +211,12 @@ def render_hero_card(
     cost_txt: str
 ):
     """
-    Rendert die große Hauptkarte.
+    Rendert EINE große Karte (Hero Widget).
+    FIX: textwrap.dedent verhindert, dass HTML als Code-Block angezeigt wird.
     """
     
     # 1. Icon & Animation Logic
     pulse_class = ""
-    dot_color = ""
     
     if status_mode == "printing":
         pulse_class = "status-pulse-blue"
@@ -207,15 +225,12 @@ def render_hero_card(
         pulse_class = "status-pulse-green"
         dot_color = "#10B981"
     elif status_mode == "error":
-        pulse_class = "status-pulse-red"
+        pulse_class = "status-static-red"
         dot_color = "#EF4444"
     else:
-        if "orange" in display_color or "yellow" in display_color:
-            pulse_class = "status-pulse-orange"
-            dot_color = "#F59E0B"
-        else:
-            pulse_class = "status-pulse-gray" 
-            dot_color = "#64748B"
+        # Fallback
+        pulse_class = "status-dot" 
+        dot_color = "#F59E0B" if "orange" in display_color or "yellow" in display_color else "#64748B"
 
     clean_text = display_text.replace('✅ ', '').replace('🔴 ', '').replace('⚠️ ', '').replace('🖨️ ', '').replace('⏳ ', '')
 
@@ -235,61 +250,66 @@ def render_hero_card(
     elif status_mode == 'low_paper': icon_char = '⚠️'
     elif status_mode == 'cooldown': icon_char = '❄️'
 
-    icon_bg = f"{dot_color}15" # Hex Transparency 
+    icon_bg = f"{dot_color}15" 
 
-    # 3. HTML Zusammenbauen
+    # 3. HTML Zusammenbauen (Mit textwrap.dedent!)
+    # WICHTIG: Das f"""...""" muss direkt am Rand stehen oder mit dedent bereinigt werden.
     html_content = f"""
-<div class="dashboard-card">
-    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-        <div>
-            <div style="display: flex; align-items: center; margin-bottom: 12px;">
-                <span class="{pulse_class} status-dot"></span>
-                <span style="font-size: 0.75rem; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.1em;">System Status</span>
+    <div class="dashboard-card">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+                <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                    <span class="{pulse_class} status-dot" style="{ 'background-color:' + dot_color if 'pulse' not in pulse_class else '' }"></span>
+                    <span style="font-size: 0.8rem; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em;">System Status</span>
+                </div>
+                <div style="font-size: 2rem; font-weight: 800; color: #1E293B; line-height: 1.1; margin-bottom: 6px;">
+                    {clean_text}
+                </div>
+                <div style="font-size: 0.8rem; color: #94A3B8; display: flex; align-items: center; gap: 4px;">
+                    <span>🕒</span> {timestamp} {heartbeat_info}
+                </div>
             </div>
-            <div style="font-size: 1.75rem; font-weight: 800; color: #1E293B; line-height: 1.1; margin-bottom: 8px;">
-                {clean_text}
-            </div>
-            <div style="font-size: 0.85rem; color: #94A3B8; display: flex; align-items: center; gap: 6px;">
-                <span>🕒</span> {timestamp} {heartbeat_info}
+            
+            <div style="background: {icon_bg}; color: {dot_color}; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px;">
+                 {icon_char}
             </div>
         </div>
-        <div style="background: {icon_bg}; color: {dot_color}; width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 28px;">
-                {icon_char}
+
+        <div style="margin-top: 24px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 6px; font-weight: 500; color: #475569;">
+                <span>Verbrauch ({pct}%)</span>
+                <span>{media_remaining} / {max_prints} Bilder</span>
+            </div>
+            <div class="progress-bg">
+                <div class="progress-fill" style="width: {pct}%; background-color: {bar_color};"></div>
+            </div>
+        </div>
+
+        <div class="metrics-grid">
+            <div class="metric-item">
+                <div class="metric-label">Papier</div>
+                <div class="metric-value" style="color: {bar_color}">{media_remaining}</div>
+                <div class="metric-sub">Verbleibend</div>
+            </div>
+            
+            <div class="metric-item" style="border-left: 1px solid #F1F5F9; border-right: 1px solid #F1F5F9;">
+                <div class="metric-label">Prognose</div>
+                <div class="metric-value">{forecast_str.split(' ')[0]}</div>
+                <div class="metric-sub">{ " ".join(forecast_str.split(' ')[1:]) if 'Min' in forecast_str else forecast_str }</div>
+                <div class="metric-sub" style="font-size: 0.65rem; color: #CBD5E1; margin-top:0;">{end_time_str}</div>
+            </div>
+            
+            <div class="metric-item">
+                <div class="metric-label">Kosten</div>
+                <div class="metric-value">{cost_txt}</div>
+                <div class="metric-sub">Laufend</div>
+            </div>
         </div>
     </div>
+    """
     
-    <div style="margin-top: 32px;">
-        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 600; color: #475569; margin-bottom: 4px;">
-            <span>Verbrauch ({pct}%)</span>
-            <span>{media_remaining} / {max_prints}</span>
-        </div>
-        <div class="progress-bg">
-            <div class="progress-fill" style="width: {pct}%; background-color: {bar_color};"></div>
-        </div>
-    </div>
-    
-    <div class="metrics-grid">
-        <div class="metric-item">
-            <div class="metric-label">Papier</div>
-            <div class="metric-value" style="color: {bar_color}">{media_remaining}</div>
-            <div class="metric-sub">Bilder</div>
-        </div>
-        <div class="metric-item" style="border-left: 1px solid #F1F5F9; border-right: 1px solid #F1F5F9;">
-            <div class="metric-label">Prognose</div>
-            <div class="metric-value">{forecast_str.split(' ')[0]}</div>
-            <div class="metric-sub">{ " ".join(forecast_str.split(' ')[1:]) if 'Min' in forecast_str else forecast_str }</div>
-            <div style="font-size: 0.65rem; color: #CBD5E1; margin-top:2px;">{end_time_str}</div>
-        </div>
-        <div class="metric-item">
-            <div class="metric-label">Kosten</div>
-            <div class="metric-value">{cost_txt}</div>
-            <div class="metric-sub">Laufend</div>
-        </div>
-    </div>
-</div>
-"""
-    
-    st.markdown(html_content, unsafe_allow_html=True)
+    # HIER IST DER FIX:
+    st.markdown(textwrap.dedent(html_content), unsafe_allow_html=True)
 
 
 def render_toggle_card(
@@ -308,41 +328,42 @@ def render_toggle_card(
     btn_left_key: str,
     btn_right_key: str,
 ):
-    """
-    Rendert eine Steuerungs-Karte im gleichen Look wie das Dashboard.
-    """
     # Farblogik
     if state == "on":
         color_theme = "#059669" # Emerald
         bg_theme = "#ECFDF5"
         icon = icon_on
         status_text = title_on
-        pulse_class = "status-pulse-green"
+        badge_border = "rgba(5, 150, 105, 0.1)"
     elif state == "off":
         color_theme = "#64748B" # Slate
-        bg_theme = "#F1F5F9"
+        bg_theme = "#F8FAFC"
         icon = icon_off
         status_text = title_off
-        pulse_class = "status-pulse-gray"
+        badge_border = "#E2E8F0"
     else:
         color_theme = "#D97706" # Amber
         bg_theme = "#FFFBEB"
         icon = icon_unknown
         status_text = title_unknown
-        pulse_class = "status-pulse-orange"
+        badge_border = "rgba(217, 119, 6, 0.1)"
 
     html_content = textwrap.dedent(f"""
-        <div class="control-card">
-            <div style="background-color: {bg_theme}; color: {color_theme}; min-width: 50px; height: 50px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 24px;">
-                {icon}
+        <div class="device-card">
+            <div class="status-badge-absolute" style="background-color:{bg_theme}; color:{color_theme}; border: 1px solid {badge_border};">
+                {badge_prefix}: {state.upper()}
             </div>
-            <div style="flex-grow: 1;">
-                <div style="display:flex; align-items:center; margin-bottom: 2px;">
-                    <div class="status-dot {pulse_class}" style="width:8px; height:8px; margin-right:6px;"></div>
-                    <div style="font-size: 0.7rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600;">{section_title}</div>
+            <div class="device-header">
+                <div class="device-icon-box" style="background-color: {bg_theme}; color: {color_theme};">
+                    {icon}
                 </div>
-                <div style="font-size: 1.1rem; font-weight: 700; color: #1E293B;">{status_text}</div>
-                <div style="font-size: 0.8rem; color: #64748B; margin-top: 2px;">{description}</div>
+                <div class="device-content">
+                    <div class="device-title-label">{section_title}</div>
+                    <div class="device-status-text">{status_text}</div>
+                </div>
+            </div>
+            <div class="device-description">
+                {description}
             </div>
         </div>
     """)
@@ -359,9 +380,6 @@ def render_toggle_card(
 
 
 def render_fleet_overview(PRINTERS: dict):
-    """
-    Zeigt alle Fotoboxen als 'Mini Hero Cards' an.
-    """
     st.markdown("### 📸 Alle Fotoboxen")
     printers_secrets = st.secrets.get("printers", {})
     fleet_data = get_fleet_data_parallel(PRINTERS, printers_secrets)
@@ -372,64 +390,72 @@ def render_fleet_overview(PRINTERS: dict):
         data = fleet_data.get(name)
         
         last_ts = "N/A"
-        media_val = "0"
-        
-        # Defaults
-        pulse_class = "status-pulse-gray"
-        dot_color = "#64748B"
-        status_text = "Offline"
-        
+        status_color = "#64748B" # Grau
+        status_bg = "#F1F5F9"
+        status_msg = "Offline / ??"
+        media_str = "–"
+
         if data:
+            media_str = data.get("media_str", "?")
             last_ts = data.get("timestamp", "N/A")
             state = data.get("state", "unknown")
-            media_val = data.get("media_str", "0").replace(" Bilder", "")
             
             if state == "error":
-                pulse_class = "status-pulse-red"
-                dot_color = "#EF4444"
-                status_text = "Störung"
+                status_color = "#EF4444" 
+                status_bg = "#FEF2F2"
+                status_msg = "Störung"
             elif state == "printing":
-                pulse_class = "status-pulse-blue"
-                dot_color = "#3B82F6"
-                status_text = "Druckt"
+                status_color = "#3B82F6"
+                status_bg = "#EFF6FF"
+                status_msg = "Druckt"
             elif state == "ready":
-                pulse_class = "status-pulse-green"
-                dot_color = "#10B981"
-                status_text = "Bereit"
+                status_color = "#10B981"
+                status_bg = "#ECFDF5"
+                status_msg = "Bereit"
 
         with cols[idx]:
             card_html = textwrap.dedent(f"""
-                <div class="mini-card">
-                    <div>
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
-                            <div style="font-weight: 700; color: #0F172A; font-size: 0.95rem;">{name}</div>
-                            <div class="status-dot {pulse_class}"></div>
-                        </div>
-                        
-                        <div style="font-size: 2rem; font-weight: 800; color: #1E293B; letter-spacing: -0.02em;">
-                            {media_val}
-                        </div>
-                        <div style="font-size: 0.75rem; color: #64748B; font-weight: 500;">Bilder verbleibend</div>
+                <div style="
+                    background: white;
+                    border: 1px solid #E2E8F0;
+                    border-radius: 16px;
+                    padding: 20px;
+                    text-align: center;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+                    height: 180px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                ">
+                    <div style="font-weight: 700; color: #0F172A; margin-bottom: 12px; font-size: 1rem;">{name}</div>
+                    <div style="
+                        display: inline-block;
+                        background: {status_bg};
+                        color: {status_color};
+                        padding: 4px 12px;
+                        border-radius: 99px;
+                        font-size: 0.75rem;
+                        font-weight: 600;
+                        margin-bottom: 12px;
+                        letter-spacing: 0.05em;
+                        text-transform: uppercase;
+                    ">
+                        {status_msg}
                     </div>
-                    
-                    <div style="margin-top: 20px; padding-top: 12px; border-top: 1px solid #F1F5F9; display:flex; justify-content: space-between; align-items:center;">
-                        <span style="font-size: 0.7rem; color: {dot_color}; font-weight: 700; text-transform: uppercase;">{status_text}</span>
-                        <span style="font-size: 0.7rem; color: #94A3B8;">{last_ts}</span>
+                    <div style="font-size: 0.9rem; color: #334155; margin-bottom: 4px; font-weight: 500;">
+                        {media_str}
+                    </div>
+                    <div style="font-size: 0.7rem; color: #94A3B8;">
+                        Update: {last_ts}
                     </div>
                 </div>
             """)
             st.markdown(card_html, unsafe_allow_html=True)
-            
-            # Button um zur Detailansicht zu springen (müsste man via Session State lösen, hier nur visuell)
-            # st.button(f"Details", key=f"btn_{idx}", use_container_width=True) 
-            
         idx += 1
 
 
 def render_health_overview(aqara_enabled: bool, dsr_enabled: bool):
-    """
-    Kleine Pill-Indikatoren, jetzt etwas subtiler.
-    """
     sheets_ok = False
     try:
         if st.session_state.get("sheet_id"):
@@ -444,14 +470,6 @@ def render_health_overview(aqara_enabled: bool, dsr_enabled: bool):
     html_items = ""
     for name, ok in items:
         color = "#10B981" if ok else "#CBD5E1" 
-        html_items += f"""
-        <div style="display:flex; align-items:center; gap:6px; margin-right:16px;">
-            <span style="background-color:{color}; width:8px; height:8px; border-radius:50%;"></span>
-            <span style="font-size:0.75rem; font-weight:600; color:#475569;">{name}</span>
-        </div>"""
+        html_items += f"""<div style="display:flex; align-items:center; gap:6px; margin-right:16px;"><span style="color:{color}; font-size:12px;">●</span><span style="font-size:12px; font-weight:500; color:#475569;">{name}</span></div>"""
         
-    st.markdown(f"""
-        <div style="display: flex; flex-wrap: wrap; background: #FFFFFF; padding: 10px 20px; border-radius: 99px; border: 1px solid #E2E8F0; width: fit-content; margin-bottom: 24px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">
-            {html_items}
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"""<div style="display: flex; flex-wrap: wrap; background: white; padding: 8px 16px; border-radius: 99px; border: 1px solid #E2E8F0; width: fit-content; margin-bottom: 24px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">{html_items}</div>""", unsafe_allow_html=True)
