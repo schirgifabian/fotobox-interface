@@ -148,11 +148,12 @@ class AqaraClient:
         
         return data
 
-    def get_socket_state(self, device_id: str, resource_id: str = "4.1.85") -> Tuple[str, Dict]:
+def get_socket_state(self, device_id: str, resource_id: str = "4.1.85") -> Tuple[str, Dict]:
         payload = {
             "resources": [{"subjectId": device_id, "resourceId": resource_id}]
         }
-        data = self._post_request("/api/resource/query", payload)
+        # KORREKTUR: "/api" entfernt
+        data = self._post_request("/resource/query", payload)
         
         val = None
         try:
@@ -184,4 +185,5 @@ class AqaraClient:
                 }
             ]
         }
-        return self._post_request("/api/resource/update", payload)
+        # KORREKTUR: "/api" entfernt
+        return self._post_request("/resource/update", payload)
