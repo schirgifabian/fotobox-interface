@@ -684,10 +684,10 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                             st.toast("Steckdose eingeschaltet!", icon="✅")
                             time.sleep(1) # Kurz warten für Feedback
                             st.rerun()
-                       else:
+                        else:
                             # Fehler anzeigen, damit du siehst, WAS falsch läuft
                             st.error(f"Schalten fehlgeschlagen: {response}")
-                    if c_off.button("Aus ⚪", use_container_width=True, key="aq_off"):
+                        if c_off.button("Aus ⚪", use_container_width=True, key="aq_off"):
                             aqara_client.switch_socket(AQARA_SOCKET_DEVICE_ID, False, AQARA_SOCKET_RESOURCE_ID)
                             st.session_state.socket_state = "off"
                             st.rerun()
