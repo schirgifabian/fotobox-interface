@@ -10,16 +10,24 @@ TOKEN_FILE = "tokens.json"
 
 class AqaraClient:
     def __init__(self):
-        # 1. Wir laden die statischen Configs direkt hier aus den Secrets
-        self.app_id = st.secrets["aqara"]["app_id"]
-        self.key_id = st.secrets["aqara"]["key_id"]
-        self.app_secret = st.secrets["aqara"]["app_secret"]
+        # 1. Config aus secrets laden
+        try:
+            self.app_id = st.secrets["aqara"]["app_id"]
+            self.key_id = st.secrets["aqara"]["key_id"]
+            self.app_secret = st.secrets["aqara"]["app_secret"]
+        except KeyError as e:
+            st.error(f"Aqara Secrets fehlen: {e}. Bitte in .streamlit/secrets.toml prüfen.")
+            raise e
         
-        # Basis URL (ohne /api am Ende, damit wir auch /auth erreichen)
         self.root_url = "https://open-ger.aqara.com/v3.0/open"
         
-        # 2. Wir laden das Token-File beim Start
+        # 2. Token laden
         self.tokens = self._load_tokens()
+        
+        # 3. WICHTIG: Wenn keine Tokens da sind, initial einen neuen holen!
+        if not self.tokens.get("access_token"):
+            print("⚠️ Keine Tokens gefunden. Versuche initialen Login...")
+            self._get_new_token()
 
     def _load_tokens(self):
         if not os.path.exists(TOKEN_FILE):
@@ -33,14 +41,17 @@ class AqaraClient:
     def _save_tokens(self, access_token, refresh_token):
         self.tokens["access_token"] = access_token
         self.tokens["refresh_token"] = refresh_token
-        with open(TOKEN_FILE, "w") as f:
-            json.dump(self.tokens, f)
+        try:
+            with open(TOKEN_FILE, "w") as f:
+                json.dump(self.tokens, f)
+        except Exception as e:
+            print(f"Fehler beim Speichern der Tokens: {e}")
 
     def _generate_headers(self, access_token=None):
         nonce = uuid.uuid4().hex
         timestamp = str(int(time.time() * 1000))
 
-        # --- Signatur Erstellung (Deine bestehende Logik) ---
+        # Signatur Parameter
         sign_params = {
             "Appid": self.app_id,
             "Keyid": self.key_id,
@@ -50,8 +61,11 @@ class AqaraClient:
         if access_token:
             sign_params["Accesstoken"] = access_token
 
+        # Sortieren und String bauen
         sign_str = "&".join(f"{k}={sign_params[k]}" for k in sorted(sign_params.keys()))
+        # Secret direkt anhängen (ohne &)
         sign_str += self.app_secret
+        
         sign = hashlib.md5(sign_str.lower().encode("utf-8")).hexdigest()
 
         headers = {
@@ -67,12 +81,36 @@ class AqaraClient:
             headers["Accesstoken"] = access_token
         return headers
 
+    def _get_new_token(self):
+        """Holt einen komplett neuen Token (nicht Refresh)"""
+        url = f"{self.root_url}/auth/token"
+        headers = self._generate_headers(access_token=None)
+        # Intent 0 = Get token for data query & control
+        payload = {"intent": 0} 
+        
+        try:
+            r = requests.post(url, headers=headers, json=payload, timeout=10)
+            data = r.json()
+            if data["code"] == 0:
+                print("✅ Neuer Token erfolgreich empfangen.")
+                new_acc = data["result"]["accessToken"]
+                new_ref = data["result"]["refreshToken"]
+                self._save_tokens(new_acc, new_ref)
+                return True
+            else:
+                print(f"❌ Fehler beim Token-Holen: {data}")
+                return False
+        except Exception as e:
+            print(f"Exception bei _get_new_token: {e}")
+            return False
+
     def _refresh_token(self):
         url = f"{self.root_url}/auth/refreshToken"
         current_refresh = self.tokens.get("refresh_token")
         
         if not current_refresh:
-            return False
+            # Wenn wir keinen Refresh Token haben, versuchen wir einen komplett neuen zu holen
+            return self._get_new_token()
 
         headers = self._generate_headers(access_token=None)
         payload = {"refreshToken": current_refresh}
@@ -81,20 +119,22 @@ class AqaraClient:
             r = requests.post(url, headers=headers, json=payload, timeout=10)
             data = r.json()
             if data["code"] == 0:
-                # Neues Token speichern
-                new_acc = data["result"]["accessToken"]
-                new_ref = data["result"]["refreshToken"]
-                self._save_tokens(new_acc, new_ref)
+                self._save_tokens(data["result"]["accessToken"], data["result"]["refreshToken"])
                 return True
-            return False
+            # Falls Refresh fehlschlägt (z.B. zu alt), versuchen wir neuen Token
+            print("Refresh fehlgeschlagen, versuche neuen Token...")
+            return self._get_new_token()
         except Exception as e:
             print(f"Refresh Error: {e}")
             return False
 
     def _post_request(self, endpoint, payload):
-        """Intelligente Sendemethode mit Retry"""
         url = f"{self.root_url}{endpoint}"
         
+        # Sicherstellen, dass wir einen Token haben
+        if not self.tokens.get("access_token"):
+            self._get_new_token()
+
         # Versuch 1
         acc_token = self.tokens.get("access_token")
         headers = self._generate_headers(acc_token)
@@ -107,9 +147,9 @@ class AqaraClient:
 
         # Fehler 108: Token Expired -> Wir versuchen einen Refresh
         if data.get("code") == 108:
-            print("⚠️ Token abgelaufen (Code 108). Versuche Refresh...")
+            print("🔄 Token abgelaufen (Code 108). Refresh...")
             if self._refresh_token():
-                # Refresh hat geklappt -> Token neu laden und Versuch 2
+                # Refresh hat geklappt -> Versuch 2
                 acc_token = self.tokens.get("access_token")
                 headers = self._generate_headers(acc_token)
                 try:
@@ -117,24 +157,21 @@ class AqaraClient:
                     data = response.json()
                 except Exception as e:
                     return {"code": -1, "message": str(e)}
-            else:
-                return {"code": -1, "message": "Token Refresh fehlgeschlagen. Bitte manuell prüfen."}
         
         return data
 
     def get_socket_state(self, device_id, resource_id="4.1.85"):
-        # Access Token wird jetzt intern gehandhabt -> Parameter entfernt
         payload = {
             "resources": [{"subjectId": device_id, "resourceId": resource_id}]
         }
         
-        # Aufruf über den intelligenten Wrapper
         data = self._post_request("/api/resource/query", payload)
         
+        # Debugging Info in Console
         if data.get("code") != 0:
+            print(f"Aqara Error: {data}")
             return "unknown", data
 
-        # Ergebnis parsen (wie in deiner alten Logik)
         val = None
         try:
             result_list = data.get("result", [])
@@ -156,11 +193,8 @@ class AqaraClient:
         return "unknown", data
 
     def switch_socket(self, device_id, turn_on: bool, resource_id="4.1.85", mode="state"):
-        # Access Token wird jetzt intern gehandhabt -> Parameter entfernt
-        
-        # Toggle Logik aus deinem alten Skript übernommen
         if mode == "toggle":
-            value = "2" # Manche Plugs nutzen Toggle Logik
+            value = "2"
         else:
             value = "1" if turn_on else "0"
 
