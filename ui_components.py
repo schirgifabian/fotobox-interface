@@ -13,7 +13,6 @@ MODERN_CSS = """
 /* 1. App-Container & Reset */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-header {visibility: hidden;}
 
 .block-container {
     padding-top: 1rem !important;
