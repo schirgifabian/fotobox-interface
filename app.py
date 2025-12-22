@@ -12,19 +12,16 @@ import streamlit as st
 import extra_streamlit_components as stx
 import pandas as pd
 
-# Neue Importe
+# Neue Importe für die optimierte Struktur
 from aqara_client import AqaraClient
 from report_generator import generate_event_pdf
 from sheets_helpers import (
     get_data,
     get_data_admin,
-    get_data_event,
     get_setting,
     set_setting,
     clear_google_sheet,
     log_reset_event,
-    get_printers_config,  # <--- NEU
-    add_new_printer       # <--- NEU
 )
 from status_logic import (
     evaluate_status,
@@ -37,6 +34,7 @@ from ui_components import (
     inject_custom_css,
     render_toggle_card,
     render_fleet_overview,
+    # render_status_help wurde entfernt
 )
 
 # --------------------------------------------------------------------
@@ -46,15 +44,28 @@ PAGE_TITLE = "Fotobox Drucker Status"
 PAGE_ICON = "🖨️"
 NTFY_ACTIVE_DEFAULT = True
 
-# --- DYNAMISCHE KONFIGURATION LADEN ---
-try:
-    MASTER_SHEET_ID = st.secrets["general"]["master_sheet_id"]
-except KeyError:
-    st.error("FEHLER: 'master_sheet_id' fehlt in secrets.toml unter [general].")
-    st.stop()
-
-# Drucker aus Google Sheet laden statt Hardcode
-PRINTERS = get_printers_config(MASTER_SHEET_ID)
+PRINTERS = {
+    "die Fotobox": {
+        "key": "standard",
+        "warning_threshold": 40,
+        "default_max_prints": 400,
+        "cost_per_roll_eur": 46.59,
+        "has_admin": True,
+        "has_aqara": True,
+        "has_dsr": True,
+        "media_factor": 1,
+    },
+    "Weinkellerei": {
+        "key": "Weinkellerei",
+        "warning_threshold": 20,
+        "default_max_prints": 400,
+        "cost_per_roll_eur": 55,
+        "has_admin": True,
+        "has_aqara": False,
+        "has_dsr": False,
+        "media_factor": 2,
+    },
+}
 
 # --------------------------------------------------------------------
 # LOGIN
@@ -158,6 +169,7 @@ def send_ntfy_push(title: str, message: str, tags: str = "warning", priority: st
             "Tags": safe_tags,
             "Priority": safe_priority,
         }
+        # Requests ohne Retry, da Push "Fire & Forget" ist
         requests.post(
             f"https://ntfy.sh/{topic}",
             data=message.encode("utf-8"),
@@ -182,7 +194,7 @@ def send_dsr_command(cmd: str) -> None:
 
 
 # --------------------------------------------------------------------
-# AQARA – KONFIG
+# AQARA – KONFIG (Optimiert 3.B)
 # --------------------------------------------------------------------
 def init_aqara() -> Tuple[bool, Optional[AqaraClient], Optional[str], str]:
     try:
@@ -190,10 +202,12 @@ def init_aqara() -> Tuple[bool, Optional[AqaraClient], Optional[str], str]:
             return False, None, None, "4.1.85"
             
         aqara_cfg = st.secrets["aqara"]
+        # Client liest Secrets und Tokens jetzt selbständig
         client = AqaraClient()
+        
         return True, client, aqara_cfg["device_id"], aqara_cfg.get("resource_id", "4.1.85")
     except Exception as e:
-        # print(f"Aqara Init Fehler: {e}")
+        print(f"Aqara Init Fehler: {e}")
         return False, None, None, "4.1.85"
 
 AQARA_ENABLED, aqara_client, AQARA_SOCKET_DEVICE_ID, AQARA_SOCKET_RESOURCE_ID = init_aqara()
@@ -219,7 +233,7 @@ def init_session_state():
 
 
 # --------------------------------------------------------------------
-# LIVE-STATUS VIEW
+# LIVE-STATUS VIEW (Optimiert 2.C & 4.A)
 # --------------------------------------------------------------------
 @st.fragment(run_every=10)
 def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: bool, event_mode: bool) -> None:
@@ -253,7 +267,7 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
 
         heartbeat_info = f" (vor {minutes_diff} Min)" if minutes_diff is not None else ""
 
-        # HERO HEADER
+        # HERO HEADER (Modernes Design)
         st.markdown(
             f"""
             <div style="
@@ -299,7 +313,7 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
         elif status_mode == "stale":
             st.warning("Seit einigen Minuten keine Daten – Verbindung / Script prüfen.")
 
-        # PAPIER STATUS & INTELLIGENTE REICHWEITE
+        # PAPIER STATUS & INTELLIGENTE REICHWEITE (Feature 2.C)
         st.markdown("### Papierstatus")
 
         prints_since_reset = max(0, (st.session_state.max_prints or 0) - media_remaining)
@@ -313,8 +327,11 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
             forecast_str = "Gestört"
         else:
             ppm = stats.get("ppm_window") or stats.get("ppm_overall")
+            # Fallback Annahme, wenn kein Durchsatz
             if ppm and ppm > 0 and media_remaining > 0:
                 minutes_left = media_remaining / ppm
+                
+                # Berechne voraussichtliche Endzeit
                 now = datetime.datetime.now()
                 end_time = now + datetime.timedelta(minutes=minutes_left)
                 end_time_formatted = end_time.strftime("%H:%M")
@@ -329,6 +346,7 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
 
         colA, colB, colC = st.columns(3)
         colA.metric("Verbleibend", f"{media_remaining} Stk", f"von {st.session_state.max_prints}")
+        # Hier wird die neue Uhrzeit angezeigt
         colB.metric("Reichweite", forecast_str, end_time_str)
 
         cost_txt = "–"
@@ -407,7 +425,7 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Log-Einträge", len(df_hist))
-    c2.metric("Drucke seit Reset", prints_since_reset)
+    c2.metric("Drucke seit Reset (geschätzt)", prints_since_reset)
 
     if stats["ppm_overall"]:
         c3.metric("Ø Drucke/Std (Session)", f"{stats['ppm_overall'] * 60:.1f}")
@@ -415,9 +433,9 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
         c3.metric("Ø Drucke/Std (Session)", "–")
 
     if stats["ppm_window"]:
-        c4.metric("Ø Drucke/Std (30 Min)", f"{stats['ppm_window'] * 60:.1f}")
+        c4.metric("Ø Drucke/Std (letzte 30 Min)", f"{stats['ppm_window'] * 60:.1f}")
     else:
-        c4.metric("Ø Drucke/Std (30 Min)", "–")
+        c4.metric("Ø Drucke/Std (letzte 30 Min)", "–")
 
     st.markdown("#### Kostenabschätzung")
     col_cost1, col_cost2 = st.columns(2)
@@ -439,14 +457,19 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
 
 
 # --------------------------------------------------------------------
-# ADMIN PANEL
+# ADMIN PANEL (Optimiert - Mit Tabs)
 # --------------------------------------------------------------------
 def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> None:
+    """
+    Admin-Bereich mit Tabs für bessere Übersicht.
+    """
+
     printer_has_aqara = printer_cfg.get("has_aqara", False)
     printer_has_dsr = printer_cfg.get("has_dsr", False)
 
     with st.expander("🛠️ Admin & Einstellungen", expanded=False):
 
+        # Tabs erstellen
         tab_paper, tab_report, tab_notify, tab_devices = st.tabs([
             "🧻 Papier & Reset", 
             "📊 Report", 
@@ -454,7 +477,9 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
             "🔌 Geräte"
         ])
 
-        # TAB 1: PAPIER
+        # ------------------------------------------------------------------
+        # TAB 1: NEUER AUFTRAG / PAPIERWECHSEL
+        # ------------------------------------------------------------------
         with tab_paper:
             st.markdown("### Neuer Auftrag / Papierwechsel")
 
@@ -480,19 +505,22 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                 )
 
             with col_note:
-                st.caption("Notiz (optional)")
+                st.caption("Notiz zum Papierwechsel (optional)")
                 reset_note = st.text_input(
-                    "Notiz",
+                    "Notiz zum Papierwechsel",
                     key="reset_note",
                     label_visibility="collapsed",
-                    placeholder="z.B. neue Rolle",
+                    placeholder="z.B. neue 400er Rolle eingelegt",
                 )
 
             st.markdown("")
             col_btn, _ = st.columns([1, 3])
             with col_btn:
                 if not st.session_state.confirm_reset:
-                    if st.button("Papierwechsel & Reset 🔄", use_container_width=True):
+                    if st.button(
+                        "Papierwechsel & Reset 🔄",
+                        use_container_width=True,
+                    ):
                         st.session_state.confirm_reset = True
                         st.session_state.temp_package_size = size
                         st.session_state.temp_reset_note = reset_note
@@ -500,6 +528,7 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                 else:
                     st.info("Bitte bestätigen.")
 
+            # Bestätigungsbereich
             if st.session_state.confirm_reset:
                 st.warning(
                     f"Wirklich Log löschen und auf {st.session_state.temp_package_size}er Rolle zurücksetzen?"
@@ -525,7 +554,9 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                         st.session_state.confirm_reset = False
                         st.rerun()
 
-        # TAB 2: REPORT
+        # ------------------------------------------------------------------
+        # TAB 2: REPORT & EXPORT
+        # ------------------------------------------------------------------
         with tab_report:
             st.markdown("### 📊 Event-Abschluss")
             st.write("Erstelle einen PDF-Bericht über das aktuelle Event.")
@@ -563,50 +594,57 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                     use_container_width=True
                 )
 
-        # TAB 3: BENACHRICHTIGUNG
+        # ------------------------------------------------------------------
+        # TAB 3: BENACHRICHTIGUNGEN
+        # ------------------------------------------------------------------
         with tab_notify:
-            st.markdown("### Benachrichtigungen")
+            st.markdown("### Benachrichtigungen & Tests")
+
             col_left, col_right = st.columns([2, 1])
 
             with col_left:
-                st.caption("ntfy Topic (aus Sheet Config)")
+                st.caption("ntfy Topic (nur zur Info)")
                 st.text_input(
                     "ntfy Topic",
-                    value=st.session_state.ntfy_topic or "(kein Topic)",
+                    value=st.session_state.ntfy_topic or "(kein Topic konfiguriert)",
                     key="ntfy_topic_display",
                     disabled=True,
                     label_visibility="collapsed",
                 )
+
                 if st.button("Test-Push senden 🔔", use_container_width=True):
                     send_ntfy_push("Test", "Test erfolgreich", tags="tada")
                     st.toast("Test wurde gesendet.")
 
             with col_right:
-                st.caption("Simulation")
+                st.caption("Status-Simulation")
                 sim_option = st.selectbox(
                     "Status simulieren",
                     ["Keine", "Fehler", "Papier fast leer", "Keine Daten"],
                     label_visibility="collapsed",
                     key="status_sim_option",
                 )
+
                 if st.button("Auslösen", use_container_width=True):
                     if sim_option == "Fehler":
-                        send_ntfy_push("🔴 Fehler (Test)", "Test-Fehler", tags="rotating_light")
+                        send_ntfy_push("🔴 Fehler (Test)", "Simulierter Fehlerzustand", tags="rotating_light")
                         maybe_play_sound("error", st.session_state.sound_enabled)
                     elif sim_option == "Papier fast leer":
-                        send_ntfy_push("⚠️ Papier (Test)", "Test-Warnung", tags="warning")
+                        send_ntfy_push("⚠️ Papier fast leer (Test)", "Simulierter Low-Paper-Status", tags="warning")
                         maybe_play_sound("low_paper", st.session_state.sound_enabled)
                     elif sim_option == "Keine Daten":
-                        send_ntfy_push("⚠️ Timeout (Test)", "Test-Stale", tags="hourglass")
+                        send_ntfy_push("⚠️ Keine aktuellen Daten (Test)", "Simulierter Stale-Status", tags="hourglass")
                         maybe_play_sound("stale", st.session_state.sound_enabled)
                     st.toast("Simulation gesendet.")
 
-        # TAB 4: GERÄTE
+        # ------------------------------------------------------------------
+        # TAB 4: GERÄTESTEUERUNG
+        # ------------------------------------------------------------------
         with tab_devices:
             st.markdown("### Gerätesteuerung")
 
             if not printer_has_aqara and not printer_has_dsr:
-                st.info("Für diese Fotobox sind keine Geräte konfiguriert.")
+                st.info("Für diese Fotobox sind keine Geräte-Steuerungen konfiguriert.")
             else:
                 col_aqara, col_dsr = st.columns(2)
 
@@ -614,18 +652,21 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                 with col_aqara:
                     st.subheader("Aqara", anchor=False)
                     if not printer_has_aqara:
-                        st.caption("Inaktiv")
+                        st.caption("Nicht verfügbar")
                     elif not AQARA_ENABLED:
-                        st.warning("Secrets fehlen")
+                        st.warning("Konfig fehlt (secrets)")
                     else:
                         current_state, debug_data = aqara_client.get_socket_state(
                             AQARA_SOCKET_DEVICE_ID, AQARA_SOCKET_RESOURCE_ID,
                         )
                         st.session_state.socket_debug = debug_data
+
                         if current_state in ("on", "off"):
                             st.session_state.socket_state = current_state
                         
                         state = st.session_state.socket_state
+
+                        # Vereinfachte UI für Tab
                         st.write(f"Status: **{state.upper()}**")
                         
                         c_on, c_off = st.columns(2)
@@ -642,9 +683,9 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                 with col_dsr:
                     st.subheader("Lockscreen", anchor=False)
                     if not printer_has_dsr:
-                        st.caption("Inaktiv")
+                        st.caption("Nicht verfügbar")
                     elif not DSR_ENABLED:
-                         st.warning("Secrets fehlen")
+                         st.warning("Konfig fehlt (secrets)")
                     else:
                         state = st.session_state.get("lockscreen_state", "off")
                         st.write(f"Status: **{state.upper()}**")
@@ -661,52 +702,6 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
 
 
 # --------------------------------------------------------------------
-# NEUE FUNKTION: Render "Add Printer"
-# --------------------------------------------------------------------
-def render_add_printer_form():
-    with st.expander("➕ Neue Fotobox anlegen"):
-        with st.form("add_printer_form"):
-            st.write("Füge eine neue Fotobox zur Konfiguration hinzu.")
-            new_name = st.text_input("Name (z.B. 'Fotobox 3')")
-            new_sheet_id = st.text_input("Google Sheet ID (für Logs)")
-            
-            c1, c2 = st.columns(2)
-            new_warn = c1.number_input("Warn-Limit", value=20)
-            new_max = c2.number_input("Standard Rolle", value=400)
-            
-            c3, c4 = st.columns(2)
-            new_cost = c3.number_input("Preis/Rolle (€)", value=46.59)
-            new_factor = c4.number_input("Medien-Faktor", value=1, min_value=1)
-            
-            st.markdown("**Optionale Features:**")
-            check_adm = st.checkbox("Hat Admin?", value=True)
-            check_aq = st.checkbox("Hat Aqara?", value=False)
-            check_dsr = st.checkbox("Hat DSR?", value=False)
-            
-            submitted = st.form_submit_button("Speichern")
-            
-            if submitted:
-                if not new_name or not new_sheet_id:
-                    st.error("Name und Sheet ID sind Pflicht!")
-                else:
-                    new_data = {
-                        "Name": new_name,
-                        "Key": new_name.lower().replace(" ", "_"),
-                        "SheetId": new_sheet_id,
-                        "WarningThreshold": new_warn,
-                        "DefaultMaxPrints": new_max,
-                        "CostPerRoll": new_cost,
-                        "MediaFactor": new_factor,
-                        "HasAdmin": check_adm,
-                        "HasAqara": check_aq,
-                        "HasDsr": check_dsr
-                    }
-                    success = add_new_printer(MASTER_SHEET_ID, new_data)
-                    if success:
-                        st.rerun()
-
-
-# --------------------------------------------------------------------
 # MAIN
 # --------------------------------------------------------------------
 def main():
@@ -717,25 +712,15 @@ def main():
     render_logout_button()
 
     st.sidebar.header("Einstellungen")
-    
-    # 1. Neues Feature: Printer hinzufügen
-    render_add_printer_form()
-    st.sidebar.markdown("---")
-
-    # Fallback: Wenn noch gar keine Printer im Sheet sind
-    if not PRINTERS:
-        st.warning("Es sind noch keine Fotoboxen konfiguriert. Bitte oben eine anlegen.")
-        st.stop()
 
     view_mode = st.sidebar.radio("Ansicht", ["Einzelne Fotobox", "Alle Boxen"])
 
-    # 2. Flottenübersicht (nutzt jetzt PRINTERS aus dem Sheet)
+    # Flottenübersicht
     if view_mode == "Alle Boxen":
         render_fleet_overview(PRINTERS)
         return
 
-    # 3. Einzelansicht
-    # Dropdown Key -> Printer Config
+    # Einzelne Box
     printer_name = st.sidebar.selectbox("Fotobox auswählen", list(PRINTERS.keys()))
     printer_cfg = PRINTERS[printer_name]
 
@@ -744,16 +729,21 @@ def main():
     warning_threshold = printer_cfg.get("warning_threshold", 20)
     printer_has_admin = printer_cfg.get("has_admin", True)
 
-    # WICHTIG: SheetID kommt jetzt aus der Config, nicht mehr aus Secrets
-    sheet_id = printer_cfg.get("sheet_id")
-    # Ntfy Topic könnte man auch ins Sheet packen, aber optional hier via Secrets oder Default
-    # Der Einfachheit halber: Falls nicht im Sheet, dann leer lassen oder Logic erweitern
-    ntfy_topic = st.secrets.get("printers", {}).get(printer_cfg["key"], {}).get("ntfy_topic", "")
-    
+    printer_key = printer_cfg["key"]
+    printers_secrets = st.secrets.get("printers", {})
+    printer_secret = printers_secrets.get(printer_key, {})
+
+    sheet_id = printer_secret.get("sheet_id")
+    ntfy_topic = printer_secret.get("ntfy_topic")
+
     if not sheet_id:
-        st.error(f"Fehler: Keine Sheet-ID für '{printer_name}' gefunden.")
+        st.error(
+            f"Keine 'sheet_id' für '{printer_name}' in secrets.toml gefunden "
+            f"(Sektion [printers.{printer_key}])."
+        )
         st.stop()
 
+    # sheet-bezogene Infos im State
     st.session_state.sheet_id = sheet_id
     st.session_state.ntfy_topic = ntfy_topic
 
@@ -769,7 +759,6 @@ def main():
         except Exception:
             st.session_state.max_prints = printer_cfg["default_max_prints"]
 
-    # Globale Settings
     if "ntfy_active" not in st.session_state:
         try:
             default_ntfy = get_setting("ntfy_active", str(NTFY_ACTIVE_DEFAULT))
@@ -823,6 +812,8 @@ def main():
 
     if view_event_mode:
         show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=True)
+        # Legende / Hilfe entfernt
+        
         st.write("")
         st.link_button("☁️ Fotoshare Cloud", "https://fotoshare.co/admin/index", use_container_width=True)
 
@@ -830,6 +821,8 @@ def main():
         tab_live, tab_hist = st.tabs(["Live-Status", "Historie & Analyse"])
         with tab_live:
             show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=False)
+            # Legende / Hilfe entfernt
+            
             st.write("")
             st.link_button("☁️ Fotoshare Cloud", "https://fotoshare.co/admin/index", use_container_width=True)
 
