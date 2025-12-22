@@ -169,7 +169,7 @@ def generate_event_pdf(
         pdf.set_font("Arial", 'B', 12)
         pdf.cell(0, 10, "Verlauf & Analyse", 0, 1)
         
-        # HIER IST DER FIX: type='png' hinzufügen
+        # HIER IST DER FIX 1: type='png' hinzufügen
         pdf.image(chart_buffer, x=10, w=190, type='png') 
         
         pdf.ln(5)
@@ -215,4 +215,5 @@ def generate_event_pdf(
             pdf.cell(30, 6, media_val, 1, 0, 'C')
             pdf.cell(115, 6, status, 1, 1)
 
-    return pdf.output(dest='S').encode('latin-1')
+    # HIER IST DER FIX 2: .encode('latin-1') entfernt und in bytes() gewrappt
+    return bytes(pdf.output(dest='S'))
