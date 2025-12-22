@@ -5,3 +5,4 @@ requests
 streamlit-lottie
 streamlit-autorefresh
 extra-streamlit-components
+fpdf
