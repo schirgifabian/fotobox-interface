@@ -2,7 +2,7 @@
 
 import streamlit as st
 import textwrap
-from sheets_helpers import get_data_event, get_spreadsheet
+from sheets_helpers import get_data_event, get_spreadsheet, get_fleet_data_parallel
 from status_logic import HEARTBEAT_WARN_MINUTES
 
 # -----------------------------------------------------------------------------
@@ -277,50 +277,53 @@ def render_toggle_card(
 
 
 def render_fleet_overview(PRINTERS: dict):
+    """
+    Rendert die Übersicht aller Drucker. 
+    Nutzt 'get_fleet_data_parallel' für schnelle Ladezeiten.
+    """
     st.markdown("### 📸 Alle Fotoboxen")
 
     printers_secrets = st.secrets.get("printers", {})
+    
+    # 1. Parallel Load: Alle Daten gleichzeitig holen
+    # Dies verhindert, dass wir N mal warten müssen (N = Anzahl Drucker)
+    fleet_data = get_fleet_data_parallel(PRINTERS, printers_secrets)
+
     cols = st.columns(len(PRINTERS))
     
     idx = 0
     for name, cfg in PRINTERS.items():
-        sheet_id = printers_secrets.get(cfg["key"], {}).get("sheet_id")
         
+        # Daten aus dem parallelen Fetch holen
+        data = fleet_data.get(name)
+        
+        # Defaults (falls Fehler oder Offline)
         last_ts = "N/A"
-        status_color = "#64748B"
+        status_color = "#64748B" # Grau
         status_bg = "#F1F5F9"
-        status_msg = "Offline"
+        status_msg = "Offline / ??"
         media_str = "–"
-        
-        if sheet_id:
-            try:
-                df = get_data_event(sheet_id)
-                if not df.empty:
-                    last = df.iloc[-1]
-                    last_ts = str(last.get("Timestamp", ""))[-8:]
-                    raw_status = str(last.get("Status", "")).lower()
-                    try:
-                        media_val = int(last.get("MediaRemaining", 0)) * cfg.get("media_factor", 1)
-                        media_str = f"{media_val} Bilder"
-                    except:
-                        media_str = "?"
 
-                    if "error" in raw_status or "jam" in raw_status or "end" in raw_status:
-                        status_color = "#EF4444"
-                        status_bg = "#FEF2F2"
-                        status_msg = "Störung"
-                    elif "printing" in raw_status:
-                        status_color = "#3B82F6"
-                        status_bg = "#EFF6FF"
-                        status_msg = "Druckt"
-                    else:
-                        status_color = "#10B981"
-                        status_bg = "#ECFDF5"
-                        status_msg = "Bereit"
-            except: pass
+        if data:
+            media_str = data.get("media_str", "?")
+            last_ts = data.get("timestamp", "N/A")
+            state = data.get("state", "unknown")
+            
+            # Farb-Logik basierend auf dem ermittelten State
+            if state == "error":
+                status_color = "#EF4444" # Rot
+                status_bg = "#FEF2F2"
+                status_msg = "Störung"
+            elif state == "printing":
+                status_color = "#3B82F6" # Blau
+                status_bg = "#EFF6FF"
+                status_msg = "Druckt"
+            elif state == "ready":
+                status_color = "#10B981" # Grün
+                status_bg = "#ECFDF5"
+                status_msg = "Bereit"
 
         with cols[idx]:
-            # Auch hier dedent nutzen
             card_html = textwrap.dedent(f"""
                 <div style="
                     background: white;
@@ -366,9 +369,11 @@ def render_health_overview(aqara_enabled: bool, dsr_enabled: bool):
     sheets_ok = False
     try:
         if st.session_state.get("sheet_id"):
+            # Nur checken, ob das Objekt existiert/geladen werden kann
             _ = get_spreadsheet(st.session_state.get("sheet_id"))
             sheets_ok = True
     except: pass
+    
     ntfy_ok = bool(st.session_state.get("ntfy_topic")) and st.session_state.get("ntfy_active", False)
     
     items = [("Sheets", sheets_ok), ("Push", ntfy_ok), ("Strom", aqara_enabled), ("Sperre", dsr_enabled)]
