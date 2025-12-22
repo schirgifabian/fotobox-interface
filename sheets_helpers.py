@@ -39,19 +39,26 @@ def get_main_worksheet():
         raise RuntimeError("sheet_id ist nicht im Session State gesetzt.")
     return get_spreadsheet(sheet_id_local).sheet1
 
-
 def get_settings_ws(sheet_id: str):
     """
-    Settings-Worksheet holen oder bei Bedarf erstellen.
+    Settings-Worksheet holen. Falls es nicht existiert und wir nicht schreiben dürfen,
+    geben wir None zurück oder fangen den Fehler ab.
     """
     sh = get_spreadsheet(sheet_id)
     try:
         return sh.worksheet("Settings")
     except WorksheetNotFound:
-        ws = sh.add_worksheet(title="Settings", rows=100, cols=3)
-        ws.append_row(["Key", "Value", "UpdatedAt"])
-        return ws
-
+        try:
+            # Versuche das Blatt anzulegen
+            ws = sh.add_worksheet(title="Settings", rows=100, cols=3)
+            ws.append_row(["Key", "Value", "UpdatedAt"])
+            return ws
+        except Exception as e:
+            # Wenn wir keine Schreibrechte haben (APIError 403), Fehler loggen, aber nicht crashen
+            print(f"Konnte Settings-Sheet nicht erstellen (Rechte fehlen?): {e}")
+            # Wir geben ein Dummy-Objekt oder None zurück, damit der Rest nicht crasht
+            # (Das erfordert Anpassungen in load_settings, siehe unten)
+            raise e
 
 @st.cache_data(ttl=60)
 def load_settings(sheet_id: str):
