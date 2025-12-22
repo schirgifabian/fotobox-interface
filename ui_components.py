@@ -254,7 +254,7 @@ def render_hero_card(
 
     # 3. HTML Zusammenbauen (Mit textwrap.dedent!)
     # WICHTIG: Das f"""...""" muss direkt am Rand stehen oder mit dedent bereinigt werden.
-    html_content = f"""
+html_content = f"""
     <div class="dashboard-card">
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
             <div>
@@ -269,12 +269,10 @@ def render_hero_card(
                     <span>🕒</span> {timestamp} {heartbeat_info}
                 </div>
             </div>
-            
             <div style="background: {icon_bg}; color: {dot_color}; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px;">
                  {icon_char}
             </div>
         </div>
-
         <div style="margin-top: 24px;">
             <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 6px; font-weight: 500; color: #475569;">
                 <span>Verbrauch ({pct}%)</span>
@@ -284,21 +282,18 @@ def render_hero_card(
                 <div class="progress-fill" style="width: {pct}%; background-color: {bar_color};"></div>
             </div>
         </div>
-
         <div class="metrics-grid">
             <div class="metric-item">
                 <div class="metric-label">Papier</div>
                 <div class="metric-value" style="color: {bar_color}">{media_remaining}</div>
                 <div class="metric-sub">Verbleibend</div>
             </div>
-            
             <div class="metric-item" style="border-left: 1px solid #F1F5F9; border-right: 1px solid #F1F5F9;">
                 <div class="metric-label">Prognose</div>
                 <div class="metric-value">{forecast_str.split(' ')[0]}</div>
                 <div class="metric-sub">{ " ".join(forecast_str.split(' ')[1:]) if 'Min' in forecast_str else forecast_str }</div>
                 <div class="metric-sub" style="font-size: 0.65rem; color: #CBD5E1; margin-top:0;">{end_time_str}</div>
             </div>
-            
             <div class="metric-item">
                 <div class="metric-label">Kosten</div>
                 <div class="metric-value">{cost_txt}</div>
