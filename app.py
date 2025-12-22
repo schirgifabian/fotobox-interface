@@ -583,7 +583,8 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                     printer_name=st.session_state.selected_printer,
                     stats=stats,
                     prints_since_reset=prints_done,
-                    cost_info=cost_str
+                    cost_info=cost_str,
+                    media_factor=media_factor  # <--- NEU HINZUFÜGEN
                 )
                 
                 st.download_button(
