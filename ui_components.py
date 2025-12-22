@@ -72,7 +72,7 @@ div.stButton > button:hover {
    NEU: DASHBOARD STYLES (Hero Card & Animationen)
    -------------------------------------------------------------------------- */
 
-/* Pulsierende Animation für Status-Punkte */
+/* Pulsierende Animationen für ALLE Farben */
 @keyframes pulse-green {
     0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
     70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
@@ -83,6 +83,21 @@ div.stButton > button:hover {
     70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
     100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
 }
+@keyframes pulse-orange {
+    0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+@keyframes pulse-red {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+@keyframes pulse-gray {
+    0% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(100, 116, 139, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0); }
+}
 
 .status-dot {
     height: 12px;
@@ -92,6 +107,8 @@ div.stButton > button:hover {
     margin-right: 8px;
     flex-shrink: 0;
 }
+
+/* Klassenzuweisung der Animationen */
 .status-pulse-green {
     background-color: #10B981;
     animation: pulse-green 2s infinite;
@@ -100,8 +117,17 @@ div.stButton > button:hover {
     background-color: #3B82F6;
     animation: pulse-blue 2s infinite;
 }
-.status-static-red {
+.status-pulse-orange {
+    background-color: #F59E0B;
+    animation: pulse-orange 2s infinite;
+}
+.status-pulse-red {
     background-color: #EF4444;
+    animation: pulse-red 2s infinite;
+}
+.status-pulse-gray {
+    background-color: #64748B;
+    animation: pulse-gray 2s infinite;
 }
 
 /* Die große Dashboard-Karte */
@@ -217,6 +243,7 @@ def render_hero_card(
     
     # 1. Icon & Animation Logic
     pulse_class = ""
+    dot_color = ""
     
     if status_mode == "printing":
         pulse_class = "status-pulse-blue"
@@ -225,12 +252,17 @@ def render_hero_card(
         pulse_class = "status-pulse-green"
         dot_color = "#10B981"
     elif status_mode == "error":
-        pulse_class = "status-static-red"
+        pulse_class = "status-pulse-red" # Jetzt auch animiert
         dot_color = "#EF4444"
     else:
-        # Fallback
-        pulse_class = "status-dot" 
-        dot_color = "#F59E0B" if "orange" in display_color or "yellow" in display_color else "#64748B"
+        # Check ob Warnung (orange/yellow) vorliegt
+        if "orange" in display_color or "yellow" in display_color:
+            pulse_class = "status-pulse-orange"
+            dot_color = "#F59E0B"
+        else:
+            # Fallback (z.B. Offline/Unbekannt) jetzt auch animiert (Grau)
+            pulse_class = "status-pulse-gray" 
+            dot_color = "#64748B"
 
     clean_text = display_text.replace('✅ ', '').replace('🔴 ', '').replace('⚠️ ', '').replace('🖨️ ', '').replace('⏳ ', '')
 
@@ -252,64 +284,57 @@ def render_hero_card(
 
     icon_bg = f"{dot_color}15" 
 
-    # 3. HTML Zusammenbauen (Mit textwrap.dedent!)
-    # WICHTIG: Das f"""...""" muss direkt am Rand stehen oder mit dedent bereinigt werden.
+    # 3. HTML Zusammenbauen
     html_content = f"""
-    <div class="dashboard-card">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div>
-                <div style="display: flex; align-items: center; margin-bottom: 8px;">
-                    <span class="{pulse_class} status-dot" style="{ 'background-color:' + dot_color if 'pulse' not in pulse_class else '' }"></span>
-                    <span style="font-size: 0.8rem; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em;">System Status</span>
-                </div>
-                <div style="font-size: 2rem; font-weight: 800; color: #1E293B; line-height: 1.1; margin-bottom: 6px;">
-                    {clean_text}
-                </div>
-                <div style="font-size: 0.8rem; color: #94A3B8; display: flex; align-items: center; gap: 4px;">
-                    <span>🕒</span> {timestamp} {heartbeat_info}
-                </div>
+<div class="dashboard-card">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+            <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                <span class="{pulse_class} status-dot"></span>
+                <span style="font-size: 0.8rem; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em;">System Status</span>
             </div>
-            
-            <div style="background: {icon_bg}; color: {dot_color}; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px;">
-                 {icon_char}
+            <div style="font-size: 2rem; font-weight: 800; color: #1E293B; line-height: 1.1; margin-bottom: 6px;">
+                {clean_text}
+            </div>
+            <div style="font-size: 0.8rem; color: #94A3B8; display: flex; align-items: center; gap: 4px;">
+                <span>🕒</span> {timestamp} {heartbeat_info}
             </div>
         </div>
-
-        <div style="margin-top: 24px;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 6px; font-weight: 500; color: #475569;">
-                <span>Verbrauch ({pct}%)</span>
-                <span>{media_remaining} / {max_prints} Bilder</span>
-            </div>
-            <div class="progress-bg">
-                <div class="progress-fill" style="width: {pct}%; background-color: {bar_color};"></div>
-            </div>
-        </div>
-
-        <div class="metrics-grid">
-            <div class="metric-item">
-                <div class="metric-label">Papier</div>
-                <div class="metric-value" style="color: {bar_color}">{media_remaining}</div>
-                <div class="metric-sub">Verbleibend</div>
-            </div>
-            
-            <div class="metric-item" style="border-left: 1px solid #F1F5F9; border-right: 1px solid #F1F5F9;">
-                <div class="metric-label">Prognose</div>
-                <div class="metric-value">{forecast_str.split(' ')[0]}</div>
-                <div class="metric-sub">{ " ".join(forecast_str.split(' ')[1:]) if 'Min' in forecast_str else forecast_str }</div>
-                <div class="metric-sub" style="font-size: 0.65rem; color: #CBD5E1; margin-top:0;">{end_time_str}</div>
-            </div>
-            
-            <div class="metric-item">
-                <div class="metric-label">Kosten</div>
-                <div class="metric-value">{cost_txt}</div>
-                <div class="metric-sub">Laufend</div>
-            </div>
+        <div style="background: {icon_bg}; color: {dot_color}; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px;">
+                {icon_char}
         </div>
     </div>
-    """
+    <div style="margin-top: 24px;">
+        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 6px; font-weight: 500; color: #475569;">
+            <span>Verbrauch ({pct}%)</span>
+            <span>{media_remaining} / {max_prints} Bilder</span>
+        </div>
+        <div class="progress-bg">
+            <div class="progress-fill" style="width: {pct}%; background-color: {bar_color};"></div>
+        </div>
+    </div>
+    <div class="metrics-grid">
+        <div class="metric-item">
+            <div class="metric-label">Papier</div>
+            <div class="metric-value" style="color: {bar_color}">{media_remaining}</div>
+            <div class="metric-sub">Verbleibend</div>
+        </div>
+        <div class="metric-item" style="border-left: 1px solid #F1F5F9; border-right: 1px solid #F1F5F9;">
+            <div class="metric-label">Prognose</div>
+            <div class="metric-value">{forecast_str.split(' ')[0]}</div>
+            <div class="metric-sub">{ " ".join(forecast_str.split(' ')[1:]) if 'Min' in forecast_str else forecast_str }</div>
+            <div class="metric-sub" style="font-size: 0.65rem; color: #CBD5E1; margin-top:0;">{end_time_str}</div>
+        </div>
+        <div class="metric-item">
+            <div class="metric-label">Kosten</div>
+            <div class="metric-value">{cost_txt}</div>
+            <div class="metric-sub">Laufend</div>
+        </div>
+    </div>
+</div>
+"""
     
-    # HIER IST DER FIX:
-    st.markdown(textwrap.dedent(html_content), unsafe_allow_html=True)
+    st.markdown(html_content, unsafe_allow_html=True)
 
 
 def render_toggle_card(
