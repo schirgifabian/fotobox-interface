@@ -347,7 +347,7 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
         colA, colB, colC = st.columns(3)
         colA.metric("Verbleibend", f"{media_remaining} Stk", f"von {st.session_state.max_prints}")
         # Hier wird die neue Uhrzeit angezeigt
-        colB.metric("Reichweite", forecast_str, end_time_str)
+        colB.metric("Restlaufzeit", forecast_str, end_time_str)
 
         cost_txt = "–"
         if cost_per_roll and (st.session_state.max_prints or 0) > 0:
