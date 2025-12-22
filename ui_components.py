@@ -79,8 +79,9 @@ div[data-testid="stMetric"] {
     box-shadow: 0 1px 2px rgba(0,0,0,0.02) !important;
     text-align: center !important;
     
-    /* FIX: Gleiche Höhe erzwingen & Inhalt zentrieren */
-    min-height: 160px !important;
+    /* FIX: Flexible Höhe für Mobile */
+    min-height: 160px !important; 
+    height: auto !important;
     display: flex !important;
     flex-direction: column !important;
     justify-content: center !important;
@@ -122,8 +123,9 @@ div[data-testid="stMetricDelta"] {
     flex-direction: column;
     justify-content: center;
     
-    /* FIXE HÖHE damit beide Boxen gleich sind */
-    height: 190px; 
+    /* FIX: Flexible Höhe statt fixer Höhe für Mobile-Optimierung (4.A) */
+    min-height: 190px; 
+    height: auto;
 }
 
 .device-header {
