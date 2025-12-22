@@ -19,6 +19,7 @@ class AqaraClient:
             st.error(f"Aqara Secrets fehlen: {e}")
             raise e
         
+        # Basis-URL für Europa
         self.root_url = "https://open-ger.aqara.com/v3.0/open"
         self.tokens: Dict[str, str] = self._load_tokens()
         
@@ -85,13 +86,14 @@ class AqaraClient:
                     raise requests.exceptions.RequestException(f"Server Error {response.status_code}")
                 return response.json()
             except (requests.exceptions.RequestException, json.JSONDecodeError) as e:
-                wait_time = 2 ** i # 1s, 2s, 4s...
+                wait_time = 2 ** i 
                 print(f"Request Error ({e}). Retry in {wait_time}s...")
                 time.sleep(wait_time)
         
         return {"code": -1, "message": "Max retries exceeded"}
 
     def _get_new_token(self) -> bool:
+        # Auth Endpoint ist direkt erreichbar
         url = f"{self.root_url}/auth/token"
         headers = self._generate_headers(access_token=None)
         payload = {"intent": 0}
@@ -149,16 +151,21 @@ class AqaraClient:
         return data
 
     def get_socket_state(self, device_id: str, resource_id: str = "4.1.85") -> Tuple[str, Dict]:
+        # KORREKTUR: Nutzung des 'query.resource.value' Intent über /api
         payload = {
-            "resources": [{"subjectId": device_id, "resourceId": resource_id}]
+            "intent": "query.resource.value",
+            "data": {
+                "resources": [{"subjectId": device_id, "resourceId": resource_id}]
+            }
         }
-        # FIX: /api entfernt
-        data = self._post_request("/resource/query", payload)
+        # Endpoint ist immer /api für Intents
+        data = self._post_request("/api", payload)
         
         val = None
         try:
             result_list = data.get("result", [])
-            if result_list:
+            # result ist oft eine Liste von Dicts
+            if result_list and isinstance(result_list, list):
                 val = result_list[0].get("value")
         except Exception:
             pass
@@ -176,14 +183,19 @@ class AqaraClient:
 
     def switch_socket(self, device_id: str, turn_on: bool, resource_id: str = "4.1.85", mode: str = "state") -> Dict:
         value = "2" if mode == "toggle" else ("1" if turn_on else "0")
+        
+        # KORREKTUR: Nutzung des 'write.resource.device' Intent über /api
         payload = {
-            "resources": [
-                {
-                    "subjectId": device_id,
-                    "resourceId": resource_id,
-                    "value": value
-                }
-            ]
+            "intent": "write.resource.device",
+            "data": {
+                "resources": [
+                    {
+                        "subjectId": device_id,
+                        "resourceId": resource_id,
+                        "value": value
+                    }
+                ]
+            }
         }
-        # FIX: /api entfernt
-        return self._post_request("/resource/update", payload)
+        # Endpoint ist immer /api für Intents
+        return self._post_request("/api", payload)
