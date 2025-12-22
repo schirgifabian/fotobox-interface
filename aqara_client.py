@@ -76,7 +76,7 @@ class AqaraClient:
         return headers
 
     def _request_with_retry(self, url: str, headers: Dict, payload: Dict, retries: int = 3) -> Dict[str, Any]:
-        """Hilfsfunktion: Führt Request mit Exponential Backoff aus (3.B)"""
+        """Hilfsfunktion: Führt Request mit Exponential Backoff aus"""
         for i in range(retries):
             try:
                 response = requests.post(url, headers=headers, json=payload, timeout=5)
@@ -148,11 +148,11 @@ class AqaraClient:
         
         return data
 
-def get_socket_state(self, device_id: str, resource_id: str = "4.1.85") -> Tuple[str, Dict]:
+    def get_socket_state(self, device_id: str, resource_id: str = "4.1.85") -> Tuple[str, Dict]:
         payload = {
             "resources": [{"subjectId": device_id, "resourceId": resource_id}]
         }
-        # KORREKTUR: "/api" entfernt
+        # FIX: /api entfernt
         data = self._post_request("/resource/query", payload)
         
         val = None
@@ -185,5 +185,5 @@ def get_socket_state(self, device_id: str, resource_id: str = "4.1.85") -> Tuple
                 }
             ]
         }
-        # KORREKTUR: "/api" entfernt
+        # FIX: /api entfernt
         return self._post_request("/resource/update", payload)
