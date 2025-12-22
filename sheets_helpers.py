@@ -6,6 +6,7 @@ import gspread
 import streamlit as st
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import WorksheetNotFound
+import concurrent.futures
 
 
 @st.cache_resource
@@ -156,3 +157,78 @@ def log_reset_event(package_size: int, note: str = ""):
         )
     except Exception as e:
         st.warning(f"Reset konnte nicht im Meta-Log gespeichert werden: {e}")
+
+def fetch_single_status(sheet_id: str, printer_key: str, media_factor: int):
+    """
+    Hilfsfunktion für den Thread-Worker: Lädt Daten für EINE Box
+    und gibt ein kleines Status-Dict zurück.
+    """
+    if not sheet_id:
+        return printer_key, None
+
+    try:
+        # Hier nutzen wir die gecachte Funktion get_data_event
+        df = get_data_event(sheet_id)
+        if df.empty:
+            return printer_key, None
+            
+        last = df.iloc[-1]
+        
+        # Daten extrahieren
+        raw_status = str(last.get("Status", "")).lower()
+        timestamp = str(last.get("Timestamp", ""))[-8:] # Nur Uhrzeit
+        
+        try:
+            media_val = int(last.get("MediaRemaining", 0)) * media_factor
+        except:
+            media_val = 0
+            
+        # Status Logik vereinfacht für Übersicht
+        if any(x in raw_status for x in ["error", "jam", "end", "fehlt"]):
+            state = "error"
+        elif "printing" in raw_status:
+            state = "printing"
+        else:
+            state = "ready"
+            
+        return printer_key, {
+            "state": state,
+            "media_str": f"{media_val} Bilder",
+            "timestamp": timestamp,
+            "raw_status": raw_status
+        }
+    except Exception as e:
+        # Im Fehlerfall nicht abstürzen, sondern None zurückgeben
+        return printer_key, None
+
+def get_fleet_data_parallel(printers_config: dict, secrets_printers: dict) -> dict:
+    """
+    Lädt alle Fotobox-Statuswerte PARALLEL statt nacheinander.
+    """
+    results = {}
+    
+    # ThreadPoolExecutor erstellt einen Pool von Worker-Threads
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_printer = {}
+        
+        for name, cfg in printers_config.items():
+            key = cfg["key"]
+            # Sheet ID aus Secrets holen
+            s_id = secrets_printers.get(key, {}).get("sheet_id")
+            media_factor = cfg.get("media_factor", 1)
+            
+            # Aufgabe in den Pool werfen (startet sofort im Hintergrund)
+            future = executor.submit(fetch_single_status, s_id, name, media_factor)
+            future_to_printer[future] = name
+
+        # Warten bis alle fertig sind
+        for future in concurrent.futures.as_completed(future_to_printer):
+            printer_name = future_to_printer[future]
+            try:
+                # Ergebnis abholen
+                key_check, data = future.result()
+                results[printer_name] = data
+            except Exception:
+                results[printer_name] = None
+                
+    return results
