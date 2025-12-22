@@ -12,7 +12,7 @@ import streamlit as st
 import extra_streamlit_components as stx
 import pandas as pd
 
-# Neue Importe für die optimierte Struktur
+# Importe
 from aqara_client import AqaraClient
 from report_generator import generate_event_pdf
 from sheets_helpers import (
@@ -34,7 +34,7 @@ from ui_components import (
     inject_custom_css,
     render_toggle_card,
     render_fleet_overview,
-    render_status_help,
+    # render_status_help wurde entfernt
 )
 
 # --------------------------------------------------------------------
@@ -169,7 +169,6 @@ def send_ntfy_push(title: str, message: str, tags: str = "warning", priority: st
             "Tags": safe_tags,
             "Priority": safe_priority,
         }
-        # Requests ohne Retry, da Push "Fire & Forget" ist
         requests.post(
             f"https://ntfy.sh/{topic}",
             data=message.encode("utf-8"),
@@ -194,7 +193,7 @@ def send_dsr_command(cmd: str) -> None:
 
 
 # --------------------------------------------------------------------
-# AQARA – KONFIG (Optimiert 3.B)
+# AQARA – KONFIG
 # --------------------------------------------------------------------
 def init_aqara() -> Tuple[bool, Optional[AqaraClient], Optional[str], str]:
     try:
@@ -202,9 +201,7 @@ def init_aqara() -> Tuple[bool, Optional[AqaraClient], Optional[str], str]:
             return False, None, None, "4.1.85"
             
         aqara_cfg = st.secrets["aqara"]
-        # Client liest Secrets und Tokens jetzt selbständig
         client = AqaraClient()
-        
         return True, client, aqara_cfg["device_id"], aqara_cfg.get("resource_id", "4.1.85")
     except Exception as e:
         print(f"Aqara Init Fehler: {e}")
@@ -233,7 +230,7 @@ def init_session_state():
 
 
 # --------------------------------------------------------------------
-# LIVE-STATUS VIEW (Optimiert 2.C & 4.A)
+# LIVE-STATUS VIEW
 # --------------------------------------------------------------------
 @st.fragment(run_every=10)
 def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: bool, event_mode: bool) -> None:
@@ -267,7 +264,7 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
 
         heartbeat_info = f" (vor {minutes_diff} Min)" if minutes_diff is not None else ""
 
-        # HERO HEADER (Modernes Design)
+        # HERO HEADER
         st.markdown(
             f"""
             <div style="
@@ -313,11 +310,10 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
         elif status_mode == "stale":
             st.warning("Seit einigen Minuten keine Daten – Verbindung / Script prüfen.")
 
-        # PAPIER STATUS & INTELLIGENTE REICHWEITE (Feature 2.C)
+        # PAPIER STATUS
         st.markdown("### Papierstatus")
 
         prints_since_reset = max(0, (st.session_state.max_prints or 0) - media_remaining)
-
         stats = compute_print_stats(df, window_min=30, media_factor=media_factor)
         
         forecast_str = "–"
@@ -327,18 +323,13 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
             forecast_str = "Gestört"
         else:
             ppm = stats.get("ppm_window") or stats.get("ppm_overall")
-            # Fallback Annahme, wenn kein Durchsatz
             if ppm and ppm > 0 and media_remaining > 0:
                 minutes_left = media_remaining / ppm
-                
-                # Berechne voraussichtliche Endzeit
                 now = datetime.datetime.now()
                 end_time = now + datetime.timedelta(minutes=minutes_left)
                 end_time_formatted = end_time.strftime("%H:%M")
-                
                 forecast_str = humanize_minutes(minutes_left)
                 end_time_str = f" (bis ca. {end_time_formatted} Uhr)"
-                
             elif media_remaining > 0:
                 forecast_str = "Warte auf Drucke..."
             else:
@@ -346,7 +337,6 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
 
         colA, colB, colC = st.columns(3)
         colA.metric("Verbleibend", f"{media_remaining} Stk", f"von {st.session_state.max_prints}")
-        # Hier wird die neue Uhrzeit angezeigt
         colB.metric("Reichweite", forecast_str, end_time_str)
 
         cost_txt = "–"
@@ -369,9 +359,7 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
             if not st.session_state.max_prints:
                 progress_val = 0
             else:
-                progress_val = max(
-                    0.0, min(1.0, media_remaining / st.session_state.max_prints)
-                )
+                progress_val = max(0.0, min(1.0, media_remaining / st.session_state.max_prints))
 
             if progress_val < 0.1:
                 bar_color = "red"
@@ -381,13 +369,7 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
                 bar_color = "blue"
 
         st.markdown(
-            f"""
-            <style>
-            .stProgress > div > div > div > div {{
-                background-color: {bar_color};
-            }}
-            </style>
-            """,
+            f"""<style>.stProgress > div > div > div > div {{ background-color: {bar_color}; }}</style>""",
             unsafe_allow_html=True,
         )
         st.progress(progress_val)
@@ -409,7 +391,7 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
 
     df_hist = _prepare_history_df(df)
     if df_hist.empty:
-        st.info("Keine auswertbaren Daten (Timestamp / MediaRemaining fehlen).")
+        st.info("Keine auswertbaren Daten.")
         return
 
     df_hist = df_hist.copy()
@@ -419,165 +401,104 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
     st.line_chart(df_hist["RemainingPrints"], use_container_width=True)
 
     stats = compute_print_stats(df, window_min=30, media_factor=media_factor)
-
     last_remaining = int(df_hist["RemainingPrints"].iloc[-1])
     prints_since_reset = max(0, (st.session_state.max_prints or 0) - last_remaining)
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Log-Einträge", len(df_hist))
-    c2.metric("Drucke seit Reset (geschätzt)", prints_since_reset)
-
-    if stats["ppm_overall"]:
-        c3.metric("Ø Drucke/Std (Session)", f"{stats['ppm_overall'] * 60:.1f}")
-    else:
-        c3.metric("Ø Drucke/Std (Session)", "–")
-
-    if stats["ppm_window"]:
-        c4.metric("Ø Drucke/Std (letzte 30 Min)", f"{stats['ppm_window'] * 60:.1f}")
-    else:
-        c4.metric("Ø Drucke/Std (letzte 30 Min)", "–")
-
-    st.markdown("#### Kostenabschätzung")
-    col_cost1, col_cost2 = st.columns(2)
-    if cost_per_roll and (st.session_state.max_prints or 0) > 0:
-        try:
-            cost_per_print = cost_per_roll / st.session_state.max_prints
-            cost_used = prints_since_reset * cost_per_print
-            col_cost1.metric("Kosten seit Reset", f"{cost_used:0.2f} €")
-            col_cost2.metric("Kosten pro Druck (ca.)", f"{cost_per_print:0.3f} €")
-        except Exception:
-            col_cost1.metric("Kosten seit Reset", "–")
-            col_cost2.metric("Kosten pro Druck (ca.)", "–")
-    else:
-        col_cost1.metric("Kosten seit Reset", "–")
-        col_cost2.metric("Kosten pro Druck (ca.)", "–")
+    c2.metric("Drucke seit Reset", prints_since_reset)
+    
+    val_ppm = f"{stats['ppm_overall'] * 60:.1f}" if stats['ppm_overall'] else "–"
+    c3.metric("Ø Drucke/Std (Gesamt)", val_ppm)
+    
+    val_win = f"{stats['ppm_window'] * 60:.1f}" if stats['ppm_window'] else "–"
+    c4.metric("Ø Drucke/Std (30 Min)", val_win)
 
     st.markdown("#### Rohdaten (letzte 200 Zeilen)")
     st.dataframe(df.tail(200), use_container_width=True)
 
 
 # --------------------------------------------------------------------
-# ADMIN PANEL (Optimiert 2.B & 3.B)
+# ADMIN PANEL (OPTIMIERT: TABS STATT ENDLOS-LISTE)
 # --------------------------------------------------------------------
 def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> None:
     """
-    Admin-Bereich: Papierwechsel, PDF-Export, Benachrichtigungen, Gerätesteuerung.
+    Admin-Bereich: Jetzt mit Tabs für bessere Übersicht.
     """
-
     printer_has_aqara = printer_cfg.get("has_aqara", False)
     printer_has_dsr = printer_cfg.get("has_dsr", False)
 
-    with st.expander("🛠️ Admin & Einstellungen"):
+    with st.expander("🛠️ Admin & Einstellungen", expanded=False):
+        
+        # Tabs erstellen
+        tab_paper, tab_report, tab_devices, tab_notify = st.tabs([
+            "🔄 Papier & Auftrag", 
+            "📄 Bericht", 
+            "🔌 Geräte", 
+            "🔔 System & Tests"
+        ])
 
-        # ------------------------------------------------------------------
-        # 1) NEUER AUFTRAG / PAPIERWECHSEL
-        # ------------------------------------------------------------------
-        st.markdown("### Neuer Auftrag / Papierwechsel")
+        # --- TAB 1: PAPIERWECHSEL ---
+        with tab_paper:
+            st.markdown("#### Papierwechsel & Reset")
+            
+            col_size, col_note = st.columns([1, 2])
+            with col_size:
+                st.caption("Paketgröße")
+                size_options = [200, 400]
+                try:
+                    curr = int(st.session_state.max_prints or printer_cfg["default_max_prints"])
+                except:
+                    curr = printer_cfg["default_max_prints"]
+                idx = 0 if curr == 200 else 1
+                size = st.radio("Size", size_options, horizontal=True, index=idx, label_visibility="collapsed")
+            
+            with col_note:
+                st.caption("Notiz (optional)")
+                reset_note = st.text_input("Reset-Notiz", key="reset_note", label_visibility="collapsed", placeholder="z.B. neue Rolle")
 
-        col_size, col_note = st.columns([1, 2])
-
-        with col_size:
-            st.caption("Paketgröße")
-            size_options = [200, 400]
-            try:
-                current_size = int(
-                    st.session_state.max_prints or printer_cfg["default_max_prints"]
-                )
-            except Exception:
-                current_size = printer_cfg["default_max_prints"]
-            idx = 0 if current_size == 200 else 1
-            size = st.radio(
-                "Paketgröße",
-                size_options,
-                horizontal=True,
-                index=idx,
-                label_visibility="collapsed",
-            )
-
-        with col_note:
-            st.caption("Notiz zum Papierwechsel (optional)")
-            reset_note = st.text_input(
-                "Notiz zum Papierwechsel",
-                key="reset_note",
-                label_visibility="collapsed",
-                placeholder="z.B. neue 400er Rolle eingelegt",
-            )
-
-        st.markdown("")
-        col_btn, _ = st.columns([1, 3])
-        with col_btn:
+            st.write("")
             if not st.session_state.confirm_reset:
-                if st.button(
-                    "Papierwechsel durchführen & Zähler zurücksetzen 🔄",
-                    use_container_width=True,
-                ):
-                    # Schritt 1: nur vormerken
+                if st.button("Zähler zurücksetzen 🔄", use_container_width=True):
                     st.session_state.confirm_reset = True
                     st.session_state.temp_package_size = size
                     st.session_state.temp_reset_note = reset_note
                     st.rerun()
             else:
-                st.info("Bitte unten bestätigen oder abbrechen.")
-
-        # Bestätigungsbereich
-        if st.session_state.confirm_reset:
-            st.warning(
-                f"Möchtest du wirklich das Log löschen und auf eine {st.session_state.temp_package_size}er Rolle zurücksetzen?"
-            )
-            col_yes, col_no = st.columns(2)
-            with col_yes:
-                if st.button("Ja, zurücksetzen ✅", use_container_width=True):
-                    # Paketgröße übernehmen
+                st.info("Bestätigung erforderlich:")
+                col_yes, col_no = st.columns(2)
+                if col_yes.button("Ja, Reset ✅", use_container_width=True):
                     st.session_state.max_prints = st.session_state.temp_package_size
-                    try:
-                        set_setting("package_size", st.session_state.max_prints)
-                    except Exception:
-                        pass
-                    # Log löschen
+                    try: set_setting("package_size", st.session_state.max_prints)
+                    except: pass
                     clear_google_sheet()
-                    log_reset_event(
-                        st.session_state.temp_package_size,
-                        st.session_state.temp_reset_note,
-                    )
+                    log_reset_event(st.session_state.temp_package_size, st.session_state.temp_reset_note)
                     st.session_state.confirm_reset = False
-                    st.session_state.last_warn_status = None
                     st.rerun()
-            with col_no:
-                if st.button("Abbrechen ❌", use_container_width=True):
+                if col_no.button("Abbruch ❌", use_container_width=True):
                     st.session_state.confirm_reset = False
                     st.rerun()
 
-        st.markdown("---")
-
-        # ------------------------------------------------------------------
-        # FEATURE 2.B: EVENT REPORT & PDF EXPORT
-        # ------------------------------------------------------------------
-        st.markdown("### 📊 Event-Abschluss & Report")
-        col_rep1, col_rep2 = st.columns([2, 1])
-        with col_rep1:
-            st.write("Erstelle einen PDF-Bericht über das aktuelle Event (Druckzahlen, Zeiten, etc.).")
-        with col_rep2:
+        # --- TAB 2: PDF REPORT ---
+        with tab_report:
+            st.markdown("#### Event-Abschluss & PDF")
+            st.write("Erstelle einen PDF-Bericht über das aktuelle Event.")
+            
             if st.button("PDF Bericht erstellen 📄", use_container_width=True):
-                # Daten holen
                 df_rep = get_data_admin(st.session_state.sheet_id)
                 media_factor = printer_cfg.get("media_factor", 1)
                 stats = compute_print_stats(df_rep, media_factor=media_factor)
                 
-                # Prints since reset
+                last_val = 0
                 if not df_rep.empty:
                     last_val = int(df_rep.iloc[-1].get("MediaRemaining", 0)) * media_factor
-                else:
-                    last_val = 0
                 prints_done = max(0, (st.session_state.max_prints or 0) - last_val)
                 
-                # Kosten
                 cost_str = "N/A"
                 cpr = printer_cfg.get("cost_per_roll_eur")
                 if cpr and st.session_state.max_prints:
-                     c_used = prints_done * (cpr / st.session_state.max_prints)
-                     cost_str = f"{c_used:.2f} EUR"
+                     cost_str = f"{prints_done * (cpr / st.session_state.max_prints):.2f} EUR"
 
-                # PDF Generieren
                 pdf_bytes = generate_event_pdf(
                     df=df_rep,
                     printer_name=st.session_state.selected_printer,
@@ -587,199 +508,73 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                 )
                 
                 st.download_button(
-                    label="⬇️ PDF Herunterladen",
+                    "⬇️ PDF Herunterladen",
                     data=pdf_bytes,
                     file_name=f"report_{datetime.date.today()}.pdf",
                     mime="application/pdf",
                     use_container_width=True
                 )
 
-        st.markdown("---")
-
-        # ------------------------------------------------------------------
-        # 2) BENACHRICHTIGUNGEN & TESTS
-        # ------------------------------------------------------------------
-        st.markdown("### Benachrichtigungen & Tests")
-
-        col_left, col_right = st.columns([2, 1])
-
-        with col_left:
-            st.caption("ntfy Topic (nur zur Info)")
-            st.text_input(
-                "ntfy Topic",
-                value=st.session_state.ntfy_topic or "(kein Topic konfiguriert)",
-                key="ntfy_topic_display",
-                disabled=True,
-                label_visibility="collapsed",
-            )
-
-            if st.button("Test-Push senden 🔔", use_container_width=True):
-                send_ntfy_push("Test", "Test erfolgreich", tags="tada")
-                st.toast("Test wurde gesendet.")
-
-        with col_right:
-            st.caption("Status-Simulation")
-            sim_option = st.selectbox(
-                "Status simulieren",
-                ["Keine", "Fehler", "Papier fast leer", "Keine Daten"],
-                label_visibility="collapsed",
-                key="status_sim_option",
-            )
-
-            if st.button("Simulation auslösen", use_container_width=True):
-                if sim_option == "Fehler":
-                    send_ntfy_push(
-                        "🔴 Fehler (Test)",
-                        "Simulierter Fehlerzustand",
-                        tags="rotating_light",
-                    )
-                    maybe_play_sound("error", st.session_state.sound_enabled)
-                elif sim_option == "Papier fast leer":
-                    send_ntfy_push(
-                        "⚠️ Papier fast leer (Test)",
-                        "Simulierter Low-Paper-Status",
-                        tags="warning",
-                    )
-                    maybe_play_sound("low_paper", st.session_state.sound_enabled)
-                elif sim_option == "Keine Daten":
-                    send_ntfy_push(
-                        "⚠️ Keine aktuellen Daten (Test)",
-                        "Simulierter Stale-Status",
-                        tags="hourglass",
-                    )
-                    maybe_play_sound("stale", st.session_state.sound_enabled)
-                st.toast("Simulation gesendet.")
-
-        st.markdown("---")
-
-        # ------------------------------------------------------------------
-        # 3) GERÄTESTEUERUNG (Aqara & dsrBooth)
-        # ------------------------------------------------------------------
-        st.markdown("### Gerätesteuerung")
-
-        if not printer_has_aqara and not printer_has_dsr:
-            st.info("Für diese Fotobox sind keine Geräte-Steuerungen konfiguriert.")
-            return
-
-        col_aqara, col_dsr = st.columns(2)
-
-        # --- Aqara Steckdose ------------------------------------------------
-        with col_aqara:
-            st.subheader("Aqara Steckdose", anchor=False)
-
-            if not printer_has_aqara:
-                st.info("Keine Aqara-Steckdose für diese Box hinterlegt.")
-            elif not AQARA_ENABLED:
-                st.info(
-                    "Aqara ist nicht konfiguriert. Bitte [aqara] in secrets.toml setzen."
-                )
+        # --- TAB 3: GERÄTE (AQARA/DSR) ---
+        with tab_devices:
+            st.markdown("#### Gerätesteuerung")
+            
+            if not printer_has_aqara and not printer_has_dsr:
+                st.info("Keine Geräte konfiguriert.")
             else:
-                # Nutze neuen Client (3.B)
-                current_state, debug_data = aqara_client.get_socket_state(
-                    AQARA_SOCKET_DEVICE_ID,
-                    AQARA_SOCKET_RESOURCE_ID,
-                )
-
-                st.session_state.socket_debug = debug_data
-
-                if current_state in ("on", "off"):
-                    st.session_state.socket_state = current_state
-                elif st.session_state.socket_state not in ("on", "off"):
-                    st.session_state.socket_state = "unknown"
-
-                state = st.session_state.socket_state
-
-                click_on, click_off = render_toggle_card(
-                    section_title="Fotobox-Steckdose",
-                    description=(
-                        "Schaltet die Stromversorgung der Fotobox über die Aqara-Steckdose."
-                    ),
-                    state=state,
-                    title_on="EINGESCHALTET",
-                    title_off="AUSGESCHALTET",
-                    title_unknown="STATUS UNBEKANNT",
-                    badge_prefix="Zustand",
-                    icon_on="🟢",
-                    icon_off="⚪️",
-                    icon_unknown="⚠️",
-                    btn_left_label="Ein",
-                    btn_right_label="Aus",
-                    btn_left_key="aqara_btn_on",
-                    btn_right_key="aqara_btn_off",
-                )
-
-                desired_state = True if click_on else False if click_off else None
-
-                if desired_state is not None and desired_state != (state == "on"):
-                    res = aqara_client.switch_socket(
-                    AQARA_SOCKET_DEVICE_ID,
-                    turn_on=desired_state,
-                    resource_id=AQARA_SOCKET_RESOURCE_ID
-                )
-
-                    if res.get("code") == 0:
-                        st.session_state.socket_state = "on" if desired_state else "off"
-                        st.success(
-                            "Steckdose eingeschaltet."
-                            if desired_state
-                            else "Steckdose ausgeschaltet."
+                col_aq, col_ds = st.columns(2)
+                
+                with col_aq:
+                    st.caption("Strom (Aqara)")
+                    if printer_has_aqara and AQARA_ENABLED:
+                        state = st.session_state.socket_state
+                        c_on, c_off = render_toggle_card(
+                            "Steckdose", "Strom", state,
+                            "AN", "AUS", "?", "Zustand", "🟢", "⚪️", "⚠️", "Ein", "Aus", "bq_on", "bq_off"
                         )
-                        time.sleep(0.5)
-                        st.rerun()
+                        target = True if c_on else (False if c_off else None)
+                        if target is not None:
+                            res = aqara_client.switch_socket(AQARA_SOCKET_DEVICE_ID, turn_on=target)
+                            if res.get("code") == 0:
+                                st.session_state.socket_state = "on" if target else "off"
+                                st.rerun()
                     else:
-                        st.error("Fehler beim Schalten der Steckdose:")
-                        st.code(json.dumps(res, indent=2))
+                        st.write("Nicht verfügbar")
 
-        # --- dsrBooth Lockscreen -------------------------------------------
-        with col_dsr:
-            st.subheader("dsrBooth Lockscreen", anchor=False)
+                with col_ds:
+                    st.caption("Lockscreen (dsrBooth)")
+                    if printer_has_dsr and DSR_ENABLED:
+                        l_state = st.session_state.lockscreen_state
+                        c_l, c_ul = render_toggle_card(
+                            "Sperre", "Gäste-Modus", l_state,
+                            "GESPERRT", "FREI", "?", "Modus", "🔒", "🔓", "⚠️", "Sperren", "Freigeben", "l_on", "l_off"
+                        )
+                        if c_l: 
+                            send_dsr_command("lock_on")
+                            st.session_state.lockscreen_state = "on"
+                            st.rerun()
+                        if c_ul:
+                            send_dsr_command("lock_off")
+                            st.session_state.lockscreen_state = "off"
+                            st.rerun()
+                    else:
+                        st.write("Nicht verfügbar")
 
-            if not printer_has_dsr:
-                st.info("Kein dsrBooth-Lockscreen für diese Box hinterlegt.")
-            elif not DSR_ENABLED:
-                st.info(
-                    "dsrBooth-Steuerung ist nicht konfiguriert. "
-                    "Bitte [dsrbooth] mit control_topic in secrets.toml setzen."
-                )
-            else:
-                state = st.session_state.get("lockscreen_state", "off")
-
-                click_on, click_off = render_toggle_card(
-                    section_title="Gäste-Lockscreen",
-                    description=(
-                        "Sperrt oder gibt den Gästemodus in dsrBooth frei. "
-                        "Status basiert auf letzter Aktion."
-                    ),
-                    state=state,
-                    title_on="GESPERRT",
-                    title_off="FREIGEGEBEN",
-                    title_unknown="UNBEKANNT",
-                    badge_prefix="Status",
-                    icon_on="🔒",
-                    icon_off="🔓",
-                    icon_unknown="⚠️",
-                    btn_left_label="Sperren",
-                    btn_right_label="Freigeben",
-                    btn_left_key="dsr_btn_lock",
-                    btn_right_key="dsr_btn_unlock",
-                )
-
-                desired_state = None
-                if click_on:
-                    desired_state = True
-                elif click_off:
-                    desired_state = False
-
-                if desired_state is not None:
-                    cmd = "lock_on" if desired_state else "lock_off"
-                    send_dsr_command(cmd)
-                    st.session_state.lockscreen_state = "on" if desired_state else "off"
-                    
-                    action_text = "aktiviert" if desired_state else "deaktiviert"
-                    st.success(f"Befehl gesendet: Lockscreen {action_text}.")
-                    
-                    time.sleep(0.5) 
-                    st.rerun()
+        # --- TAB 4: SYSTEM & TESTS ---
+        with tab_notify:
+            st.markdown("#### System & Tests")
+            
+            st.text_input("ntfy Topic", value=st.session_state.ntfy_topic or "-", disabled=True)
+            if st.button("🔔 Test-Push senden", use_container_width=True):
+                send_ntfy_push("Test", "Test OK", tags="tada")
+                st.toast("Gesendet")
+            
+            st.write("")
+            sim = st.selectbox("Status simulieren", ["Keine", "Fehler", "Papier leer"], label_visibility="collapsed")
+            if st.button("Simulation starten", use_container_width=True) and sim != "Keine":
+                tags = "rotating_light" if sim == "Fehler" else "warning"
+                send_ntfy_push(f"Sim: {sim}", "Test-Nachricht", tags=tags)
+                st.toast("Simuliert")
 
 
 # --------------------------------------------------------------------
@@ -793,15 +588,12 @@ def main():
     render_logout_button()
 
     st.sidebar.header("Einstellungen")
-
     view_mode = st.sidebar.radio("Ansicht", ["Einzelne Fotobox", "Alle Boxen"])
 
-    # Flottenübersicht
     if view_mode == "Alle Boxen":
         render_fleet_overview(PRINTERS)
         return
 
-    # Einzelne Box
     printer_name = st.sidebar.selectbox("Fotobox auswählen", list(PRINTERS.keys()))
     printer_cfg = PRINTERS[printer_name]
 
@@ -818,95 +610,65 @@ def main():
     ntfy_topic = printer_secret.get("ntfy_topic")
 
     if not sheet_id:
-        st.error(
-            f"Keine 'sheet_id' für '{printer_name}' in secrets.toml gefunden "
-            f"(Sektion [printers.{printer_key}])."
-        )
+        st.error(f"Fehler: Keine sheet_id für {printer_name} gefunden.")
         st.stop()
 
-    # sheet-bezogene Infos im State
     st.session_state.sheet_id = sheet_id
     st.session_state.ntfy_topic = ntfy_topic
 
-    # Settings laden
     if st.session_state.selected_printer != printer_name:
         st.session_state.selected_printer = printer_name
         st.session_state.last_warn_status = None
         st.session_state.last_sound_status = None
-
         try:
             pkg = get_setting("package_size", printer_cfg["default_max_prints"])
             st.session_state.max_prints = int(pkg)
-        except Exception:
+        except:
             st.session_state.max_prints = printer_cfg["default_max_prints"]
 
     if "ntfy_active" not in st.session_state:
-        try:
-            default_ntfy = get_setting("ntfy_active", str(NTFY_ACTIVE_DEFAULT))
-            st.session_state.ntfy_active = str(default_ntfy).lower() == "true"
-        except Exception:
-            st.session_state.ntfy_active = NTFY_ACTIVE_DEFAULT
+        try: st.session_state.ntfy_active = str(get_setting("ntfy_active", str(NTFY_ACTIVE_DEFAULT))).lower() == "true"
+        except: st.session_state.ntfy_active = NTFY_ACTIVE_DEFAULT
 
     if "event_mode" not in st.session_state:
-        try:
-            default_view = get_setting("default_view", "admin")
-            st.session_state.event_mode = default_view == "event"
-        except Exception:
-            st.session_state.event_mode = False
+        try: st.session_state.event_mode = get_setting("default_view", "admin") == "event"
+        except: st.session_state.event_mode = False
 
     if "sound_enabled" not in st.session_state:
         st.session_state.sound_enabled = False
 
-    event_mode = st.sidebar.toggle(
-        "Event-Ansicht (nur Status)",
-        value=st.session_state.event_mode,
-    )
-    sound_enabled = st.sidebar.toggle(
-        "Sound bei Warnungen",
-        value=st.session_state.sound_enabled,
-    )
-    ntfy_active_ui = st.sidebar.toggle(
-        "Push-Benachrichtigungen aktiv",
-        value=st.session_state.ntfy_active,
-    )
+    event_mode = st.sidebar.toggle("Event-Ansicht", value=st.session_state.event_mode)
+    sound_enabled = st.sidebar.toggle("Sound", value=st.session_state.sound_enabled)
+    ntfy_active_ui = st.sidebar.toggle("Push Aktiv", value=st.session_state.ntfy_active)
 
     if event_mode != st.session_state.event_mode:
         st.session_state.event_mode = event_mode
-        try:
-            set_setting("default_view", "event" if event_mode else "admin")
-        except Exception:
-            pass
+        try: set_setting("default_view", "event" if event_mode else "admin")
+        except: pass
 
     if ntfy_active_ui != st.session_state.ntfy_active:
         st.session_state.ntfy_active = ntfy_active_ui
-        try:
-            set_setting("ntfy_active", ntfy_active_ui)
-        except Exception:
-            pass
+        try: set_setting("ntfy_active", ntfy_active_ui)
+        except: pass
 
     st.session_state.sound_enabled = sound_enabled
 
-    # ---------------- UI ----------------
+    # UI RENDERING
     st.title(f"{PAGE_ICON} {PAGE_TITLE}")
-
     view_event_mode = event_mode or not printer_has_admin
 
     if view_event_mode:
         show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=True)
-        render_status_help(warning_threshold)
-        
+        # Hilfe & Legende entfernt
         st.write("")
         st.link_button("☁️ Fotoshare Cloud", "https://fotoshare.co/admin/index", use_container_width=True)
-
     else:
         tab_live, tab_hist = st.tabs(["Live-Status", "Historie & Analyse"])
         with tab_live:
             show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=False)
-            render_status_help(warning_threshold)
-            
+            # Hilfe & Legende entfernt
             st.write("")
             st.link_button("☁️ Fotoshare Cloud", "https://fotoshare.co/admin/index", use_container_width=True)
-
         with tab_hist:
             show_history(media_factor, cost_per_roll)
 
