@@ -11,9 +11,8 @@ import requests
 import streamlit as st
 import extra_streamlit_components as stx
 import pandas as pd
-from streamlit_lottie import st_lottie
 
-# --- NEUE & BESTEHENDE IMPORTE ---
+# Neue Importe für die optimierte Struktur
 from aqara_client import AqaraClient
 from report_generator import generate_event_pdf
 from sheets_helpers import (
@@ -35,29 +34,8 @@ from ui_components import (
     inject_custom_css,
     render_toggle_card,
     render_fleet_overview,
-    render_hero_status,
-    render_custom_progress_bar
+    # render_status_help wurde entfernt
 )
-
-# --------------------------------------------------------------------
-# LOTTIE ANIMATION LOADER
-# --------------------------------------------------------------------
-@st.cache_data
-def load_lottieurl(url: str):
-    r = requests.get(url)
-    if r.status_code != 200:
-        return None
-    return r.json()
-
-# Lottie URLs (Open Source Animationen)
-LOTTIE_PRINTING = "https://lottie.host/5a8e0f06-5a7a-4286-905c-37e466479f6e/8wG9QnF6wK.json" # Drucker Animation
-LOTTIE_READY = "https://lottie.host/9e4d5818-4940-4235-9854-3e6188e7343e/8X1q1X1q1X.json" # Clean Checkmark (Generic Placeholder URL - using a safe fallback logic ideally)
-LOTTIE_WARNING = "https://assets10.lottiefiles.com/packages/lf20_s9m78f.json" # Warning Triangle
-LOTTIE_ERROR = "https://assets9.lottiefiles.com/packages/lf20_qpwbv89w.json" # Error Cross
-
-# Fallback auf statische URLs, da Lottie-URLs sich ändern können. 
-# Für Produktion empfiehlt es sich, die JSONs herunterzuladen und lokal zu laden.
-# Hier verwende ich Dummys, die funktionieren sollten.
 
 # --------------------------------------------------------------------
 # GRUNDKONFIG
@@ -88,6 +66,7 @@ PRINTERS = {
         "media_factor": 2,
     },
 }
+
 # --------------------------------------------------------------------
 # LOGIN
 # --------------------------------------------------------------------
@@ -157,92 +136,78 @@ except Exception:
 
 
 def _sanitize_header_value(val: str, default: str = "ntfy") -> str:
-    if not isinstance(val, str): val = str(val)
+    if not isinstance(val, str):
+        val = str(val)
+
     val = val.replace("\r", " ").replace("\n", " ")
     val = unicodedata.normalize("NFKC", val)
     val = re.sub(r"[\U00010000-\U0010FFFF]", "", val)
     val = val.encode("latin-1", "ignore").decode("latin-1")
     val = val.strip()
-    return val if val else default
+
+    if not val:
+        val = default
+
+    return val
+
 
 def send_ntfy_push(title: str, message: str, tags: str = "warning", priority: str = "default") -> None:
-    if not st.session_state.get("ntfy_active", False): return
+    if not st.session_state.get("ntfy_active", False):
+        return
+
     topic = st.session_state.get("ntfy_topic")
-    if not topic: return
-    
+    if not topic:
+        return
+
+    safe_title = _sanitize_header_value(title, default="Status")
+    safe_tags = _sanitize_header_value(tags, default="info")
+    safe_priority = _sanitize_header_value(priority, default="default")
+
     try:
+        headers = {
+            "Title": safe_title,
+            "Tags": safe_tags,
+            "Priority": safe_priority,
+        }
+        # Requests ohne Retry, da Push "Fire & Forget" ist
         requests.post(
             f"https://ntfy.sh/{topic}",
             data=message.encode("utf-8"),
-            headers={"Title": _sanitize_header_value(title), "Tags": _sanitize_header_value(tags), "Priority": priority},
-            timeout=5
+            headers=headers,
+            timeout=5,
         )
-    except: pass
+    except Exception as e:
+        st.error(f"ntfy Fehler: {e}")
+
 
 def send_dsr_command(cmd: str) -> None:
+    if not DSR_ENABLED or not DSR_CONTROL_TOPIC:
+        return
     try:
-        dsr_cfg = st.secrets["dsrbooth"]
-        DSR_CONTROL_TOPIC = dsr_cfg.get("control_topic")
-        if DSR_CONTROL_TOPIC:
-            requests.post(f"https://ntfy.sh/{DSR_CONTROL_TOPIC}", data=cmd.encode("utf-8"), timeout=5)
-    except: pass
+        requests.post(
+            f"https://ntfy.sh/{DSR_CONTROL_TOPIC}",
+            data=cmd.encode("utf-8"),
+            timeout=5,
+        )
+    except Exception:
+        pass
 
-def init_aqara() -> Tuple[bool, Optional[AqaraClient], Optional[str], str]:
-    try:
-        if "aqara" not in st.secrets: return False, None, None, "4.1.85"
-        client = AqaraClient()
-        aqara_cfg = st.secrets["aqara"]
-        return True, client, aqara_cfg["device_id"], aqara_cfg.get("resource_id", "4.1.85")
-    except: return False, None, None, "4.1.85"
-
-AQARA_ENABLED, aqara_client, AQARA_SOCKET_DEVICE_ID, AQARA_SOCKET_RESOURCE_ID = init_aqara()
-try:
-    dsr_cfg = st.secrets["dsrbooth"]
-    DSR_CONTROL_TOPIC = dsr_cfg.get("control_topic")
-    DSR_ENABLED = bool(DSR_CONTROL_TOPIC)
-except:
-    DSR_ENABLED = False
-
-def init_session_state():
-    defaults = {"confirm_reset": False, "last_warn_status": None, "last_sound_status": None, "max_prints": None, "selected_printer": None, "socket_state": "unknown", "socket_debug": None, "lockscreen_state": "off"}
-    for k, v in defaults.items():
-        if k not in st.session_state: st.session_state[k] = v
 
 # --------------------------------------------------------------------
 # AQARA – KONFIG (Optimiert 3.B)
 # --------------------------------------------------------------------
-# app.py - Ersetze die bestehende init_aqara Funktion hiermit:
-
 def init_aqara() -> Tuple[bool, Optional[AqaraClient], Optional[str], str]:
     try:
         if "aqara" not in st.secrets:
             return False, None, None, "4.1.85"
             
-        # Debugging: Wir probieren den Login manuell und zeigen das Ergebnis
+        aqara_cfg = st.secrets["aqara"]
+        # Client liest Secrets und Tokens jetzt selbständig
         client = AqaraClient()
         
-        # Test: Haben wir einen Token bekommen?
-        if not client.tokens.get("access_token"):
-            st.error("❌ Aqara Login fehlgeschlagen! Keine tokens.json erstellt.")
-            
-            # Wir machen manuell einen Request, um den Fehler zu sehen
-            url = f"{client.root_url}/auth/token"
-            headers = client._generate_headers(access_token=None)
-            payload = {"intent": 0}
-            data = client._request_with_retry(url, headers, payload)
-            
-            st.code(f"Antwort vom Aqara Server:\n{json.dumps(data, indent=2)}", language="json")
-            
-            if data.get("code") == 302:
-                 st.warning("⚠️ Fehler 302: Signatur falsch. Bitte App ID & Key ID prüfen.")
-            elif data.get("code") == 301:
-                 st.warning("⚠️ Fehler 301: Falsche Region. Ist dein Aqara-Konto auf Europa eingestellt?")
-                 
-        aqara_cfg = st.secrets["aqara"]
         return True, client, aqara_cfg["device_id"], aqara_cfg.get("resource_id", "4.1.85")
-        
     except Exception as e:
-        st.error(f"Aqara Init Fehler: {e}")
+        print(f"Aqara Init Fehler: {e}")
         return False, None, None, "4.1.85"
 
 AQARA_ENABLED, aqara_client, AQARA_SOCKET_DEVICE_ID, AQARA_SOCKET_RESOURCE_ID = init_aqara()
@@ -268,111 +233,167 @@ def init_session_state():
 
 
 # --------------------------------------------------------------------
-# LIVE-STATUS VIEW (MIT WOW-EFFEKT)
+# LIVE-STATUS VIEW (Optimiert 2.C & 4.A)
 # --------------------------------------------------------------------
 @st.fragment(run_every=10)
 def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: bool, event_mode: bool) -> None:
     df = get_data(st.session_state.sheet_id, event_mode=event_mode)
     if df.empty:
-        st.info("Warte auf Daten...")
+        st.info("System wartet auf Start…")
+        st.caption("Noch keine Druckdaten empfangen.")
         return
 
     try:
         last = df.iloc[-1]
         timestamp = str(last.get("Timestamp", ""))
         raw_status = str(last.get("Status", ""))
-        try: media_remaining_raw = int(last.get("MediaRemaining", 0))
-        except: media_remaining_raw = 0
+
+        try:
+            media_remaining_raw = int(last.get("MediaRemaining", 0))
+        except Exception:
+            media_remaining_raw = 0
+
         media_remaining = media_remaining_raw * media_factor
 
         status_mode, display_text, display_color, push, minutes_diff = evaluate_status(
             raw_status, media_remaining, timestamp
         )
 
-        if push:
-            send_ntfy_push(*push)
+        if push is not None:
+            title, msg, tags = push
+            send_ntfy_push(title, msg, tags=tags)
+
         maybe_play_sound(status_mode, sound_enabled)
-        
+
         heartbeat_info = f" (vor {minutes_diff} Min)" if minutes_diff is not None else ""
 
-        # --- HERO STATUS (Mit Animation) ---
-        # Wir teilen das Layout oben: Links Animation, Rechts Text
-        
-        # Lottie laden (basierend auf Status)
-        lottie_json = None
-        if status_mode == "printing":
-             # Wir nutzen hier stattdessen eine lokale Referenz oder URL laden
-             # Da wir keine lokalen Files haben, laden wir URL (Achtung: Performance)
-             # Für Production: Lade JSON einmal global.
-             lottie_json = load_lottieurl("https://lottie.host/5a8e0f06-5a7a-4286-905c-37e466479f6e/8wG9QnF6wK.json")
-        elif status_mode == "error":
-             lottie_json = load_lottieurl("https://assets9.lottiefiles.com/packages/lf20_qpwbv89w.json")
-        
-        # Zeige die überarbeitete Hero Card
-        render_hero_status(status_mode, display_text, timestamp, heartbeat_info)
-        
-        # Wenn wir drucken oder Fehler haben, zeigen wir die Animation UNTERHALB der Card groß an
-        if lottie_json:
-            st_lottie(lottie_json, height=150, key="status_anim")
+        # HERO HEADER (Modernes Design)
+        st.markdown(
+            f"""
+            <div style="
+                background: linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%);
+                padding: 30px;
+                border-radius: 24px;
+                border: 1px solid #E2E8F0;
+                margin-bottom: 24px;
+                text-align: center;
+                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+            ">
+                <div style="font-size: 1rem; color: #64748B; margin-bottom: 8px; font-weight: 600;">
+                    AKTUELLER STATUS
+                </div>
+                <div style="
+                    font-size: 2.5rem; 
+                    font-weight: 800; 
+                    color: {display_color};
+                    letter-spacing: -0.02em;
+                    margin-bottom: 8px;
+                ">
+                    {display_text.replace('✅ ', '').replace('🔴 ', '').replace('⚠️ ', '')}
+                </div>
+                 <div style="
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    background: #F1F5F9;
+                    padding: 6px 16px;
+                    border-radius: 99px;
+                    color: #475569;
+                    font-size: 0.85rem;
+                ">
+                    <span>🕒</span> Letztes Signal: {timestamp} {heartbeat_info}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
         if status_mode == "error":
-            st.error("Störung aktiv! Bitte Drucker prüfen.")
+            st.error("Bitte Drucker und Papier prüfen (Störung aktiv).")
         elif status_mode == "stale":
-            st.warning("Verbindung prüfen (Keine Daten seit > 60 Min).")
+            st.warning("Seit einigen Minuten keine Daten – Verbindung / Script prüfen.")
 
-        # --- PAPIER STATUS & FORECAST ---
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("### 🧻 Papierstand & Analyse")
+        # PAPIER STATUS & INTELLIGENTE REICHWEITE (Feature 2.C)
+        st.markdown("### Papierstatus")
 
         prints_since_reset = max(0, (st.session_state.max_prints or 0) - media_remaining)
+
         stats = compute_print_stats(df, window_min=30, media_factor=media_factor)
         
         forecast_str = "–"
         end_time_str = ""
-        ppm = stats.get("ppm_window") or stats.get("ppm_overall")
-        
-        if status_mode != "error" and ppm and ppm > 0 and media_remaining > 0:
-            minutes_left = media_remaining / ppm
-            now = datetime.datetime.now()
-            end_time = now + datetime.timedelta(minutes=minutes_left)
-            forecast_str = humanize_minutes(minutes_left)
-            end_time_str = f" (bis {end_time.strftime('%H:%M')})"
-        elif media_remaining > 0:
-            forecast_str = "Warte..."
-        else:
-            forecast_str = "Leer"
 
-        # Metrics Row
+        if status_mode == "error":
+            forecast_str = "Gestört"
+        else:
+            ppm = stats.get("ppm_window") or stats.get("ppm_overall")
+            # Fallback Annahme, wenn kein Durchsatz
+            if ppm and ppm > 0 and media_remaining > 0:
+                minutes_left = media_remaining / ppm
+                
+                # Berechne voraussichtliche Endzeit
+                now = datetime.datetime.now()
+                end_time = now + datetime.timedelta(minutes=minutes_left)
+                end_time_formatted = end_time.strftime("%H:%M")
+                
+                forecast_str = humanize_minutes(minutes_left)
+                end_time_str = f" (bis ca. {end_time_formatted} Uhr)"
+                
+            elif media_remaining > 0:
+                forecast_str = "Warte auf Drucke..."
+            else:
+                forecast_str = "0 Min."
+
         colA, colB, colC = st.columns(3)
-        colA.metric("Verbleibend", f"{media_remaining}", f"von {st.session_state.max_prints}")
-        colB.metric("Laufzeit", forecast_str, end_time_str.replace("(", "").replace(")", ""))
-        
-        cost_txt = "–"
-        if cost_per_roll and st.session_state.max_prints:
-            cost_used = prints_since_reset * (cost_per_roll / st.session_state.max_prints)
-            cost_txt = f"{cost_used:.2f} €"
-        colC.metric("Kosten (Live)", cost_txt)
+        colA.metric("Verbleibend", f"{media_remaining} Stk", f"von {st.session_state.max_prints}")
+        # Hier wird die neue Uhrzeit angezeigt
+        colB.metric("Restlaufzeit", forecast_str, end_time_str)
 
-        # --- ANIMATED PROGRESS BAR ---
-        # Berechnung
-        progress_val = 0.0
-        if st.session_state.max_prints and media_remaining > 0:
-             progress_val = media_remaining / st.session_state.max_prints
-        
-        # Farben definieren
-        if status_mode == "error" and media_remaining == 0:
-            c_start, c_end = "#EF4444", "#B91C1C" # Rot
-        elif progress_val < 0.15:
-            c_start, c_end = "#F59E0B", "#D97706" # Orange
+        cost_txt = "–"
+        if cost_per_roll and (st.session_state.max_prints or 0) > 0:
+            try:
+                cost_per_print = cost_per_roll / st.session_state.max_prints
+                cost_used = prints_since_reset * cost_per_print
+                cost_txt = f"{cost_used:0.2f} €"
+                colC.metric("Kosten (live)", cost_txt)
+            except Exception:
+                colC.metric("Kosten (live)", "–")
         else:
-            c_start, c_end = "#3B82F6", "#2563EB" # Blau
-            
-        render_custom_progress_bar(progress_val, c_start, c_end)
-        
-        st.caption(f"Füllstand: {int(progress_val*100)}%")
+            colC.metric("Kosten (live)", "–")
+
+        # Progress-Bar
+        if status_mode == "error" and media_remaining == 0:
+            bar_color = "red"
+            progress_val = 0
+        else:
+            if not st.session_state.max_prints:
+                progress_val = 0
+            else:
+                progress_val = max(
+                    0.0, min(1.0, media_remaining / st.session_state.max_prints)
+                )
+
+            if progress_val < 0.1:
+                bar_color = "red"
+            elif progress_val < 0.25:
+                bar_color = "orange"
+            else:
+                bar_color = "blue"
+
+        st.markdown(
+            f"""
+            <style>
+            .stProgress > div > div > div > div {{
+                background-color: {bar_color};
+            }}
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.progress(progress_val)
 
     except Exception as e:
-        st.error(f"Render Fehler: {e}")
+        st.error(f"Fehler bei der Datenverarbeitung: {e}")
 
 
 # --------------------------------------------------------------------
@@ -384,8 +405,7 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
         st.info("Noch keine Daten für die Historie.")
         return
 
-    # Das CSS aus ui_components sorgt automatisch für schöneres Styling hier
-    st.markdown("### 📈 Verlauf & Analyse")
+    st.subheader("Verlauf & Analyse")
 
     df_hist = _prepare_history_df(df)
     if df_hist.empty:
@@ -405,13 +425,17 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Log-Einträge", len(df_hist))
-    c2.metric("Gedruckt (Reset)", prints_since_reset)
+    c2.metric("Drucke seit Reset (geschätzt)", prints_since_reset)
 
-    ppm_sess = stats['ppm_overall']
-    c3.metric("Ø Drucke/Std (Total)", f"{ppm_sess * 60:.1f}" if ppm_sess else "–")
+    if stats["ppm_overall"]:
+        c3.metric("Ø Drucke/Std (Session)", f"{stats['ppm_overall'] * 60:.1f}")
+    else:
+        c3.metric("Ø Drucke/Std (Session)", "–")
 
-    ppm_win = stats['ppm_window']
-    c4.metric("Ø Drucke/Std (30min)", f"{ppm_win * 60:.1f}" if ppm_win else "–")
+    if stats["ppm_window"]:
+        c4.metric("Ø Drucke/Std (letzte 30 Min)", f"{stats['ppm_window'] * 60:.1f}")
+    else:
+        c4.metric("Ø Drucke/Std (letzte 30 Min)", "–")
 
     st.markdown("#### Kostenabschätzung")
     col_cost1, col_cost2 = st.columns(2)
@@ -420,13 +444,13 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
             cost_per_print = cost_per_roll / st.session_state.max_prints
             cost_used = prints_since_reset * cost_per_print
             col_cost1.metric("Kosten seit Reset", f"{cost_used:0.2f} €")
-            col_cost2.metric("Kosten pro Druck", f"{cost_per_print:0.3f} €")
+            col_cost2.metric("Kosten pro Druck (ca.)", f"{cost_per_print:0.3f} €")
         except Exception:
             col_cost1.metric("Kosten seit Reset", "–")
-            col_cost2.metric("Kosten pro Druck", "–")
+            col_cost2.metric("Kosten pro Druck (ca.)", "–")
     else:
         col_cost1.metric("Kosten seit Reset", "–")
-        col_cost2.metric("Kosten pro Druck", "–")
+        col_cost2.metric("Kosten pro Druck (ca.)", "–")
 
     st.markdown("#### Rohdaten (letzte 200 Zeilen)")
     st.dataframe(df.tail(200), use_container_width=True)
@@ -439,11 +463,15 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
     """
     Admin-Bereich mit Tabs für bessere Übersicht.
     """
+
     printer_has_aqara = printer_cfg.get("has_aqara", False)
     printer_has_dsr = printer_cfg.get("has_dsr", False)
 
+    # ÄNDERUNG: Expander entfernt, stattdessen eine Überschrift hinzugefügt
     st.subheader("🛠️ Admin & Einstellungen") 
 
+    # ÄNDERUNG: Code hierunter wurde eine Ebene nach links gerückt (de-indented)
+    
     # Tabs erstellen
     tab_paper, tab_report, tab_notify, tab_devices = st.tabs([
         "🧻 Papier & Reset", 
@@ -452,7 +480,9 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
         "🔌 Geräte"
     ])
 
-    # --- TAB 1: NEUER AUFTRAG / PAPIERWECHSEL ---
+    # ------------------------------------------------------------------
+    # TAB 1: NEUER AUFTRAG / PAPIERWECHSEL
+    # ------------------------------------------------------------------
     with tab_paper:
         st.markdown("### Neuer Auftrag / Papierwechsel")
 
@@ -478,7 +508,7 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
             )
 
         with col_note:
-            st.caption("Notiz (optional)")
+            st.caption("Notiz zum Papierwechsel (optional)")
             reset_note = st.text_input(
                 "Notiz zum Papierwechsel",
                 key="reset_note",
@@ -490,7 +520,10 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
         col_btn, _ = st.columns([1, 3])
         with col_btn:
             if not st.session_state.confirm_reset:
-                if st.button("Papierwechsel & Reset 🔄", use_container_width=True):
+                if st.button(
+                    "Papierwechsel & Reset 🔄",
+                    use_container_width=True,
+                ):
                     st.session_state.confirm_reset = True
                     st.session_state.temp_package_size = size
                     st.session_state.temp_reset_note = reset_note
@@ -500,7 +533,9 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
 
         # Bestätigungsbereich
         if st.session_state.confirm_reset:
-            st.warning(f"Wirklich Log löschen und auf {st.session_state.temp_package_size}er Rolle zurücksetzen?")
+            st.warning(
+                f"Wirklich Log löschen und auf {st.session_state.temp_package_size}er Rolle zurücksetzen?"
+            )
             col_yes, col_no = st.columns(2)
             with col_yes:
                 if st.button("Ja, zurücksetzen ✅", use_container_width=True):
@@ -522,7 +557,9 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                     st.session_state.confirm_reset = False
                     st.rerun()
 
-    # --- TAB 2: REPORT & EXPORT ---
+    # ------------------------------------------------------------------
+    # TAB 2: REPORT & EXPORT
+    # ------------------------------------------------------------------
     with tab_report:
         st.markdown("### 📊 Event-Abschluss")
         st.write("Erstelle einen PDF-Bericht über das aktuelle Event.")
@@ -561,7 +598,9 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                 use_container_width=True
             )
 
-    # --- TAB 3: BENACHRICHTIGUNGEN ---
+    # ------------------------------------------------------------------
+    # TAB 3: BENACHRICHTIGUNGEN
+    # ------------------------------------------------------------------
     with tab_notify:
         st.markdown("### Benachrichtigungen & Tests")
 
@@ -602,7 +641,9 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                     maybe_play_sound("stale", st.session_state.sound_enabled)
                 st.toast("Simulation gesendet.")
 
-    # --- TAB 4: GERÄTESTEUERUNG ---
+    # ------------------------------------------------------------------
+    # TAB 4: GERÄTESTEUERUNG
+    # ------------------------------------------------------------------
     with tab_devices:
         st.markdown("### Gerätesteuerung")
 
@@ -629,23 +670,27 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                     
                     state = st.session_state.socket_state
 
+                    # Vereinfachte UI für Tab
                     st.write(f"Status: **{state.upper()}**")
                     
                     c_on, c_off = st.columns(2)
                     if c_on.button("An 🟢", use_container_width=True, key="aq_on"):
+                        # Antwort speichern
                         response = aqara_client.switch_socket(AQARA_SOCKET_DEVICE_ID, True, AQARA_SOCKET_RESOURCE_ID)
+    
+                        # Code 0 bedeutet Erfolg bei Aqara
                         if response.get("code") == 0:
                             st.session_state.socket_state = "on"
                             st.toast("Steckdose eingeschaltet!", icon="✅")
-                            time.sleep(1)
+                            time.sleep(1) # Kurz warten für Feedback
                             st.rerun()
                         else:
+                            # Fehler anzeigen, damit du siehst, WAS falsch läuft
                             st.error(f"Schalten fehlgeschlagen: {response}")
-                            
-                    if c_off.button("Aus ⚪", use_container_width=True, key="aq_off"):
-                        aqara_client.switch_socket(AQARA_SOCKET_DEVICE_ID, False, AQARA_SOCKET_RESOURCE_ID)
-                        st.session_state.socket_state = "off"
-                        st.rerun()
+                        if c_off.button("Aus ⚪", use_container_width=True, key="aq_off"):
+                            aqara_client.switch_socket(AQARA_SOCKET_DEVICE_ID, False, AQARA_SOCKET_RESOURCE_ID)
+                            st.session_state.socket_state = "off"
+                            st.rerun()
 
             # --- dsrBooth ---
             with col_dsr:
@@ -674,10 +719,7 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
 # --------------------------------------------------------------------
 def main():
     st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="centered")
-    
-    # 1. Custom CSS injizieren (WICHTIG für WOW Effekt)
     inject_custom_css()
-    
     init_session_state()
     check_login()
     render_logout_button()
@@ -686,7 +728,7 @@ def main():
 
     view_mode = st.sidebar.radio("Ansicht", ["Einzelne Fotobox", "Alle Boxen"])
 
-    # Flottenübersicht (Neu: Nutzt Glassmorphism Cards)
+    # Flottenübersicht
     if view_mode == "Alle Boxen":
         render_fleet_overview(PRINTERS)
         return
@@ -789,7 +831,7 @@ def main():
         st.link_button("☁️ Fotoshare Cloud", "https://fotoshare.co/admin/index", use_container_width=True)
 
     else:
-        tab_live, tab_hist = st.tabs(["🚀 Live Dashboard", "📈 Analyse"])
+        tab_live, tab_hist = st.tabs(["Live-Status", "Historie & Analyse"])
         with tab_live:
             show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=False)
             # Legende / Hilfe entfernt
