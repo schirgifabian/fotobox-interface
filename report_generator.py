@@ -168,8 +168,10 @@ def generate_event_pdf(
     if chart_buffer:
         pdf.set_font("Arial", 'B', 12)
         pdf.cell(0, 10, "Verlauf & Analyse", 0, 1)
-        # Image aus Buffer laden
-        pdf.image(chart_buffer, x=10, w=190) 
+        
+        # HIER IST DER FIX: type='png' hinzufügen
+        pdf.image(chart_buffer, x=10, w=190, type='png') 
+        
         pdf.ln(5)
     
     # --- 4. Tabelle (Letzte Logs) ---
