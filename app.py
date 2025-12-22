@@ -467,239 +467,242 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
     printer_has_aqara = printer_cfg.get("has_aqara", False)
     printer_has_dsr = printer_cfg.get("has_dsr", False)
 
-    with st.expander("🛠️ Admin & Einstellungen", expanded=False):
+    # ÄNDERUNG: Expander entfernt, stattdessen eine Überschrift hinzugefügt
+    st.subheader("🛠️ Admin & Einstellungen") 
 
-        # Tabs erstellen
-        tab_paper, tab_report, tab_notify, tab_devices = st.tabs([
-            "🧻 Papier & Reset", 
-            "📊 Report", 
-            "🔔 Benachrichtigung", 
-            "🔌 Geräte"
-        ])
+    # ÄNDERUNG: Code hierunter wurde eine Ebene nach links gerückt (de-indented)
+    
+    # Tabs erstellen
+    tab_paper, tab_report, tab_notify, tab_devices = st.tabs([
+        "🧻 Papier & Reset", 
+        "📊 Report", 
+        "🔔 Benachrichtigung", 
+        "🔌 Geräte"
+    ])
 
-        # ------------------------------------------------------------------
-        # TAB 1: NEUER AUFTRAG / PAPIERWECHSEL
-        # ------------------------------------------------------------------
-        with tab_paper:
-            st.markdown("### Neuer Auftrag / Papierwechsel")
+    # ------------------------------------------------------------------
+    # TAB 1: NEUER AUFTRAG / PAPIERWECHSEL
+    # ------------------------------------------------------------------
+    with tab_paper:
+        st.markdown("### Neuer Auftrag / Papierwechsel")
 
-            col_size, col_note = st.columns([1, 2])
+        col_size, col_note = st.columns([1, 2])
 
-            with col_size:
-                st.caption("Paketgröße")
-                size_options = [200, 400]
-                try:
-                    current_size = int(
-                        st.session_state.max_prints or printer_cfg["default_max_prints"]
-                    )
-                except Exception:
-                    current_size = printer_cfg["default_max_prints"]
-                idx = 0 if current_size == 200 else 1
-                size = st.radio(
-                    "Paketgröße",
-                    size_options,
-                    horizontal=True,
-                    index=idx,
-                    label_visibility="collapsed",
-                    key="tab_paper_size"
+        with col_size:
+            st.caption("Paketgröße")
+            size_options = [200, 400]
+            try:
+                current_size = int(
+                    st.session_state.max_prints or printer_cfg["default_max_prints"]
                 )
+            except Exception:
+                current_size = printer_cfg["default_max_prints"]
+            idx = 0 if current_size == 200 else 1
+            size = st.radio(
+                "Paketgröße",
+                size_options,
+                horizontal=True,
+                index=idx,
+                label_visibility="collapsed",
+                key="tab_paper_size"
+            )
 
-            with col_note:
-                st.caption("Notiz zum Papierwechsel (optional)")
-                reset_note = st.text_input(
-                    "Notiz zum Papierwechsel",
-                    key="reset_note",
-                    label_visibility="collapsed",
-                    placeholder="z.B. neue 400er Rolle eingelegt",
-                )
+        with col_note:
+            st.caption("Notiz zum Papierwechsel (optional)")
+            reset_note = st.text_input(
+                "Notiz zum Papierwechsel",
+                key="reset_note",
+                label_visibility="collapsed",
+                placeholder="z.B. neue 400er Rolle eingelegt",
+            )
 
-            st.markdown("")
-            col_btn, _ = st.columns([1, 3])
-            with col_btn:
-                if not st.session_state.confirm_reset:
-                    if st.button(
-                        "Papierwechsel & Reset 🔄",
-                        use_container_width=True,
-                    ):
-                        st.session_state.confirm_reset = True
-                        st.session_state.temp_package_size = size
-                        st.session_state.temp_reset_note = reset_note
-                        st.rerun()
-                else:
-                    st.info("Bitte bestätigen.")
-
-            # Bestätigungsbereich
-            if st.session_state.confirm_reset:
-                st.warning(
-                    f"Wirklich Log löschen und auf {st.session_state.temp_package_size}er Rolle zurücksetzen?"
-                )
-                col_yes, col_no = st.columns(2)
-                with col_yes:
-                    if st.button("Ja, zurücksetzen ✅", use_container_width=True):
-                        st.session_state.max_prints = st.session_state.temp_package_size
-                        try:
-                            set_setting("package_size", st.session_state.max_prints)
-                        except Exception:
-                            pass
-                        clear_google_sheet()
-                        log_reset_event(
-                            st.session_state.temp_package_size,
-                            st.session_state.temp_reset_note,
-                        )
-                        st.session_state.confirm_reset = False
-                        st.session_state.last_warn_status = None
-                        st.rerun()
-                with col_no:
-                    if st.button("Abbrechen ❌", use_container_width=True):
-                        st.session_state.confirm_reset = False
-                        st.rerun()
-
-        # ------------------------------------------------------------------
-        # TAB 2: REPORT & EXPORT
-        # ------------------------------------------------------------------
-        with tab_report:
-            st.markdown("### 📊 Event-Abschluss")
-            st.write("Erstelle einen PDF-Bericht über das aktuelle Event.")
-            
-            if st.button("PDF Bericht erstellen 📄", use_container_width=True):
-                df_rep = get_data_admin(st.session_state.sheet_id)
-                media_factor = printer_cfg.get("media_factor", 1)
-                stats = compute_print_stats(df_rep, media_factor=media_factor)
-                
-                if not df_rep.empty:
-                    last_val = int(df_rep.iloc[-1].get("MediaRemaining", 0)) * media_factor
-                else:
-                    last_val = 0
-                prints_done = max(0, (st.session_state.max_prints or 0) - last_val)
-                
-                cost_str = "N/A"
-                cpr = printer_cfg.get("cost_per_roll_eur")
-                if cpr and st.session_state.max_prints:
-                      c_used = prints_done * (cpr / st.session_state.max_prints)
-                      cost_str = f"{c_used:.2f} EUR"
-
-                pdf_bytes = generate_event_pdf(
-                    df=df_rep,
-                    printer_name=st.session_state.selected_printer,
-                    stats=stats,
-                    prints_since_reset=prints_done,
-                    cost_info=cost_str,
-                    media_factor=media_factor  # <--- NEU HINZUFÜGEN
-                )
-                
-                st.download_button(
-                    label="⬇️ PDF Herunterladen",
-                    data=pdf_bytes,
-                    file_name=f"report_{datetime.date.today()}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True
-                )
-
-        # ------------------------------------------------------------------
-        # TAB 3: BENACHRICHTIGUNGEN
-        # ------------------------------------------------------------------
-        with tab_notify:
-            st.markdown("### Benachrichtigungen & Tests")
-
-            col_left, col_right = st.columns([2, 1])
-
-            with col_left:
-                st.caption("ntfy Topic (nur zur Info)")
-                st.text_input(
-                    "ntfy Topic",
-                    value=st.session_state.ntfy_topic or "(kein Topic konfiguriert)",
-                    key="ntfy_topic_display",
-                    disabled=True,
-                    label_visibility="collapsed",
-                )
-
-                if st.button("Test-Push senden 🔔", use_container_width=True):
-                    send_ntfy_push("Test", "Test erfolgreich", tags="tada")
-                    st.toast("Test wurde gesendet.")
-
-            with col_right:
-                st.caption("Status-Simulation")
-                sim_option = st.selectbox(
-                    "Status simulieren",
-                    ["Keine", "Fehler", "Papier fast leer", "Keine Daten"],
-                    label_visibility="collapsed",
-                    key="status_sim_option",
-                )
-
-                if st.button("Auslösen", use_container_width=True):
-                    if sim_option == "Fehler":
-                        send_ntfy_push("🔴 Fehler (Test)", "Simulierter Fehlerzustand", tags="rotating_light")
-                        maybe_play_sound("error", st.session_state.sound_enabled)
-                    elif sim_option == "Papier fast leer":
-                        send_ntfy_push("⚠️ Papier fast leer (Test)", "Simulierter Low-Paper-Status", tags="warning")
-                        maybe_play_sound("low_paper", st.session_state.sound_enabled)
-                    elif sim_option == "Keine Daten":
-                        send_ntfy_push("⚠️ Keine aktuellen Daten (Test)", "Simulierter Stale-Status", tags="hourglass")
-                        maybe_play_sound("stale", st.session_state.sound_enabled)
-                    st.toast("Simulation gesendet.")
-
-        # ------------------------------------------------------------------
-        # TAB 4: GERÄTESTEUERUNG
-        # ------------------------------------------------------------------
-        with tab_devices:
-            st.markdown("### Gerätesteuerung")
-
-            if not printer_has_aqara and not printer_has_dsr:
-                st.info("Für diese Fotobox sind keine Geräte-Steuerungen konfiguriert.")
+        st.markdown("")
+        col_btn, _ = st.columns([1, 3])
+        with col_btn:
+            if not st.session_state.confirm_reset:
+                if st.button(
+                    "Papierwechsel & Reset 🔄",
+                    use_container_width=True,
+                ):
+                    st.session_state.confirm_reset = True
+                    st.session_state.temp_package_size = size
+                    st.session_state.temp_reset_note = reset_note
+                    st.rerun()
             else:
-                col_aqara, col_dsr = st.columns(2)
+                st.info("Bitte bestätigen.")
 
-                # --- Aqara Steckdose ---
-                with col_aqara:
-                    st.subheader("Aqara", anchor=False)
-                    if not printer_has_aqara:
-                        st.caption("Nicht verfügbar")
-                    elif not AQARA_ENABLED:
+        # Bestätigungsbereich
+        if st.session_state.confirm_reset:
+            st.warning(
+                f"Wirklich Log löschen und auf {st.session_state.temp_package_size}er Rolle zurücksetzen?"
+            )
+            col_yes, col_no = st.columns(2)
+            with col_yes:
+                if st.button("Ja, zurücksetzen ✅", use_container_width=True):
+                    st.session_state.max_prints = st.session_state.temp_package_size
+                    try:
+                        set_setting("package_size", st.session_state.max_prints)
+                    except Exception:
+                        pass
+                    clear_google_sheet()
+                    log_reset_event(
+                        st.session_state.temp_package_size,
+                        st.session_state.temp_reset_note,
+                    )
+                    st.session_state.confirm_reset = False
+                    st.session_state.last_warn_status = None
+                    st.rerun()
+            with col_no:
+                if st.button("Abbrechen ❌", use_container_width=True):
+                    st.session_state.confirm_reset = False
+                    st.rerun()
+
+    # ------------------------------------------------------------------
+    # TAB 2: REPORT & EXPORT
+    # ------------------------------------------------------------------
+    with tab_report:
+        st.markdown("### 📊 Event-Abschluss")
+        st.write("Erstelle einen PDF-Bericht über das aktuelle Event.")
+        
+        if st.button("PDF Bericht erstellen 📄", use_container_width=True):
+            df_rep = get_data_admin(st.session_state.sheet_id)
+            media_factor = printer_cfg.get("media_factor", 1)
+            stats = compute_print_stats(df_rep, media_factor=media_factor)
+            
+            if not df_rep.empty:
+                last_val = int(df_rep.iloc[-1].get("MediaRemaining", 0)) * media_factor
+            else:
+                last_val = 0
+            prints_done = max(0, (st.session_state.max_prints or 0) - last_val)
+            
+            cost_str = "N/A"
+            cpr = printer_cfg.get("cost_per_roll_eur")
+            if cpr and st.session_state.max_prints:
+                  c_used = prints_done * (cpr / st.session_state.max_prints)
+                  cost_str = f"{c_used:.2f} EUR"
+
+            pdf_bytes = generate_event_pdf(
+                df=df_rep,
+                printer_name=st.session_state.selected_printer,
+                stats=stats,
+                prints_since_reset=prints_done,
+                cost_info=cost_str,
+                media_factor=media_factor
+            )
+            
+            st.download_button(
+                label="⬇️ PDF Herunterladen",
+                data=pdf_bytes,
+                file_name=f"report_{datetime.date.today()}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+
+    # ------------------------------------------------------------------
+    # TAB 3: BENACHRICHTIGUNGEN
+    # ------------------------------------------------------------------
+    with tab_notify:
+        st.markdown("### Benachrichtigungen & Tests")
+
+        col_left, col_right = st.columns([2, 1])
+
+        with col_left:
+            st.caption("ntfy Topic (nur zur Info)")
+            st.text_input(
+                "ntfy Topic",
+                value=st.session_state.ntfy_topic or "(kein Topic konfiguriert)",
+                key="ntfy_topic_display",
+                disabled=True,
+                label_visibility="collapsed",
+            )
+
+            if st.button("Test-Push senden 🔔", use_container_width=True):
+                send_ntfy_push("Test", "Test erfolgreich", tags="tada")
+                st.toast("Test wurde gesendet.")
+
+        with col_right:
+            st.caption("Status-Simulation")
+            sim_option = st.selectbox(
+                "Status simulieren",
+                ["Keine", "Fehler", "Papier fast leer", "Keine Daten"],
+                label_visibility="collapsed",
+                key="status_sim_option",
+            )
+
+            if st.button("Auslösen", use_container_width=True):
+                if sim_option == "Fehler":
+                    send_ntfy_push("🔴 Fehler (Test)", "Simulierter Fehlerzustand", tags="rotating_light")
+                    maybe_play_sound("error", st.session_state.sound_enabled)
+                elif sim_option == "Papier fast leer":
+                    send_ntfy_push("⚠️ Papier fast leer (Test)", "Simulierter Low-Paper-Status", tags="warning")
+                    maybe_play_sound("low_paper", st.session_state.sound_enabled)
+                elif sim_option == "Keine Daten":
+                    send_ntfy_push("⚠️ Keine aktuellen Daten (Test)", "Simulierter Stale-Status", tags="hourglass")
+                    maybe_play_sound("stale", st.session_state.sound_enabled)
+                st.toast("Simulation gesendet.")
+
+    # ------------------------------------------------------------------
+    # TAB 4: GERÄTESTEUERUNG
+    # ------------------------------------------------------------------
+    with tab_devices:
+        st.markdown("### Gerätesteuerung")
+
+        if not printer_has_aqara and not printer_has_dsr:
+            st.info("Für diese Fotobox sind keine Geräte-Steuerungen konfiguriert.")
+        else:
+            col_aqara, col_dsr = st.columns(2)
+
+            # --- Aqara Steckdose ---
+            with col_aqara:
+                st.subheader("Aqara", anchor=False)
+                if not printer_has_aqara:
+                    st.caption("Nicht verfügbar")
+                elif not AQARA_ENABLED:
+                    st.warning("Konfig fehlt (secrets)")
+                else:
+                    current_state, debug_data = aqara_client.get_socket_state(
+                        AQARA_SOCKET_DEVICE_ID, AQARA_SOCKET_RESOURCE_ID,
+                    )
+                    st.session_state.socket_debug = debug_data
+
+                    if current_state in ("on", "off"):
+                        st.session_state.socket_state = current_state
+                    
+                    state = st.session_state.socket_state
+
+                    # Vereinfachte UI für Tab
+                    st.write(f"Status: **{state.upper()}**")
+                    
+                    c_on, c_off = st.columns(2)
+                    if c_on.button("An 🟢", use_container_width=True, key="aq_on"):
+                            aqara_client.switch_socket(AQARA_SOCKET_DEVICE_ID, True, AQARA_SOCKET_RESOURCE_ID)
+                            st.session_state.socket_state = "on"
+                            st.rerun()
+                    if c_off.button("Aus ⚪", use_container_width=True, key="aq_off"):
+                            aqara_client.switch_socket(AQARA_SOCKET_DEVICE_ID, False, AQARA_SOCKET_RESOURCE_ID)
+                            st.session_state.socket_state = "off"
+                            st.rerun()
+
+            # --- dsrBooth ---
+            with col_dsr:
+                st.subheader("Lockscreen", anchor=False)
+                if not printer_has_dsr:
+                    st.caption("Nicht verfügbar")
+                elif not DSR_ENABLED:
                         st.warning("Konfig fehlt (secrets)")
-                    else:
-                        current_state, debug_data = aqara_client.get_socket_state(
-                            AQARA_SOCKET_DEVICE_ID, AQARA_SOCKET_RESOURCE_ID,
-                        )
-                        st.session_state.socket_debug = debug_data
+                else:
+                    state = st.session_state.get("lockscreen_state", "off")
+                    st.write(f"Status: **{state.upper()}**")
 
-                        if current_state in ("on", "off"):
-                            st.session_state.socket_state = current_state
-                        
-                        state = st.session_state.socket_state
-
-                        # Vereinfachte UI für Tab
-                        st.write(f"Status: **{state.upper()}**")
-                        
-                        c_on, c_off = st.columns(2)
-                        if c_on.button("An 🟢", use_container_width=True, key="aq_on"):
-                             aqara_client.switch_socket(AQARA_SOCKET_DEVICE_ID, True, AQARA_SOCKET_RESOURCE_ID)
-                             st.session_state.socket_state = "on"
-                             st.rerun()
-                        if c_off.button("Aus ⚪", use_container_width=True, key="aq_off"):
-                             aqara_client.switch_socket(AQARA_SOCKET_DEVICE_ID, False, AQARA_SOCKET_RESOURCE_ID)
-                             st.session_state.socket_state = "off"
-                             st.rerun()
-
-                # --- dsrBooth ---
-                with col_dsr:
-                    st.subheader("Lockscreen", anchor=False)
-                    if not printer_has_dsr:
-                        st.caption("Nicht verfügbar")
-                    elif not DSR_ENABLED:
-                         st.warning("Konfig fehlt (secrets)")
-                    else:
-                        state = st.session_state.get("lockscreen_state", "off")
-                        st.write(f"Status: **{state.upper()}**")
-
-                        l_on, l_off = st.columns(2)
-                        if l_on.button("Sperren 🔒", use_container_width=True, key="dsr_l"):
-                            send_dsr_command("lock_on")
-                            st.session_state.lockscreen_state = "on"
-                            st.rerun()
-                        if l_off.button("Frei 🔓", use_container_width=True, key="dsr_u"):
-                            send_dsr_command("lock_off")
-                            st.session_state.lockscreen_state = "off"
-                            st.rerun()
+                    l_on, l_off = st.columns(2)
+                    if l_on.button("Sperren 🔒", use_container_width=True, key="dsr_l"):
+                        send_dsr_command("lock_on")
+                        st.session_state.lockscreen_state = "on"
+                        st.rerun()
+                    if l_off.button("Frei 🔓", use_container_width=True, key="dsr_u"):
+                        send_dsr_command("lock_off")
+                        st.session_state.lockscreen_state = "off"
+                        st.rerun()
 
 
 # --------------------------------------------------------------------
