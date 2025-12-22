@@ -408,7 +408,80 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
     ])
 
     # ------------------------------------------------------------------
-    # TAB 1: NEUER AUFTRAG / PAPIERWECHSEL
+    # TAB 1: GERÄTESTEUERUNG
+    # ------------------------------------------------------------------
+    with tab_devices:
+        st.markdown("### Gerätesteuerung")
+
+        if not printer_has_aqara and not printer_has_dsr:
+            st.info("Für diese Fotobox sind keine Geräte-Steuerungen konfiguriert.")
+        else:
+            col_aqara, col_dsr = st.columns(2)
+
+            # --- Aqara Steckdose ---
+            with col_aqara:
+                st.subheader("Aqara", anchor=False)
+                if not printer_has_aqara:
+                    st.caption("Nicht verfügbar")
+                elif not AQARA_ENABLED:
+                    st.warning("Konfig fehlt (secrets)")
+                else:
+                    current_state, debug_data = aqara_client.get_socket_state(
+                        AQARA_SOCKET_DEVICE_ID, AQARA_SOCKET_RESOURCE_ID,
+                    )
+                    st.session_state.socket_debug = debug_data
+
+                    if current_state in ("on", "off"):
+                        st.session_state.socket_state = current_state
+                    
+                    state = st.session_state.socket_state
+
+                    # Vereinfachte UI für Tab
+                    st.write(f"Status: **{state.upper()}**")
+                    
+                    c_on, c_off = st.columns(2)
+                    if c_on.button("An 🟢", use_container_width=True, key="aq_on"):
+                        # Antwort speichern
+                        response = aqara_client.switch_socket(AQARA_SOCKET_DEVICE_ID, True, AQARA_SOCKET_RESOURCE_ID)
+    
+                        # Code 0 bedeutet Erfolg bei Aqara
+                        if response.get("code") == 0:
+                            st.session_state.socket_state = "on"
+                            st.toast("Steckdose eingeschaltet!", icon="✅")
+                            time.sleep(1) # Kurz warten für Feedback
+                            st.rerun()
+                        else:
+                            # Fehler anzeigen, damit du siehst, WAS falsch läuft
+                            st.error(f"Schalten fehlgeschlagen: {response}")
+                        if c_off.button("Aus ⚪", use_container_width=True, key="aq_off"):
+                            aqara_client.switch_socket(AQARA_SOCKET_DEVICE_ID, False, AQARA_SOCKET_RESOURCE_ID)
+                            st.session_state.socket_state = "off"
+                            st.rerun()
+
+            # --- dsrBooth ---
+            with col_dsr:
+                st.subheader("Lockscreen", anchor=False)
+                if not printer_has_dsr:
+                    st.caption("Nicht verfügbar")
+                elif not DSR_ENABLED:
+                        st.warning("Konfig fehlt (secrets)")
+                else:
+                    state = st.session_state.get("lockscreen_state", "off")
+                    st.write(f"Status: **{state.upper()}**")
+
+                    l_on, l_off = st.columns(2)
+                    if l_on.button("Sperren 🔒", use_container_width=True, key="dsr_l"):
+                        send_dsr_command("lock_on")
+                        st.session_state.lockscreen_state = "on"
+                        st.rerun()
+                    if l_off.button("Frei 🔓", use_container_width=True, key="dsr_u"):
+                        send_dsr_command("lock_off")
+                        st.session_state.lockscreen_state = "off"
+                        st.rerun()
+
+    
+    # ------------------------------------------------------------------
+    # TAB 2: NEUER AUFTRAG / PAPIERWECHSEL
     # ------------------------------------------------------------------
     with tab_paper:
         st.markdown("### Neuer Auftrag / Papierwechsel")
@@ -485,7 +558,7 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                     st.rerun()
 
     # ------------------------------------------------------------------
-    # TAB 2: REPORT & EXPORT
+    # TAB 3: REPORT & EXPORT
     # ------------------------------------------------------------------
     with tab_report:
         st.markdown("### 📊 Event-Abschluss")
@@ -526,7 +599,7 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
             )
 
     # ------------------------------------------------------------------
-    # TAB 3: BENACHRICHTIGUNGEN
+    # TAB 4: BENACHRICHTIGUNGEN
     # ------------------------------------------------------------------
     with tab_notify:
         st.markdown("### Benachrichtigungen & Tests")
@@ -568,77 +641,6 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                     maybe_play_sound("stale", st.session_state.sound_enabled)
                 st.toast("Simulation gesendet.")
 
-    # ------------------------------------------------------------------
-    # TAB 4: GERÄTESTEUERUNG
-    # ------------------------------------------------------------------
-    with tab_devices:
-        st.markdown("### Gerätesteuerung")
-
-        if not printer_has_aqara and not printer_has_dsr:
-            st.info("Für diese Fotobox sind keine Geräte-Steuerungen konfiguriert.")
-        else:
-            col_aqara, col_dsr = st.columns(2)
-
-            # --- Aqara Steckdose ---
-            with col_aqara:
-                st.subheader("Aqara", anchor=False)
-                if not printer_has_aqara:
-                    st.caption("Nicht verfügbar")
-                elif not AQARA_ENABLED:
-                    st.warning("Konfig fehlt (secrets)")
-                else:
-                    current_state, debug_data = aqara_client.get_socket_state(
-                        AQARA_SOCKET_DEVICE_ID, AQARA_SOCKET_RESOURCE_ID,
-                    )
-                    st.session_state.socket_debug = debug_data
-
-                    if current_state in ("on", "off"):
-                        st.session_state.socket_state = current_state
-                    
-                    state = st.session_state.socket_state
-
-                    # Vereinfachte UI für Tab
-                    st.write(f"Status: **{state.upper()}**")
-                    
-                    c_on, c_off = st.columns(2)
-                    if c_on.button("An 🟢", use_container_width=True, key="aq_on"):
-                        # Antwort speichern
-                        response = aqara_client.switch_socket(AQARA_SOCKET_DEVICE_ID, True, AQARA_SOCKET_RESOURCE_ID)
-    
-                        # Code 0 bedeutet Erfolg bei Aqara
-                        if response.get("code") == 0:
-                            st.session_state.socket_state = "on"
-                            st.toast("Steckdose eingeschaltet!", icon="✅")
-                            time.sleep(1) # Kurz warten für Feedback
-                            st.rerun()
-                        else:
-                            # Fehler anzeigen, damit du siehst, WAS falsch läuft
-                            st.error(f"Schalten fehlgeschlagen: {response}")
-                        if c_off.button("Aus ⚪", use_container_width=True, key="aq_off"):
-                            aqara_client.switch_socket(AQARA_SOCKET_DEVICE_ID, False, AQARA_SOCKET_RESOURCE_ID)
-                            st.session_state.socket_state = "off"
-                            st.rerun()
-
-            # --- dsrBooth ---
-            with col_dsr:
-                st.subheader("Lockscreen", anchor=False)
-                if not printer_has_dsr:
-                    st.caption("Nicht verfügbar")
-                elif not DSR_ENABLED:
-                        st.warning("Konfig fehlt (secrets)")
-                else:
-                    state = st.session_state.get("lockscreen_state", "off")
-                    st.write(f"Status: **{state.upper()}**")
-
-                    l_on, l_off = st.columns(2)
-                    if l_on.button("Sperren 🔒", use_container_width=True, key="dsr_l"):
-                        send_dsr_command("lock_on")
-                        st.session_state.lockscreen_state = "on"
-                        st.rerun()
-                    if l_off.button("Frei 🔓", use_container_width=True, key="dsr_u"):
-                        send_dsr_command("lock_off")
-                        st.session_state.lockscreen_state = "off"
-                        st.rerun()
 
 
 # --------------------------------------------------------------------
