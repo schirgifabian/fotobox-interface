@@ -178,15 +178,23 @@ class AqaraClient:
     def switch_socket(self, device_id: str, turn_on: bool, resource_id: str = "4.1.85", mode: str = "state") -> Dict:
         value = "2" if mode == "toggle" else ("1" if turn_on else "0")
         
-        # HIER WAR DER FEHLER: Für 'write' senden wir die Liste DIREKT in 'data'
+        # KORREKTUR: Verschachtelte Struktur: Liste -> Gerät -> Liste von Ressourcen
         payload = {
             "intent": "write.resource.device",
             "data": [
                 {
                     "subjectId": device_id,
-                    "resourceId": resource_id,
-                    "value": value
+                    "resources": [
+                        {
+                            "resourceId": resource_id,
+                            "value": value
+                        }
+                    ]
                 }
             ]
         }
+        
+        # Debugging: Zeige Payload in der Konsole, falls es immer noch klemmt
+        print(f"Sende Schaltbefehl: {json.dumps(payload)}")
+        
         return self._post_request("/api", payload)
