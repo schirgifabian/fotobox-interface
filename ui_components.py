@@ -523,27 +523,27 @@ def render_link_card(url: str, title: str, subtitle: str, icon: str = "☁️"):
     if not url:
         return
 
-    # Wir nutzen dieselbe .dashboard-card Klasse für das identische Design
-    html_content = f"""
-    <a href="{url}" target="_blank" class="dashboard-link">
-        <div class="dashboard-card" style="display: flex; justify-content: space-between; align-items: center; padding: 20px 24px;">
-            <div>
-                <div style="display: flex; align-items: center; margin-bottom: 4px;">
-                    <span style="font-size: 0.75rem; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em;">External Link</span>
+    # FIX: textwrap.dedent entfernt die Einrückung, damit es kein Code-Block wird
+    html_content = textwrap.dedent(f"""
+        <a href="{url}" target="_blank" class="dashboard-link">
+            <div class="dashboard-card" style="display: flex; justify-content: space-between; align-items: center; padding: 20px 24px;">
+                <div>
+                    <div style="display: flex; align-items: center; margin-bottom: 4px;">
+                        <span style="font-size: 0.75rem; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em;">External Link</span>
+                    </div>
+                    <div style="font-size: 1.5rem; font-weight: 800; color: #1E293B; line-height: 1.1;">
+                        {title}
+                    </div>
+                    <div style="font-size: 0.85rem; color: #64748B; margin-top: 4px; font-weight: 500;">
+                        {subtitle} ➜
+                    </div>
                 </div>
-                <div style="font-size: 1.5rem; font-weight: 800; color: #1E293B; line-height: 1.1;">
-                    {title}
-                </div>
-                <div style="font-size: 0.85rem; color: #64748B; margin-top: 4px; font-weight: 500;">
-                    {subtitle} ➜
+                
+                <div style="background: #F1F5F9; color: #3B82F6; width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 28px;">
+                        {icon}
                 </div>
             </div>
-            
-            <div style="background: #F1F5F9; color: #3B82F6; width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 28px;">
-                    {icon}
-            </div>
-        </div>
-    </a>
-    """
+        </a>
+    """)
     
     st.markdown(html_content, unsafe_allow_html=True)
