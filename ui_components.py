@@ -5,7 +5,7 @@ import textwrap
 from sheets_helpers import get_data_event, get_spreadsheet, get_fleet_data_parallel
 
 # -----------------------------------------------------------------------------
-# GLOBAL STYLING (PERFEKTIONIERT + DASHBOARD UI)
+# GLOBAL STYLING (Sidebar + Dashboard)
 # -----------------------------------------------------------------------------
 MODERN_CSS = """
 <style>
@@ -14,81 +14,62 @@ MODERN_CSS = """
 footer {visibility: hidden;}
 
 .block-container {
-    padding-top: 1rem !important;
+    padding-top: 2rem !important;
     padding-bottom: 5rem !important;
     max-width: 1000px;
 }
 
-/* 2. Typografie */
+/* 2. Typografie & Body */
 html, body, [class*="css"] {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     color: #334155;
-    font-weight: 400;
+    background-color: #F8FAFC; /* Ganz leichter Hintergrund für Main Area */
 }
 
-h1, h2, h3 {
-    color: #0F172A;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-}
-
-/* 3. Sidebar Cleaner */
+/* 3. SIDEBAR STYLING (NEU) */
 section[data-testid="stSidebar"] {
     background-color: #FFFFFF;
-    border-right: 1px solid #F1F5F9;
+    border-right: 1px solid #E2E8F0;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.02);
 }
 
-/* 4. Cards (Expander & Container) */
+/* Sidebar Überschriften */
+section[data-testid="stSidebar"] h1, 
+section[data-testid="stSidebar"] h2, 
+section[data-testid="stSidebar"] h3 {
+    color: #0F172A;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+/* Sidebar Widgets (Selectbox, Radio) */
+section[data-testid="stSidebar"] label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #64748B;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Trennlinien in Sidebar feiner machen */
+section[data-testid="stSidebar"] hr {
+    border-color: #F1F5F9;
+    margin: 1.5rem 0;
+}
+
+/* 4. Cards & Buttons (Wie vorher, leicht optimiert) */
 .stExpander {
     background: #FFFFFF;
     border: 1px solid #E2E8F0;
     border-radius: 12px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-}
-div[data-testid="stExpanderDetails"] {
-    background: #FFFFFF;
-}
-
-/* WICHTIG: Überschreibt den Standard st.container(border=True) Style, 
-   damit er exakt wie die Dashboard-Hero-Card aussieht */
-div[data-testid="stVerticalBlockBorderWrapper"] > div {
-    border-radius: 20px !important;
-    border: 1px solid #E2E8F0 !important;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
-    background-color: #FFFFFF !important;
-    padding: 24px !important;
-}
-
-/* 5. Buttons */
-div.stButton > button {
-    width: 100%;
-    border-radius: 12px; /* Runder */
-    border: 1px solid #E2E8F0;
-    background-color: #F8FAFC; /* Leicht grau */
-    color: #475569;
-    font-weight: 600;
-    padding: 0.6rem 1rem;
     box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-    transition: all 0.2s ease-in-out;
-}
-div.stButton > button:hover {
-    border-color: #CBD5E1;
-    background-color: #FFFFFF;
-    color: #0F172A;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 
-/* Primary Button Style (wenn type="primary") */
-div.stButton > button[kind="primary"] {
-    background-color: #3B82F6;
-    color: white;
-    border: 1px solid #2563EB;
-}
-div.stButton > button[kind="primary"]:hover {
-    background-color: #2563EB;
-    color: white;
-}
+</style>
+"""
+
+def inject_custom_css():
+    st.markdown(MODERN_CSS, unsafe_allow_html=True)
 
 /* --------------------------------------------------------------------------
    DASHBOARD STYLES (Hero Card & Animationen)
@@ -430,23 +411,96 @@ def render_link_card(url: str, title: str, subtitle: str, icon: str = "☁️"):
     st.markdown(html_content, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# SCREENSAVER / ZEN MODE
+# SCREENSAVER / ZEN MODE (FIX)
 # -----------------------------------------------------------------------------
-# ui_components.py
 
-def render_screensaver_ui(
+def inject_screensaver_css():
+    """
+    Setzt das CSS für den Screensaver.
+    Muss AUSSERHALB des Fragments/Loops aufgerufen werden, damit es nicht flackert.
+    """
+    css = """
+    <style>
+        .stApp {
+            background-color: #000000 !important;
+            color: #E2E8F0 !important;
+        }
+        section[data-testid="stSidebar"] { display: none !important; }
+        header { visibility: hidden !important; }
+        footer { visibility: hidden !important; }
+        
+        .screensaver-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 85vh;
+            text-align: center;
+            font-family: 'Inter', sans-serif;
+        }
+        .big-number {
+            font-size: 15vw; /* Responsive Größe */
+            font-weight: 800;
+            line-height: 1;
+            margin-bottom: 2vh;
+            font-variant-numeric: tabular-nums; /* Verhindert Springen der Zahlen */
+        }
+        .label-text {
+            font-size: 2vh;
+            text-transform: uppercase;
+            letter-spacing: 0.3em;
+            color: #64748B;
+            margin-bottom: 0px;
+        }
+        .status-pill {
+            background-color: #111827;
+            border: 1px solid #1F2937;
+            padding: 1.5vh 4vw;
+            border-radius: 99px;
+            font-size: 3vh;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 4vh;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+        }
+        .status-dot {
+            height: 2vh;
+            width: 2vh;
+            border-radius: 50%;
+        }
+        .meta-info {
+            margin-top: 5vh;
+            color: #374151;
+            font-family: monospace;
+            font-size: 1.5vh;
+        }
+        /* Buttons im Screensaver verstecken/abdunkeln */
+        .stButton > button {
+            background: transparent !important;
+            border: 1px solid #333 !important;
+            color: #555 !important;
+        }
+        .stButton > button:hover {
+            color: red !important;
+            border-color: red !important;
+        }
+    </style>
+    """
+    st.markdown(css, unsafe_allow_html=True)
+
+
+def render_screensaver_content(
     status_mode: str,
     media_remaining: int,
     display_text: str,
     display_color: str,
-    timestamp: str,
-    max_prints: int
+    timestamp: str
 ):
     """
-    Rendert eine Vollbild-Ansicht im Darkmode.
+    Rendert NUR den Inhalt (HTML), kein CSS.
     """
-    
-    # Farbe basierend auf Status festlegen
     color_map = {
         "green": "#10B981",
         "blue": "#3B82F6",
@@ -456,96 +510,22 @@ def render_screensaver_ui(
     }
     accent_color = color_map.get(display_color, "#64748B")
     
-    # CSS HACKS (bleibt gleich)
-    screensaver_css = f"""
-    <style>
-        .stApp {{
-            background-color: #000000 !important;
-            color: #E2E8F0 !important;
-        }}
-        section[data-testid="stSidebar"] {{ display: none !important; }}
-        header {{ visibility: hidden !important; }}
-        footer {{ visibility: hidden !important; }}
-        
-        .screensaver-container {{
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 85vh;
-            text-align: center;
-            font-family: 'Inter', sans-serif;
-        }}
-        .big-number {{
-            font-size: 12rem;
-            font-weight: 800;
-            line-height: 1;
-            color: {accent_color};
-            text-shadow: 0 0 40px {accent_color}40;
-            margin-bottom: 10px;
-        }}
-        .label-text {{
-            font-size: 1.2rem;
-            text-transform: uppercase;
-            letter-spacing: 0.3em;
-            color: #64748B;
-            margin-bottom: 0px;
-        }}
-        .status-pill {{
-            background-color: #111827; /* Sehr dunkles Grau */
-            border: 1px solid #1F2937;
-            color: {accent_color};
-            padding: 12px 32px;
-            border-radius: 99px;
-            font-size: 1.5rem;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-top: 20px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
-        }}
-        .status-dot {{
-            height: 14px;
-            width: 14px;
-            background-color: {accent_color};
-            border-radius: 50%;
-            box-shadow: 0 0 8px {accent_color};
-        }}
-        .meta-info {{
-            margin-top: 40px;
-            color: #374151;
-            font-family: monospace;
-            font-size: 0.8rem;
-        }}
-        /* Button unsichtbarer machen */
-        div.stButton > button {{
-            background-color: transparent !important;
-            border: 1px solid #334155 !important;
-            color: #475569 !important;
-        }}
-        div.stButton > button:hover {{
-            border-color: #EF4444 !important;
-            color: #EF4444 !important;
-        }}
-    </style>
-    """
-    st.markdown(screensaver_css, unsafe_allow_html=True)
-
-    # WICHTIG: Keine Einrückung im HTML String, damit Markdown es nicht als Code-Block erkennt!
     clean_text = display_text.replace('✅', '').replace('⚠️', '').replace('🔴', '').strip()
     
+    # Inline Styles für dynamische Farben nutzen
     html = f"""
-<div class="screensaver-container">
-<div class="label-text">Verbleibende Bilder</div>
-<div class="big-number">{media_remaining}</div>
-<div class="status-pill">
-<span class="status-dot"></span>
-{clean_text}
-</div>
-<div class="meta-info">
-Zuletzt aktualisiert: {timestamp}
-</div>
-</div>
-"""
+    <div class="screensaver-container">
+        <div class="label-text">Verbleibende Bilder</div>
+        <div class="big-number" style="color: {accent_color}; text-shadow: 0 0 40px {accent_color}40;">
+            {media_remaining}
+        </div>
+        <div class="status-pill" style="color: {accent_color};">
+            <span class="status-dot" style="background-color: {accent_color}; box-shadow: 0 0 10px {accent_color};"></span>
+            {clean_text}
+        </div>
+        <div class="meta-info">
+            Zuletzt aktualisiert: {timestamp}
+        </div>
+    </div>
+    """
     st.markdown(html, unsafe_allow_html=True)
