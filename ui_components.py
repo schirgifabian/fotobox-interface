@@ -114,6 +114,22 @@ div.stButton > button[kind="primary"]:hover {
     color: white;
 }
 
+/* 6. STICKY STATUS HEADER (Mobile Optimierung) */
+div[data-testid="stVerticalBlock"] > div:has(.dashboard-card) {
+    position: sticky;
+    top: 2.5rem; /* Platz für Streamlit Header lassen */
+    z-index: 999;
+    background-color: #F8FAFC; /* Hintergrund, damit Text nicht durchscheint beim Scrollen */
+    padding-bottom: 10px;
+    margin-bottom: 0px !important;
+    transition: all 0.2s ease;
+}
+
+/* Schatten */
+div[data-testid="stVerticalBlock"] > div:has(.dashboard-card) {
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+
 /* --------------------------------------------------------------------------
    DASHBOARD ANIMATIONEN (Keyframes)
    -------------------------------------------------------------------------- */
@@ -187,6 +203,7 @@ div.stButton > button[kind="primary"]:hover {
 
 a.dashboard-link { text-decoration: none !important; color: inherit !important; display: block; transition: transform 0.2s ease, box-shadow 0.2s ease; }
 a.dashboard-link:hover .dashboard-card { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); border-color: #CBD5E1; }
+
 </style>
 """
 
@@ -253,6 +270,9 @@ def render_hero_card(
     pulse_class = ""
     dot_color = ""
     icon_char = '📸' 
+    
+    # Standard Style für die Karte (Weiß mit grauem Rand)
+    card_style = "background: #FFFFFF; border: 1px solid #E2E8F0;"
 
     if status_mode == "maintenance":
         pulse_class = "status-pulse-gray"
@@ -269,6 +289,8 @@ def render_hero_card(
         pulse_class = "status-pulse-red"
         dot_color = "#EF4444"
         icon_char = '🔧'
+        # HIER IST DIE ÄNDERUNG: Alarm-Optik bei Fehler
+        card_style = "background: #FEF2F2; border: 2px solid #EF4444;"
     else:
         if "orange" in display_color or "yellow" in display_color:
             pulse_class = "status-pulse-orange"
@@ -290,10 +312,11 @@ def render_hero_card(
     elif pct < 25: bar_color = "#F59E0B" 
     else: bar_color = "#3B82F6" 
 
+    # Icon Hintergrund leicht transparent basierend auf Statusfarbe
     icon_bg = f"{dot_color}15" 
 
     html_content = f"""
-<div class="dashboard-card">
+<div class="dashboard-card" style="{card_style}">
     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
         <div>
             <div style="display: flex; align-items: center; margin-bottom: 8px;">
