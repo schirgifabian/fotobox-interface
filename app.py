@@ -36,7 +36,8 @@ from ui_components import (
     render_hero_card,
     render_link_card,
     render_card_header,
-    render_screensaver_ui
+    inject_screensaver_css,
+    render_screensaver_content
 )
 
 # --------------------------------------------------------------------
@@ -606,7 +607,7 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
 
 @st.fragment(run_every=10)
 def run_screensaver_loop(media_factor: int):
-    # Daten holen (Event-View für Details, wir nutzen get_data wrapper)
+    # Daten holen
     df = get_data(st.session_state.sheet_id, event_mode=True)
     
     if df.empty:
@@ -615,69 +616,72 @@ def run_screensaver_loop(media_factor: int):
 
     try:
         last = df.iloc[-1]
-        timestamp = str(last.get("Timestamp", ""))[-8:] # Nur Uhrzeit
+        timestamp = str(last.get("Timestamp", ""))[-8:] 
         raw_status = str(last.get("Status", ""))
         
         try: media_remaining = int(last.get("MediaRemaining", 0)) * media_factor
         except: media_remaining = 0
         
-        # Status auswerten
         status_mode, display_text, display_color, _, _ = evaluate_status(
             raw_status, media_remaining, timestamp
         )
         
-        max_p = st.session_state.max_prints or 400
-
-        # UI Rendern (Import aus ui_components muss vorhanden sein!)
-        render_screensaver_ui(
+        # HIER NUR NOCH CONTENT RENDERN, KEIN CSS MEHR
+        render_screensaver_content(
             status_mode=status_mode,
             media_remaining=media_remaining,
             display_text=display_text,
             display_color=display_color,
-            timestamp=timestamp,
-            max_prints=max_p
+            timestamp=timestamp
         )
         
-        # Exit Button (klein unten)
+        # Diskreter Exit Button
         c1, c2, c3 = st.columns([1,1,1])
         with c2:
             st.write("")
-            st.write("")
-            # Wir nutzen hier einen trickreichen Key, damit Streamlit nicht meckert
-            if st.button("❌ Screensaver Beenden", key="btn_exit_saver"):
+            if st.button("Beenden", key="btn_exit_saver"):
                 st.session_state.screensaver_mode = False
                 st.rerun()
 
     except Exception as e:
-        st.error(f"Fehler im Screensaver: {e}")
+        # Im Screensaver Fehler lieber dezent anzeigen oder ignorieren
+        print(f"Screensaver Error: {e}")
 
 
 # --------------------------------------------------------------------
 # MAIN
 # --------------------------------------------------------------------
 def main():
-    st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="centered") # Layout wide könnte für screensaver cool sein, aber centered passt
+    st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="centered")
+    
+    # 1. CSS IMMER INJIZIEREN
     inject_custom_css()
+    
     init_session_state()
     check_login()
 
     # --- SCREENSAVER CHECK ---
     if st.session_state.screensaver_mode:
-        # Konfiguration des aktuell gewählten Druckers laden, damit media_factor stimmt
+        # A. CSS FIX INJIZIEREN (Verhindert das Flackern beim Rerun)
+        inject_screensaver_css()
+        
+        # B. Loop starten
         printer_name = st.session_state.get("selected_printer")
         if not printer_name: 
-            # Fallback falls direkt im Screensaver gestartet (unwahrscheinlich)
             printer_name = list(PRINTERS.keys())[0]
-            
         printer_cfg = PRINTERS.get(printer_name, {})
         media_factor = printer_cfg.get("media_factor", 1)
         
-        # Screensaver Loop starten
         run_screensaver_loop(media_factor)
-        return  # <--- WICHTIG: Hier abbrechen, damit keine Sidebar etc. kommt
+        return  # Stop render here
     # -------------------------
 
     render_logout_button()
+
+# --- UI OPTIMIERUNG SIDEBAR ---
+    with st.sidebar:
+        st.markdown("## ⚙️ Control Panel") # Schöner Header statt Standard
+        st.write("") # Spacer
     
     st.sidebar.header("Einstellungen")
     
@@ -685,9 +689,9 @@ def main():
     view_mode = st.sidebar.radio("Ansicht", ["Einzelne Fotobox", "Alle Boxen"])
     
     # --- BUTTON FÜR SCREENSAVER HINZUFÜGEN ---
-    # Am besten ganz unten in der Sidebar oder bei den Ansichten
     st.sidebar.markdown("---")
-    if st.sidebar.button("🖥️ Screensaver starten"):
+    st.sidebar.caption("Display Mode")
+    if st.sidebar.button("🖥️ Zen Mode starten", use_container_width=True):
         st.session_state.screensaver_mode = True
         st.rerun()
     # -----------------------------------------
