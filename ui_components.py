@@ -424,4 +424,144 @@ def render_link_card(url: str, title: str, subtitle: str, icon: str = "☁️"):
 """
     st.markdown(html_content, unsafe_allow_html=True)
 
-# render_toggle_card habe ich entfernt, da wir nun die flexiblere render_card_header Strategie nutzen.
+# -----------------------------------------------------------------------------
+# SCREENSAVER / ZEN MODE
+# -----------------------------------------------------------------------------
+def render_screensaver_ui(
+    status_mode: str,
+    media_remaining: int,
+    display_text: str,
+    display_color: str,
+    timestamp: str,
+    max_prints: int
+):
+    """
+    Rendert eine Vollbild-Ansicht im Darkmode.
+    """
+    
+    # Farbe basierend auf Status festlegen
+    color_map = {
+        "green": "#10B981", # Smaragdgrün
+        "blue": "#3B82F6",  # Blau
+        "orange": "#F59E0B",# Bernstein
+        "red": "#EF4444",   # Rot
+        "gray": "#64748B"   # Grau
+    }
+    accent_color = color_map.get(display_color, "#64748B")
+    
+    # Prozentbalken Berechnung
+    if not max_prints or max_prints <= 0:
+        pct = 0
+    else:
+        pct = max(0, min(100, int((media_remaining / max_prints) * 100)))
+
+    # CSS HACKS: Sidebar ausblenden, Hintergrund schwarz, Header weg
+    screensaver_css = f"""
+    <style>
+        /* Alles Schwarz erzwingen */
+        .stApp {{
+            background-color: #000000 !important;
+            color: #E2E8F0 !important;
+        }}
+        
+        /* Sidebar komplett ausblenden */
+        section[data-testid="stSidebar"] {{
+            display: none !important;
+        }}
+        
+        /* Header Decoration Line oben ausblenden */
+        header {{
+            visibility: hidden !important;
+        }}
+        
+        /* Footer ausblenden */
+        footer {{
+            visibility: hidden !important;
+        }}
+
+        /* Container Styling */
+        .screensaver-container {{
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 90vh; /* Fast volle Höhe */
+            text-align: center;
+        }}
+
+        .big-number {{
+            font-size: 12rem; /* Riesig */
+            font-weight: 800;
+            line-height: 1;
+            color: {accent_color};
+            text-shadow: 0 0 30px {accent_color}40; /* Leichter Glow */
+            font-variant-numeric: tabular-nums;
+        }}
+
+        .label-text {{
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            color: #64748B;
+            margin-bottom: 20px;
+        }}
+
+        .status-pill {{
+            background-color: #1E293B;
+            border: 1px solid #334155;
+            color: {accent_color};
+            padding: 10px 30px;
+            border-radius: 50px;
+            font-size: 1.2rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 40px;
+        }}
+
+        .status-dot {{
+            height: 12px;
+            width: 12px;
+            background-color: {accent_color};
+            border-radius: 50%;
+            box-shadow: 0 0 10px {accent_color};
+        }}
+
+        .meta-info {{
+            margin-top: 20px;
+            color: #475569;
+            font-family: monospace;
+        }}
+        
+        /* Exit Button Styling leicht transparent machen */
+        div.stButton > button {{
+            background-color: #1E293B !important;
+            color: #94A3B8 !important;
+            border: 1px solid #334155 !important;
+        }}
+        div.stButton > button:hover {{
+            border-color: #EF4444 !important;
+            color: #EF4444 !important;
+        }}
+    </style>
+    """
+    st.markdown(screensaver_css, unsafe_allow_html=True)
+
+    # HTML Aufbau
+    html = f"""
+    <div class="screensaver-container">
+        <div class="label-text">Verbleibende Bilder</div>
+        <div class="big-number">{media_remaining}</div>
+        
+        <div class="status-pill">
+            <span class="status-dot"></span>
+            {display_text.replace('✅', '').replace('⚠️', '').replace('🔴', '').strip()}
+        </div>
+
+        <div class="meta-info">
+            Zuletzt aktualisiert: {timestamp}
+        </div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
