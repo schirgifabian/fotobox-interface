@@ -225,12 +225,6 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
             raw_status, media_remaining, timestamp
         )
 
-        # --- NEU: MINI STICKY BAR EINFÜGEN ---
-        # Diese Leiste erscheint automatisch nur auf dem Handy
-        from ui_components import render_mini_status_bar # Falls noch nicht importiert
-        render_mini_status_bar(status_mode, display_text, media_remaining)
-        # -------------------------------------
-
         if push is not None:
             title, msg, tags = push
             send_ntfy_push(title, msg, tags=tags)
@@ -278,6 +272,9 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
             cost_txt=cost_txt
         )
 
+        from ui_components import render_mini_status_bar
+        render_mini_status_bar(status_mode, display_text, media_remaining)
+                
         if status_mode == "error": st.error("Bitte Drucker und Papier prüfen (Störung aktiv).")
         elif status_mode == "stale": st.warning("Seit einigen Minuten keine Daten – Verbindung prüfen.")
             
