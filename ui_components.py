@@ -213,6 +213,19 @@ div.stButton > button:hover {
 .device-description { font-size: 0.85rem; color: #64748B; line-height: 1.5; font-weight: 400; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .status-badge-absolute { position: absolute; top: 24px; right: 24px; padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; background: #F1F5F9; }
 
+a.dashboard-link {
+    text-decoration: none !important;
+    color: inherit !important;
+    display: block;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+a.dashboard-link:hover .dashboard-card {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    border-color: #CBD5E1;
+}
+
+
 </style>
 """
 
@@ -498,3 +511,39 @@ def render_health_overview(aqara_enabled: bool, dsr_enabled: bool):
         html_items += f"""<div style="display:flex; align-items:center; gap:6px; margin-right:16px;"><span style="color:{color}; font-size:12px;">●</span><span style="font-size:12px; font-weight:500; color:#475569;">{name}</span></div>"""
         
     st.markdown(f"""<div style="display: flex; flex-wrap: wrap; background: white; padding: 8px 16px; border-radius: 99px; border: 1px solid #E2E8F0; width: fit-content; margin-bottom: 24px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">{html_items}</div>""", unsafe_allow_html=True)
+
+
+# -----------------------------------------------------------------------------
+# NEUE FUNKTION: Link Card im Hero-Style
+# -----------------------------------------------------------------------------
+def render_link_card(url: str, title: str, subtitle: str, icon: str = "☁️"):
+    """
+    Rendert einen Link, der optisch exakt wie die Hero-Card aussieht.
+    """
+    if not url:
+        return
+
+    # Wir nutzen dieselbe .dashboard-card Klasse für das identische Design
+    html_content = f"""
+    <a href="{url}" target="_blank" class="dashboard-link">
+        <div class="dashboard-card" style="display: flex; justify-content: space-between; align-items: center; padding: 20px 24px;">
+            <div>
+                <div style="display: flex; align-items: center; margin-bottom: 4px;">
+                    <span style="font-size: 0.75rem; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em;">External Link</span>
+                </div>
+                <div style="font-size: 1.5rem; font-weight: 800; color: #1E293B; line-height: 1.1;">
+                    {title}
+                </div>
+                <div style="font-size: 0.85rem; color: #64748B; margin-top: 4px; font-weight: 500;">
+                    {subtitle} ➜
+                </div>
+            </div>
+            
+            <div style="background: #F1F5F9; color: #3B82F6; width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 28px;">
+                    {icon}
+            </div>
+        </div>
+    </a>
+    """
+    
+    st.markdown(html_content, unsafe_allow_html=True)
