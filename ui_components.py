@@ -9,10 +9,8 @@ from sheets_helpers import get_data_event, get_spreadsheet, get_fleet_data_paral
 # -----------------------------------------------------------------------------
 MODERN_CSS = """
 <style>
-/* 1. App-Container & Reset */
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-header {visibility: hidden;}
+/* 1. GRUNDGERÜST & SCHRIFTEN */
+#MainMenu, footer, header {visibility: hidden;}
 
 .block-container {
     padding-top: 2rem !important;
@@ -20,152 +18,142 @@ header {visibility: hidden;}
     max-width: 1000px;
 }
 
-/* 2. Typografie & Body */
 html, body, [class*="css"] {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    color: #334155;
+    color: #1E293B; /* Dunkleres Grau für bessere Lesbarkeit */
     background-color: #F8FAFC; 
 }
 
-h1, h2, h3 {
-    color: #0F172A;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-}
-
-/* 3. SIDEBAR STYLING - NEU DESIGNT */
+/* 2. SIDEBAR - PROFISSIONELLER LOOK */
 section[data-testid="stSidebar"] {
-    background-color: #F1F5F9; /* Helleres Slate als Kontrast für weiße Cards */
+    background-color: #F1F5F9; /* Kühles Grau als Basis */
     border-right: 1px solid #E2E8F0;
-    box-shadow: none;
 }
 
-/* Sidebar Überschriften */
+/* Sidebar Header (Control Panel) */
 section[data-testid="stSidebar"] h1, 
 section[data-testid="stSidebar"] h2, 
 section[data-testid="stSidebar"] h3 {
-    color: #1E293B;
-    font-size: 1.1rem !important;
-    font-weight: 700;
-    margin-top: 0;
-    margin-bottom: 10px;
-    text-transform: none; /* Kein Zwang zu Uppercase */
+    color: #0F172A;
+    font-size: 1.2rem !important;
+    font-weight: 800;
+    margin-bottom: 20px;
+    letter-spacing: -0.02em;
 }
 
-/* Sidebar Labels (klein über Inputs) */
+/* Die kleinen Labels über den Inputs in der Sidebar */
 section[data-testid="stSidebar"] label {
-    font-size: 0.75rem;
-    font-weight: 600;
+    font-size: 0.7rem;
+    font-weight: 700;
     color: #64748B;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
 }
 
-/* 4. Cards (Container mit Border) - GILT JETZT AUCH IN SIDEBAR */
+/* 3. DIE "FLOATING CARDS" (Container Override) */
+/* Dies betrifft alle st.container(border=True) */
 div[data-testid="stVerticalBlockBorderWrapper"] > div {
-    border-radius: 16px !important;
-    border: 1px solid #E2E8F0 !important;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.02) !important;
     background-color: #FFFFFF !important;
-    padding: 16px !important;
+    border: 1px solid transparent !important; /* Rahmen weg, Schatten her */
+    border-radius: 16px !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
+    padding: 20px !important;
     margin-bottom: 16px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* 5. Buttons & Inputs Modernisierung */
+/* Hover-Effekt für die Cards (optional, macht es interaktiv) */
+div[data-testid="stVerticalBlockBorderWrapper"] > div:hover {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* 4. BUTTONS & INPUTS */
 div.stButton > button {
-    width: 100%;
     border-radius: 10px;
     border: 1px solid #E2E8F0;
-    background-color: #FFFFFF;
+    background-color: #F8FAFC;
     color: #475569;
     font-weight: 600;
+    font-size: 0.9rem;
     padding: 0.5rem 1rem;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.02);
     transition: all 0.2s ease;
 }
 div.stButton > button:hover {
     border-color: #CBD5E1;
+    background-color: #FFFFFF;
     color: #0F172A;
     transform: translateY(-1px);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
-/* Primary Button Style */
+/* Primary Button (Blau) */
 div.stButton > button[kind="primary"] {
-    background-color: #3B82F6;
+    background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
     color: white;
-    border: 1px solid #2563EB;
+    border: none;
+    box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2);
 }
 div.stButton > button[kind="primary"]:hover {
-    background-color: #2563EB;
-    color: white;
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    box-shadow: 0 6px 10px rgba(37, 99, 235, 0.3);
 }
 
-/* Selectbox & Inputs hübscher machen */
-div[data-baseweb="select"] > div {
-    background-color: #FFFFFF;
-    border-radius: 10px;
-    border-color: #E2E8F0;
+/* 5. USER PROFILE STYLING (Custom HTML Helper) */
+.user-profile-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
 }
-
-/* Toggle Switch Farben anpassen */
-div[data-baseweb="checkbox"] p {
-    font-weight: 500;
-    color: #334155;
-}
-
-/* --------------------------------------------------------------------------
-   DASHBOARD ANIMATIONEN (Keyframes) - (Bleibt gleich)
-   -------------------------------------------------------------------------- */
-@keyframes pulse-green {
-    0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
-    70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-}
-/* ... (Restliche Animationen hier unverändert lassen) ... */
-.status-dot {
-    height: 12px;
-    width: 12px;
+.user-avatar {
+    width: 40px;
+    height: 40px;
+    background: #EFF6FF;
+    color: #3B82F6;
     border-radius: 50%;
-    display: inline-block;
-    margin-right: 8px;
-    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 1.2rem;
 }
-/* ... (Restliche CSS Klassen bleiben identisch) ... */
+.user-info {
+    display: flex;
+    flex-direction: column;
+}
+.user-name {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #1E293B;
+}
+.user-role {
+    font-size: 0.75rem;
+    color: #64748B;
+}
+
+/* Restliche Dashboard Styles (bleiben gleich) */
+.status-dot { height: 12px; width: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; flex-shrink: 0; }
 .status-pulse-green { background-color: #10B981; animation: pulse-green 2s infinite; }
 .status-pulse-blue { background-color: #3B82F6; animation: pulse-blue 2s infinite; }
 .status-pulse-orange { background-color: #F59E0B; animation: pulse-orange 2s infinite; }
 .status-pulse-red { background-color: #EF4444; animation: pulse-red 2s infinite; }
 .status-pulse-gray { background-color: #64748B; animation: pulse-gray 2s infinite; }
-
-.dashboard-card {
-    background: #FFFFFF;
-    border: 1px solid #E2E8F0;
-    border-radius: 20px;
-    padding: 24px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-    margin-bottom: 24px;
-}
-/* ... (Der Rest von MODERN_CSS bleibt, nur der obere Teil wurde angepasst) ... */
-.metrics-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-    margin-top: 24px;
-    padding-top: 24px;
-    border-top: 1px solid #F1F5F9;
-}
+.dashboard-card { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 20px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); margin-bottom: 24px; }
+.metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; padding-top: 24px; border-top: 1px solid #F1F5F9; }
 .metric-item { text-align: center; }
 .metric-label { font-size: 0.75rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 4px; }
 .metric-value { font-size: 1.25rem; font-weight: 700; color: #1E293B; }
 .metric-sub { font-size: 0.7rem; color: #64748B; margin-top: 2px; }
-
 .progress-bg { background-color: #F1F5F9; border-radius: 99px; height: 12px; width: 100%; margin-top: 8px; overflow: hidden; }
 .progress-fill { height: 100%; border-radius: 99px; transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
-
 a.dashboard-link { text-decoration: none !important; color: inherit !important; display: block; transition: transform 0.2s ease, box-shadow 0.2s ease; }
 a.dashboard-link:hover .dashboard-card { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); border-color: #CBD5E1; }
+
+@keyframes pulse-green { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+@keyframes pulse-blue { 0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); } 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); } }
+@keyframes pulse-orange { 0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); } 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); } }
+@keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+@keyframes pulse-gray { 0% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(100, 116, 139, 0); } 100% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0); } }
 </style>
 """
 
