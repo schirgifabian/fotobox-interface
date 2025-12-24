@@ -687,8 +687,6 @@ def main():
         run_screensaver_loop(media_factor)
         return  # Stop render here
     # -------------------------
-
-    render_logout_button()
     
   # --- UI OPTIMIERUNG SIDEBAR ---
     with st.sidebar:
