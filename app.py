@@ -532,28 +532,28 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                         
             st.write("")
             with st.container(border=True):
-            is_maint = st.session_state.get("maintenance_mode", False)
+                is_maint = st.session_state.get("maintenance_mode", False)
             
-            # Header rendern
-            render_card_header(
-                icon="🚚", 
-                title="Box im Lager", 
-                subtitle="Transport & Lagerung",
-                color_class="slate" if is_maint else "green" # Grau wenn aktiv, sonst grün (oder umgekehrt, wie du magst)
-            )
+                # Header rendern
+                render_card_header(
+                    icon="🚚", 
+                    title="Box im Lager", 
+                    subtitle="Transport & Lagerung",
+                    color_class="slate" if is_maint else "green" # Grau wenn aktiv, sonst grün (oder umgekehrt, wie du magst)
+                )
             
-            c_text, c_toggle = st.columns([3, 1])
-            with c_text:
-                st.caption("Unterdrückt 'Keine Verbindung' Warnungen und Push-Nachrichten.")
+                c_text, c_toggle = st.columns([3, 1])
+                with c_text:
+                    st.caption("Unterdrückt 'Keine Verbindung' Warnungen und Push-Nachrichten.")
             
-            with c_toggle:
-                # Toggle
-                new_maint = st.toggle("Aktiv", value=is_maint, key=f"toggle_maint_{printer_key}")
+                with c_toggle:
+                    # Toggle
+                    new_maint = st.toggle("Aktiv", value=is_maint, key=f"toggle_maint_{printer_key}")
                 
-                if new_maint != is_maint:
-                    st.session_state.maintenance_mode = new_maint
-                    set_setting("maintenance_mode", new_maint)
-                    st.rerun()
+                    if new_maint != is_maint:
+                        st.session_state.maintenance_mode = new_maint
+                        set_setting("maintenance_mode", new_maint)
+                        st.rerun()
 
     # ------------------------------------------------------------------
     # TAB 4: NOTIFY CARD
