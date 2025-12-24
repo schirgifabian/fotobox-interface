@@ -386,19 +386,17 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
 # --------------------------------------------------------------------
 # ADMIN PANEL (Optimiert - Mit Tabs)
 # --------------------------------------------------------------------
-def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> None:
+def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, printer_key: str) -> None:
     """
     Admin-Bereich mit Tabs für bessere Übersicht.
+    Keys sind jetzt unique durch printer_key suffix.
     """
 
     printer_has_aqara = printer_cfg.get("has_aqara", False)
     printer_has_dsr = printer_cfg.get("has_dsr", False)
 
-    # ÄNDERUNG: Expander entfernt, stattdessen eine Überschrift hinzugefügt
     st.subheader("🛠️ Admin & Einstellungen") 
 
-    # ÄNDERUNG: Code hierunter wurde eine Ebene nach links gerückt (de-indented)
-    
     # Tabs erstellen
     tab_paper, tab_report, tab_notify, tab_devices = st.tabs([
         "🧻 Papier & Reset", 
@@ -426,6 +424,8 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                 elif not AQARA_ENABLED:
                     st.warning("Konfig fehlt (secrets)")
                 else:
+                    # ACHTUNG: Hier wird globaler Device ID genutzt. 
+                    # Falls du pro Drucker verschiedene Dosen hast, muss das hier dynamisch gelöst werden.
                     current_state, debug_data = aqara_client.get_socket_state(
                         AQARA_SOCKET_DEVICE_ID, AQARA_SOCKET_RESOURCE_ID,
                     )
@@ -436,27 +436,25 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                     
                     state = st.session_state.socket_state
 
-                    # Vereinfachte UI für Tab
                     st.write(f"Status: **{state.upper()}**")
                     
                     c_on, c_off = st.columns(2)
-                    if c_on.button("An 🟢", use_container_width=True, key="aq_on"):
-                        # Antwort speichern
+                    # UNIQUE KEY FIX:
+                    if c_on.button("An 🟢", use_container_width=True, key=f"aq_on_{printer_key}"):
                         response = aqara_client.switch_socket(AQARA_SOCKET_DEVICE_ID, True, AQARA_SOCKET_RESOURCE_ID)
-    
-                        # Code 0 bedeutet Erfolg bei Aqara
                         if response.get("code") == 0:
                             st.session_state.socket_state = "on"
                             st.toast("Steckdose eingeschaltet!", icon="✅")
-                            time.sleep(1) # Kurz warten für Feedback
+                            time.sleep(1)
                             st.rerun()
                         else:
-                            # Fehler anzeigen, damit du siehst, WAS falsch läuft
                             st.error(f"Schalten fehlgeschlagen: {response}")
-                        if c_off.button("Aus ⚪", use_container_width=True, key="aq_off"):
-                            aqara_client.switch_socket(AQARA_SOCKET_DEVICE_ID, False, AQARA_SOCKET_RESOURCE_ID)
-                            st.session_state.socket_state = "off"
-                            st.rerun()
+                            
+                    # UNIQUE KEY FIX:
+                    if c_off.button("Aus ⚪", use_container_width=True, key=f"aq_off_{printer_key}"):
+                        aqara_client.switch_socket(AQARA_SOCKET_DEVICE_ID, False, AQARA_SOCKET_RESOURCE_ID)
+                        st.session_state.socket_state = "off"
+                        st.rerun()
 
             # --- dsrBooth ---
             with col_dsr:
@@ -470,11 +468,13 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                     st.write(f"Status: **{state.upper()}**")
 
                     l_on, l_off = st.columns(2)
-                    if l_on.button("Sperren 🔒", use_container_width=True, key="dsr_l"):
+                    # UNIQUE KEY FIX:
+                    if l_on.button("Sperren 🔒", use_container_width=True, key=f"dsr_l_{printer_key}"):
                         send_dsr_command("lock_on")
                         st.session_state.lockscreen_state = "on"
                         st.rerun()
-                    if l_off.button("Frei 🔓", use_container_width=True, key="dsr_u"):
+                    # UNIQUE KEY FIX:
+                    if l_off.button("Frei 🔓", use_container_width=True, key=f"dsr_u_{printer_key}"):
                         send_dsr_command("lock_off")
                         st.session_state.lockscreen_state = "off"
                         st.rerun()
@@ -497,21 +497,27 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                 )
             except Exception:
                 current_size = printer_cfg["default_max_prints"]
-            idx = 0 if current_size == 200 else 1
+            
+            # Fallback falls current_size nicht in options ist
+            idx = 1 # Default 400
+            if current_size == 200: idx = 0
+            
+            # UNIQUE KEY FIX:
             size = st.radio(
                 "Paketgröße",
                 size_options,
                 horizontal=True,
                 index=idx,
                 label_visibility="collapsed",
-                key="tab_paper_size"
+                key=f"tab_paper_size_{printer_key}"
             )
 
         with col_note:
             st.caption("Notiz zum Papierwechsel (optional)")
+            # UNIQUE KEY FIX:
             reset_note = st.text_input(
                 "Notiz zum Papierwechsel",
-                key="reset_note",
+                key=f"reset_note_{printer_key}",
                 label_visibility="collapsed",
                 placeholder="z.B. neue 400er Rolle eingelegt",
             )
@@ -523,6 +529,7 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                 if st.button(
                     "Papierwechsel & Reset 🔄",
                     use_container_width=True,
+                    key=f"btn_init_reset_{printer_key}" # UNIQUE KEY
                 ):
                     st.session_state.confirm_reset = True
                     st.session_state.temp_package_size = size
@@ -534,11 +541,11 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
         # Bestätigungsbereich
         if st.session_state.confirm_reset:
             st.warning(
-                f"Wirklich Log löschen und auf {st.session_state.temp_package_size}er Rolle zurücksetzen?"
+                f"Wirklich Log löschen und auf {st.session_state.get('temp_package_size', '?')}er Rolle zurücksetzen?"
             )
             col_yes, col_no = st.columns(2)
             with col_yes:
-                if st.button("Ja, zurücksetzen ✅", use_container_width=True):
+                if st.button("Ja, zurücksetzen ✅", use_container_width=True, key=f"btn_yes_{printer_key}"):
                     st.session_state.max_prints = st.session_state.temp_package_size
                     try:
                         set_setting("package_size", st.session_state.max_prints)
@@ -553,7 +560,7 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                     st.session_state.last_warn_status = None
                     st.rerun()
             with col_no:
-                if st.button("Abbrechen ❌", use_container_width=True):
+                if st.button("Abbrechen ❌", use_container_width=True, key=f"btn_no_{printer_key}"):
                     st.session_state.confirm_reset = False
                     st.rerun()
 
@@ -564,13 +571,16 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
         st.markdown("### 📊 Event-Abschluss")
         st.write("Erstelle einen PDF-Bericht über das aktuelle Event.")
         
-        if st.button("PDF Bericht erstellen 📄", use_container_width=True):
+        # UNIQUE KEY FIX:
+        if st.button("PDF Bericht erstellen 📄", use_container_width=True, key=f"btn_pdf_{printer_key}"):
             df_rep = get_data_admin(st.session_state.sheet_id)
             media_factor = printer_cfg.get("media_factor", 1)
             stats = compute_print_stats(df_rep, media_factor=media_factor)
             
             if not df_rep.empty:
-                last_val = int(df_rep.iloc[-1].get("MediaRemaining", 0)) * media_factor
+                try:
+                    last_val = int(df_rep.iloc[-1].get("MediaRemaining", 0)) * media_factor
+                except: last_val = 0
             else:
                 last_val = 0
             prints_done = max(0, (st.session_state.max_prints or 0) - last_val)
@@ -595,7 +605,8 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
                 data=pdf_bytes,
                 file_name=f"report_{datetime.date.today()}.pdf",
                 mime="application/pdf",
-                use_container_width=True
+                use_container_width=True,
+                key=f"dl_btn_{printer_key}" # UNIQUE KEY
             )
 
     # ------------------------------------------------------------------
@@ -608,28 +619,30 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int) -> N
 
         with col_left:
             st.caption("ntfy Topic (nur zur Info)")
+            # UNIQUE KEY FIX:
             st.text_input(
                 "ntfy Topic",
                 value=st.session_state.ntfy_topic or "(kein Topic konfiguriert)",
-                key="ntfy_topic_display",
+                key=f"ntfy_topic_display_{printer_key}",
                 disabled=True,
                 label_visibility="collapsed",
             )
-
-            if st.button("Test-Push senden 🔔", use_container_width=True):
+            # UNIQUE KEY FIX:
+            if st.button("Test-Push senden 🔔", use_container_width=True, key=f"btn_test_push_{printer_key}"):
                 send_ntfy_push("Test", "Test erfolgreich", tags="tada")
                 st.toast("Test wurde gesendet.")
 
         with col_right:
             st.caption("Status-Simulation")
+            # UNIQUE KEY FIX:
             sim_option = st.selectbox(
                 "Status simulieren",
                 ["Keine", "Fehler", "Papier fast leer", "Keine Daten"],
                 label_visibility="collapsed",
-                key="status_sim_option",
+                key=f"status_sim_option_{printer_key}",
             )
 
-            if st.button("Auslösen", use_container_width=True):
+            if st.button("Auslösen", use_container_width=True, key=f"btn_sim_trigger_{printer_key}"):
                 if sim_option == "Fehler":
                     send_ntfy_push("🔴 Fehler (Test)", "Simulierter Fehlerzustand", tags="rotating_light")
                     maybe_play_sound("error", st.session_state.sound_enabled)
@@ -688,12 +701,17 @@ def main():
     # sheet-bezogene Infos im State
     st.session_state.sheet_id = sheet_id
     st.session_state.ntfy_topic = ntfy_topic
-
+    
     # Settings laden
     if st.session_state.selected_printer != printer_name:
         st.session_state.selected_printer = printer_name
+        
+        # --- FIX: State aufräumen beim Wechsel ---
+        st.session_state.confirm_reset = False
+        st.session_state.socket_state = "unknown"
         st.session_state.last_warn_status = None
         st.session_state.last_sound_status = None
+        # -----------------------------------------
 
         try:
             pkg = get_setting("package_size", printer_cfg["default_max_prints"])
@@ -767,12 +785,13 @@ def main():
             
             st.write("")
             st.link_button("☁️ Fotoshare Cloud", "https://fotoshare.co/admin/index", use_container_width=True)
-
+    
         with tab_hist:
             show_history(media_factor, cost_per_roll)
 
         st.markdown("---")
-        render_admin_panel(printer_cfg, warning_threshold)
+        # HIER: printer_key übergeben!
+        render_admin_panel(printer_cfg, warning_threshold, printer_key)
 
 
 if __name__ == "__main__":
