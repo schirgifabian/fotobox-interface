@@ -35,6 +35,7 @@ from ui_components import (
     render_toggle_card,
     render_fleet_overview,
     render_hero_card,
+    render_link_card
 )
 
 # --------------------------------------------------------------------
@@ -54,6 +55,7 @@ PRINTERS = {
         "has_aqara": False,
         "has_dsr": True,
         "media_factor": 1,
+        "fotoshare_url": "https://fotoshare.co/account/login",
     },
     "Weinkellerei": {
         "key": "Weinkellerei",
@@ -64,6 +66,7 @@ PRINTERS = {
         "has_aqara": False,
         "has_dsr": False,
         "media_factor": 2,
+        "fotoshare_url": "https://weinkellerei.tirol/fame",
     },
 }
 
@@ -230,13 +233,12 @@ def init_session_state():
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
-
-
+            
 # --------------------------------------------------------------------
-# LIVE-STATUS VIEW (Optimiert 2.C & 4.A)
+# LIVE-STATUS VIEW
 # --------------------------------------------------------------------
 @st.fragment(run_every=10)
-def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: bool, event_mode: bool) -> None:
+def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: bool, event_mode: bool, cloud_url: str = None) -> None:
     df = get_data(st.session_state.sheet_id, event_mode=event_mode)
     if df.empty:
         st.info("System wartet auf Start…")
@@ -318,11 +320,21 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
             st.error("Bitte Drucker und Papier prüfen (Störung aktiv).")
         elif status_mode == "stale":
             st.warning("Seit einigen Minuten keine Daten – Verbindung / Script prüfen.")
+            
+        # --- HIER: DIE NEUE CARD EINFÜGEN ---
+        # Wir prüfen, ob eine URL übergeben wurde, und zeigen dann die Karte
+        if cloud_url:
+            st.write("") # Kleiner Abstand
+            render_link_card(
+                url=cloud_url, 
+                title="Bilder Überblick", 
+                subtitle="Zur Galerie", 
+                icon="☁️"
+            )
 
     except Exception as e:
         st.error(f"Fehler bei der Datenverarbeitung: {e}")
-
-
+        
 # --------------------------------------------------------------------
 # HISTORIE VIEW
 # --------------------------------------------------------------------
@@ -683,6 +695,9 @@ def main():
     cost_per_roll = printer_cfg.get("cost_per_roll_eur")
     warning_threshold = printer_cfg.get("warning_threshold", 20)
     printer_has_admin = printer_cfg.get("has_admin", True)
+    
+    # NEU: URL aus Config holen
+    fotoshare_url = printer_cfg.get("fotoshare_url") 
 
     printer_key = printer_cfg["key"]
     printers_secrets = st.secrets.get("printers", {})
@@ -702,7 +717,7 @@ def main():
     st.session_state.sheet_id = sheet_id
     st.session_state.ntfy_topic = ntfy_topic
     
-    # Settings laden
+    # Settings laden (Muss VOR der Anzeige passieren)
     if st.session_state.selected_printer != printer_name:
         st.session_state.selected_printer = printer_name
         
@@ -765,26 +780,20 @@ def main():
 
     st.session_state.sound_enabled = sound_enabled
 
-    # ---------------- UI ----------------
+    # ---------------- UI RENDERING (Hier erst anzeigen!) ----------------
     st.title(f"{PAGE_ICON} {PAGE_TITLE}")
 
     view_event_mode = event_mode or not printer_has_admin
 
     if view_event_mode:
-        show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=True)
-        # Legende / Hilfe entfernt
+        # Hier übergeben wir die URL und KEINEN Button mehr
+        show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=True, cloud_url=fotoshare_url)
         
-        st.write("")
-        st.link_button("☁️ Fotoshare Cloud", "https://fotoshare.co/admin/index", use_container_width=True)
-
     else:
         tab_live, tab_hist = st.tabs(["Live-Status", "Historie & Analyse"])
         with tab_live:
-            show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=False)
-            # Legende / Hilfe entfernt
-            
-            st.write("")
-            st.link_button("☁️ Fotoshare Cloud", "https://fotoshare.co/admin/index", use_container_width=True)
+            # Hier übergeben wir die URL und KEINEN Button mehr
+            show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=False, cloud_url=fotoshare_url)
     
         with tab_hist:
             show_history(media_factor, cost_per_roll)
