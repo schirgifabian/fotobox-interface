@@ -658,13 +658,10 @@ def run_screensaver_loop(media_factor: int):
             timestamp=display_timestamp # Hier die gekürzte Version nutzen
         )
         
-        # Diskreter Exit Button
-        c1, c2, c3 = st.columns([1,1,1])
-        with c2:
-            st.write("")
-            if st.button("Beenden", key="btn_exit_saver"):
-                st.session_state.screensaver_mode = False
-                st.rerun()
+        # Der Button wird nun via CSS am unteren Rand fixiert
+        if st.button("Beenden", key="btn_exit_saver"):
+            st.session_state.screensaver_mode = False
+            st.rerun()
 
     except Exception as e:
         # Im Screensaver Fehler lieber dezent anzeigen oder ignorieren
