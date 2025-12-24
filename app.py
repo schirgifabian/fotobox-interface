@@ -11,8 +11,8 @@ import requests
 import streamlit as st
 import extra_streamlit_components as stx
 import pandas as pd
+import plotly.express as px
 
-# Neue Importe für die optimierte Struktur
 from aqara_client import AqaraClient
 from report_generator import generate_event_pdf
 from sheets_helpers import (
@@ -300,8 +300,29 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
     df_hist = df_hist.copy()
     df_hist["RemainingPrints"] = df_hist["MediaRemaining"] * media_factor
 
-    st.markdown("#### Medienverlauf (echte Drucke)")
-    st.line_chart(df_hist["RemainingPrints"], use_container_width=True)
+    # --- NEU: PLOTLY CHART ---
+    # Wir erstellen ein interaktives Liniendiagramm
+    fig = px.line(
+        df_hist, 
+        y="RemainingPrints", 
+        title="Papierverlauf (Interaktiv)",
+        labels={"RemainingPrints": "Verbleibende Bilder", "index": "Zeitpunkt"},
+        template="plotly_white"
+    )
+    
+    # Styling: Blaue Linie, etwas dicker
+    fig.update_traces(line_color='#3B82F6', line_width=3)
+    
+    # Layout: Hover-Effekt, Achsen formatieren
+    fig.update_layout(
+        hovermode="x unified",
+        height=350,
+        margin=dict(l=20, r=20, t=40, b=20),
+        yaxis=dict(rangemode="tozero") # Y-Achse startet immer bei 0
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    # -------------------------
 
     stats = compute_print_stats(df, window_min=30, media_factor=media_factor)
     last_remaining = int(df_hist["RemainingPrints"].iloc[-1])
