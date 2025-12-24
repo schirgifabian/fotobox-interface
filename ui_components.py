@@ -114,47 +114,6 @@ div.stButton > button[kind="primary"]:hover {
     color: white;
 }
 
-/* 6. MOBILE MINI STICKY BAR */
-.mobile-status-bar {
-    display: none; /* Auf Desktop standardmäßig ausblenden */
-}
-
-@media (max-width: 768px) {
-    .mobile-status-bar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        
-        /* HIER IST DIE ÄNDERUNG: sticky statt fixed */
-        position: -webkit-sticky; /* Für Safari */
-        position: sticky;
-        
-        /* 3rem (ca 48px) ist meist die Höhe des Streamlit Headers. 
-           So dockt es genau darunter an. */
-        top: 3rem; 
-        
-        z-index: 999; /* Etwas niedriger als der Streamlit Header */
-        
-        /* Margin sorgt für Abstand zur Hero-Card vorher */
-        margin-top: 1rem; 
-        margin-bottom: 1rem;
-        
-        background-color: rgba(255, 255, 255, 0.90);
-        backdrop-filter: blur(8px);
-        border: 1px solid #E2E8F0; /* Rundherum Rand sieht bei Sticky oft besser aus */
-        border-radius: 12px;       /* Leicht abgerundet sieht 'schwebend' aus */
-        padding: 8px 16px;         /* Etwas Padding */
-        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
-    }
-
-.mini-stat-item {
-    display: flex;
-    align-items: center;
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #334155;
-}
-
 /* --------------------------------------------------------------------------
    DASHBOARD ANIMATIONEN (Keyframes)
    -------------------------------------------------------------------------- */
@@ -228,7 +187,6 @@ div.stButton > button[kind="primary"]:hover {
 
 a.dashboard-link { text-decoration: none !important; color: inherit !important; display: block; transition: transform 0.2s ease, box-shadow 0.2s ease; }
 a.dashboard-link:hover .dashboard-card { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); border-color: #CBD5E1; }
-
 </style>
 """
 
@@ -295,9 +253,6 @@ def render_hero_card(
     pulse_class = ""
     dot_color = ""
     icon_char = '📸' 
-    
-    # Standard Style für die Karte (Weiß mit grauem Rand)
-    card_style = "background: #FFFFFF; border: 1px solid #E2E8F0;"
 
     if status_mode == "maintenance":
         pulse_class = "status-pulse-gray"
@@ -314,8 +269,6 @@ def render_hero_card(
         pulse_class = "status-pulse-red"
         dot_color = "#EF4444"
         icon_char = '🔧'
-        # HIER IST DIE ÄNDERUNG: Alarm-Optik bei Fehler
-        card_style = "background: #FEF2F2; border: 2px solid #EF4444;"
     else:
         if "orange" in display_color or "yellow" in display_color:
             pulse_class = "status-pulse-orange"
@@ -337,11 +290,10 @@ def render_hero_card(
     elif pct < 25: bar_color = "#F59E0B" 
     else: bar_color = "#3B82F6" 
 
-    # Icon Hintergrund leicht transparent basierend auf Statusfarbe
     icon_bg = f"{dot_color}15" 
 
     html_content = f"""
-<div class="dashboard-card" style="{card_style}">
+<div class="dashboard-card">
     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
         <div>
             <div style="display: flex; align-items: center; margin-bottom: 8px;">
@@ -389,48 +341,6 @@ def render_hero_card(
 </div>
 """
     st.markdown(html_content, unsafe_allow_html=True)
-
-def render_mini_status_bar(status_mode: str, display_text: str, media_remaining: int):
-    """
-    Rendert eine fixierte Mini-Leiste für Mobile Devices.
-    """
-    # Farben definieren
-    color_map = {
-        "ready": "#10B981",    # Grün
-        "printing": "#3B82F6", # Blau
-        "error": "#EF4444",    # Rot
-        "warning": "#F59E0B",  # Orange
-        "offline": "#64748B"   # Grau
-    }
-    
-    # Farbe bestimmen
-    if status_mode in color_map:
-        c = color_map[status_mode]
-    elif "stale" in status_mode or "low" in status_mode:
-        c = color_map["warning"]
-    else:
-        c = color_map["offline"]
-
-    # Text kürzen für Mobile (z.B. "✅ Bereit" -> "Bereit")
-    short_text = display_text.replace('✅ ', '').replace('🔴 ', '').replace('⚠️ ', '').replace('🖨️ ', '').strip()
-    # Falls Text zu lang, abschneiden
-    if len(short_text) > 15: 
-        short_text = short_text[:12] + "..."
-
-    html = f"""
-    <div class="mobile-status-bar">
-        <div class="mini-stat-item">
-            <div style="width: 10px; height: 10px; border-radius: 50%; background: {c}; margin-right: 8px; box-shadow: 0 0 5px {c};"></div>
-            {short_text}
-        </div>
-        <div class="mini-stat-item">
-            <span style="background: #F1F5F9; padding: 4px 10px; border-radius: 99px; font-size: 0.75rem; color: #475569;">
-                📷 {media_remaining}
-            </span>
-        </div>
-    </div>
-    """
-    st.markdown(html, unsafe_allow_html=True)
 
 
 def render_fleet_overview(PRINTERS: dict):
