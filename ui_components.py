@@ -5,7 +5,7 @@ import textwrap
 from sheets_helpers import get_data_event, get_spreadsheet, get_fleet_data_parallel
 
 # -----------------------------------------------------------------------------
-# GLOBAL STYLING (Sidebar + Dashboard)
+# GLOBAL STYLING (Sidebar + Dashboard + Animationen)
 # -----------------------------------------------------------------------------
 MODERN_CSS = """
 <style>
@@ -26,7 +26,13 @@ html, body, [class*="css"] {
     background-color: #F8FAFC; /* Ganz leichter Hintergrund für Main Area */
 }
 
-/* 3. SIDEBAR STYLING (NEU) */
+h1, h2, h3 {
+    color: #0F172A;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+/* 3. SIDEBAR STYLING */
 section[data-testid="stSidebar"] {
     background-color: #FFFFFF;
     border-right: 1px solid #E2E8F0;
@@ -57,24 +63,60 @@ section[data-testid="stSidebar"] hr {
     margin: 1.5rem 0;
 }
 
-/* 4. Cards & Buttons (Wie vorher, leicht optimiert) */
+/* 4. Cards (Expander & Container) */
 .stExpander {
     background: #FFFFFF;
     border: 1px solid #E2E8F0;
     border-radius: 12px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+div[data-testid="stExpanderDetails"] {
+    background: #FFFFFF;
 }
 
-</style>
-"""
+/* Container Border Override */
+div[data-testid="stVerticalBlockBorderWrapper"] > div {
+    border-radius: 20px !important;
+    border: 1px solid #E2E8F0 !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
+    background-color: #FFFFFF !important;
+    padding: 24px !important;
+}
 
-def inject_custom_css():
-    st.markdown(MODERN_CSS, unsafe_allow_html=True)
+/* 5. Buttons */
+div.stButton > button {
+    width: 100%;
+    border-radius: 12px;
+    border: 1px solid #E2E8F0;
+    background-color: #F8FAFC;
+    color: #475569;
+    font-weight: 600;
+    padding: 0.6rem 1rem;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    transition: all 0.2s ease-in-out;
+}
+div.stButton > button:hover {
+    border-color: #CBD5E1;
+    background-color: #FFFFFF;
+    color: #0F172A;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+/* Primary Button Style */
+div.stButton > button[kind="primary"] {
+    background-color: #3B82F6;
+    color: white;
+    border: 1px solid #2563EB;
+}
+div.stButton > button[kind="primary"]:hover {
+    background-color: #2563EB;
+    color: white;
+}
 
 /* --------------------------------------------------------------------------
-   DASHBOARD STYLES (Hero Card & Animationen)
+   DASHBOARD ANIMATIONEN (Keyframes)
    -------------------------------------------------------------------------- */
-/* ... (Animationen bleiben gleich wie vorher) ... */
 @keyframes pulse-green {
     0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
     70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
@@ -156,11 +198,6 @@ def inject_custom_css():
 # NEUE KOMPONENTE: Card Header für Admin-Bereiche
 # -----------------------------------------------------------------------------
 def render_card_header(icon: str, title: str, subtitle: str, color_class: str = "blue"):
-    """
-    Rendert den oberen Teil einer Card (Icon + Text) innerhalb eines st.containers.
-    """
-    
-    # Farb-Mapping für Icon-Hintergrund
     colors = {
         "blue":  {"bg": "#EFF6FF", "fg": "#3B82F6"},
         "green": {"bg": "#ECFDF5", "fg": "#10B981"},
@@ -215,7 +252,7 @@ def render_hero_card(
     # 1. Icon & Animation Logic
     pulse_class = ""
     dot_color = ""
-    icon_char = '📸' # Standard Icon
+    icon_char = '📸' 
 
     if status_mode == "maintenance":
         pulse_class = "status-pulse-gray"
@@ -233,7 +270,6 @@ def render_hero_card(
         dot_color = "#EF4444"
         icon_char = '🔧'
     else:
-        # Fallback für andere Modi (orange/gelb oder grau)
         if "orange" in display_color or "yellow" in display_color:
             pulse_class = "status-pulse-orange"
             dot_color = "#F59E0B"
@@ -243,10 +279,8 @@ def render_hero_card(
             pulse_class = "status-pulse-gray" 
             dot_color = "#64748B"
 
-    # Text bereinigen (Icons entfernen, da wir eigene haben)
     clean_text = display_text.replace('✅ ', '').replace('🔴 ', '').replace('⚠️ ', '').replace('🖨️ ', '').replace('⏳ ', '').replace('🚚 ', '')
 
-    # 2. Progress Bar Logic
     if not max_prints or max_prints <= 0:
         pct = 0
     else:
@@ -258,7 +292,6 @@ def render_hero_card(
 
     icon_bg = f"{dot_color}15" 
 
-    # 3. HTML Zusammenbauen
     html_content = f"""
 <div class="dashboard-card">
     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
@@ -383,7 +416,7 @@ def render_fleet_overview(PRINTERS: dict):
                 </div>
             """)
             st.markdown(card_html, unsafe_allow_html=True)
-        idx += 1
+            idx += 1
 
 
 def render_link_card(url: str, title: str, subtitle: str, icon: str = "☁️"):
@@ -443,7 +476,7 @@ def inject_screensaver_css():
             font-weight: 800;
             line-height: 1;
             margin-bottom: 2vh;
-            font-variant-numeric: tabular-nums; /* Verhindert Springen der Zahlen */
+            font-variant-numeric: tabular-nums;
         }
         .label-text {
             font-size: 2vh;
