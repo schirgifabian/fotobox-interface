@@ -251,6 +251,12 @@ def render_hero_card(
         else:
             pulse_class = "status-pulse-gray" 
             dot_color = "#64748B"
+            
+    if status_mode == "maintenance":
+        pulse_class = "status-pulse-gray"
+        dot_color = "#94A3B8" # Slate 400
+        icon_char = '🚚' # LKW Icon
+    elif status_mode == "printing":
 
     clean_text = display_text.replace('✅ ', '').replace('🔴 ', '').replace('⚠️ ', '').replace('🖨️ ', '').replace('⏳ ', '')
 
