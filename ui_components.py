@@ -125,25 +125,27 @@ div.stButton > button[kind="primary"]:hover {
         align-items: center;
         justify-content: space-between;
         
-        position: fixed;
-        top: 2.875rem; /* Exakt unter dem Streamlit Header */
-        left: 0;
-        right: 0;
-        height: 48px;
-        z-index: 10000;
+        /* HIER IST DIE ÄNDERUNG: sticky statt fixed */
+        position: -webkit-sticky; /* Für Safari */
+        position: sticky;
         
-        background-color: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(8px); /* Glas-Effekt */
-        border-bottom: 1px solid #E2E8F0;
-        padding: 0 16px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        /* 3rem (ca 48px) ist meist die Höhe des Streamlit Headers. 
+           So dockt es genau darunter an. */
+        top: 3rem; 
+        
+        z-index: 999; /* Etwas niedriger als der Streamlit Header */
+        
+        /* Margin sorgt für Abstand zur Hero-Card vorher */
+        margin-top: 1rem; 
+        margin-bottom: 1rem;
+        
+        background-color: rgba(255, 255, 255, 0.90);
+        backdrop-filter: blur(8px);
+        border: 1px solid #E2E8F0; /* Rundherum Rand sieht bei Sticky oft besser aus */
+        border-radius: 12px;       /* Leicht abgerundet sieht 'schwebend' aus */
+        padding: 8px 16px;         /* Etwas Padding */
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
     }
-    
-    /* Platzhalter, damit der Inhalt nicht unter die Leiste rutscht */
-    .block-container {
-        padding-top: 5rem !important; 
-    }
-}
 
 .mini-stat-item {
     display: flex;
