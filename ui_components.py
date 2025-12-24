@@ -509,16 +509,21 @@ def inject_screensaver_css():
             font-family: monospace;
             font-size: 1.5vh;
         }
-        /* Buttons im Screensaver verstecken/abdunkeln */
+        /* Button sichtbar machen */
         .stButton > button {
-            background: transparent !important;
-            border: 1px solid #333 !important;
-            color: #555 !important;
+            background-color: rgba(255, 255, 255, 0.1) !important;
+            border: 1px solid #666 !important;
+            color: #ccc !important;
+            border-radius: 8px !important;
+            transition: all 0.3s ease !important;
         }
         .stButton > button:hover {
-            color: red !important;
-            border-color: red !important;
+            background-color: rgba(255, 255, 255, 0.3) !important;
+            border-color: #fff !important;
+            color: #fff !important;
+            transform: scale(1.02);
         }
+        
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
