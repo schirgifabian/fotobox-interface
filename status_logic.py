@@ -182,7 +182,7 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str, maint
             if maintenance_active:
                 # Wartungsmodus: Keine Warnung, sondern Info
                 status_mode = "maintenance"
-                display_text = "🚚 Transport / Wartung"
+                display_text = "Box im Lager / Wartung"
                 display_color = "slate"
             else:
                 # Normaler Modus: Warnung
