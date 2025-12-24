@@ -43,7 +43,7 @@ from ui_components import (
 # --------------------------------------------------------------------
 # GRUNDKONFIG
 # --------------------------------------------------------------------
-PAGE_TITLE = "Fotobox Status"
+PAGE_TITLE = "Fotobox Drucker Status"
 PAGE_ICON = "🖨️"
 NTFY_ACTIVE_DEFAULT = True
 
@@ -272,9 +272,6 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
             cost_txt=cost_txt
         )
 
-        from ui_components import render_mini_status_bar
-        render_mini_status_bar(status_mode, display_text, media_remaining)
-                
         if status_mode == "error": st.error("Bitte Drucker und Papier prüfen (Störung aktiv).")
         elif status_mode == "stale": st.warning("Seit einigen Minuten keine Daten – Verbindung prüfen.")
             
