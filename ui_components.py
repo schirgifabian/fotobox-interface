@@ -509,19 +509,43 @@ def inject_screensaver_css():
             font-family: monospace;
             font-size: 1.5vh;
         }
-        /* Button sichtbar machen */
+        /* Button-Container: Fixiert am unteren Bildschirmrand, exakt mittig */
+        .stButton {
+            position: fixed !important;
+            bottom: 40px !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            width: auto !important;
+            z-index: 99999;
+        }
+
+        /* Das eigentliche Button-Styling (Pillen-Form, dezent) */
         .stButton > button {
-            background-color: rgba(255, 255, 255, 0.1) !important;
-            border: 1px solid #666 !important;
-            color: #ccc !important;
-            border-radius: 8px !important;
+            background-color: transparent !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            color: rgba(255, 255, 255, 0.4) !important;
+            border-radius: 50px !important; /* Macht ihn rund (Pille) */
+            padding: 8px 30px !important;
+            font-size: 0.75rem !important;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
             transition: all 0.3s ease !important;
         }
+
+        /* Hover-Effekt: Wird weiß und sichtbar */
         .stButton > button:hover {
-            background-color: rgba(255, 255, 255, 0.3) !important;
-            border-color: #fff !important;
-            color: #fff !important;
-            transform: scale(1.02);
+            border-color: #ffffff !important;
+            color: #ffffff !important;
+            background-color: rgba(255, 255, 255, 0.1) !important;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        /* Den Button beim Klicken nicht rot werden lassen */
+        .stButton > button:active, .stButton > button:focus {
+            border-color: #ffffff !important;
+            color: #ffffff !important;
+            background-color: rgba(255, 255, 255, 0.2) !important;
         }
         
     </style>
