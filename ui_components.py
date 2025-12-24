@@ -114,20 +114,43 @@ div.stButton > button[kind="primary"]:hover {
     color: white;
 }
 
-/* 6. STICKY STATUS HEADER (Mobile Optimierung) */
-div[data-testid="stVerticalBlock"] > div:has(.dashboard-card) {
-    position: sticky;
-    top: 2.5rem; /* Platz für Streamlit Header lassen */
-    z-index: 999;
-    background-color: #F8FAFC; /* Hintergrund, damit Text nicht durchscheint beim Scrollen */
-    padding-bottom: 10px;
-    margin-bottom: 0px !important;
-    transition: all 0.2s ease;
+/* 6. MOBILE MINI STICKY BAR */
+.mobile-status-bar {
+    display: none; /* Auf Desktop standardmäßig ausblenden */
 }
 
-/* Schatten */
-div[data-testid="stVerticalBlock"] > div:has(.dashboard-card) {
-    border-bottom: 1px solid rgba(0,0,0,0.05);
+@media (max-width: 768px) {
+    .mobile-status-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        
+        position: fixed;
+        top: 2.875rem; /* Exakt unter dem Streamlit Header */
+        left: 0;
+        right: 0;
+        height: 48px;
+        z-index: 10000;
+        
+        background-color: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(8px); /* Glas-Effekt */
+        border-bottom: 1px solid #E2E8F0;
+        padding: 0 16px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    /* Platzhalter, damit der Inhalt nicht unter die Leiste rutscht */
+    .block-container {
+        padding-top: 5rem !important; 
+    }
+}
+
+.mini-stat-item {
+    display: flex;
+    align-items: center;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #334155;
 }
 
 /* --------------------------------------------------------------------------
@@ -364,6 +387,48 @@ def render_hero_card(
 </div>
 """
     st.markdown(html_content, unsafe_allow_html=True)
+
+def render_mini_status_bar(status_mode: str, display_text: str, media_remaining: int):
+    """
+    Rendert eine fixierte Mini-Leiste für Mobile Devices.
+    """
+    # Farben definieren
+    color_map = {
+        "ready": "#10B981",    # Grün
+        "printing": "#3B82F6", # Blau
+        "error": "#EF4444",    # Rot
+        "warning": "#F59E0B",  # Orange
+        "offline": "#64748B"   # Grau
+    }
+    
+    # Farbe bestimmen
+    if status_mode in color_map:
+        c = color_map[status_mode]
+    elif "stale" in status_mode or "low" in status_mode:
+        c = color_map["warning"]
+    else:
+        c = color_map["offline"]
+
+    # Text kürzen für Mobile (z.B. "✅ Bereit" -> "Bereit")
+    short_text = display_text.replace('✅ ', '').replace('🔴 ', '').replace('⚠️ ', '').replace('🖨️ ', '').strip()
+    # Falls Text zu lang, abschneiden
+    if len(short_text) > 15: 
+        short_text = short_text[:12] + "..."
+
+    html = f"""
+    <div class="mobile-status-bar">
+        <div class="mini-stat-item">
+            <div style="width: 10px; height: 10px; border-radius: 50%; background: {c}; margin-right: 8px; box-shadow: 0 0 5px {c};"></div>
+            {short_text}
+        </div>
+        <div class="mini-stat-item">
+            <span style="background: #F1F5F9; padding: 4px 10px; border-radius: 99px; font-size: 0.75rem; color: #475569;">
+                📷 {media_remaining}
+            </span>
+        </div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def render_fleet_overview(PRINTERS: dict):
