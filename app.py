@@ -35,7 +35,7 @@ from ui_components import (
     render_fleet_overview,
     render_hero_card,
     render_link_card,
-    render_card_header
+    render_card_header,
     render_screensaver_ui
 )
 
