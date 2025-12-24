@@ -43,7 +43,7 @@ from ui_components import (
 # --------------------------------------------------------------------
 # GRUNDKONFIG
 # --------------------------------------------------------------------
-PAGE_TITLE = "Fotobox Drucker Status"
+PAGE_TITLE = "Fotobox Drucker Status Testserver"
 PAGE_ICON = "🖨️"
 NTFY_ACTIVE_DEFAULT = True
 
@@ -637,14 +637,16 @@ def run_screensaver_loop(media_factor: int):
 
     try:
         last = df.iloc[-1]
-        timestamp = str(last.get("Timestamp", ""))[-8:] 
+        full_timestamp = str(last.get("Timestamp", "")) # Voller Zeitstempel für die Logik
+        display_timestamp = full_timestamp[-8:]         # Nur Uhrzeit für die Anzeige
         raw_status = str(last.get("Status", ""))
         
         try: media_remaining = int(last.get("MediaRemaining", 0)) * media_factor
         except: media_remaining = 0
         
+        # Hier full_timestamp übergeben!
         status_mode, display_text, display_color, _, _ = evaluate_status(
-            raw_status, media_remaining, timestamp
+            raw_status, media_remaining, full_timestamp
         )
         
         # HIER NUR NOCH CONTENT RENDERN, KEIN CSS MEHR
@@ -653,7 +655,7 @@ def run_screensaver_loop(media_factor: int):
             media_remaining=media_remaining,
             display_text=display_text,
             display_color=display_color,
-            timestamp=timestamp
+            timestamp=display_timestamp # Hier die gekürzte Version nutzen
         )
         
         # Diskreter Exit Button
