@@ -195,6 +195,7 @@ def init_session_state():
         "socket_state": "unknown",
         "socket_debug": None,
         "lockscreen_state": "off",
+        "maintenance_mode": False,
     }
     for k, v in defaults.items():
         if k not in st.session_state: st.session_state[k] = v
@@ -217,6 +218,8 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
         except Exception: media_remaining_raw = 0
         media_remaining = media_remaining_raw * media_factor
 
+        maint_active = st.session_state.get("maintenance_mode", False)
+        
         status_mode, display_text, display_color, push, minutes_diff = evaluate_status(
             raw_status, media_remaining, timestamp
         )
@@ -526,6 +529,31 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                             st.rerun()
                     else:
                         st.caption("Nicht verfügbar")
+                        
+            st.write("")
+            with st.container(border=True):
+            is_maint = st.session_state.get("maintenance_mode", False)
+            
+            # Header rendern
+            render_card_header(
+                icon="🚚", 
+                title="Box im Lager", 
+                subtitle="Transport & Lagerung",
+                color_class="slate" if is_maint else "green" # Grau wenn aktiv, sonst grün (oder umgekehrt, wie du magst)
+            )
+            
+            c_text, c_toggle = st.columns([3, 1])
+            with c_text:
+                st.caption("Unterdrückt 'Keine Verbindung' Warnungen und Push-Nachrichten.")
+            
+            with c_toggle:
+                # Toggle
+                new_maint = st.toggle("Aktiv", value=is_maint, key=f"toggle_maint_{printer_key}")
+                
+                if new_maint != is_maint:
+                    st.session_state.maintenance_mode = new_maint
+                    set_setting("maintenance_mode", new_maint)
+                    st.rerun()
 
     # ------------------------------------------------------------------
     # TAB 4: NOTIFY CARD
@@ -697,10 +725,20 @@ def main():
         st.session_state.socket_state = "unknown"
         st.session_state.last_warn_status = None
         st.session_state.last_sound_status = None
+        
+        # 1. Paketgröße laden (bestehend)
         try:
             pkg = get_setting("package_size", printer_cfg["default_max_prints"])
             st.session_state.max_prints = int(pkg)
-        except: st.session_state.max_prints = printer_cfg["default_max_prints"]
+        except: 
+            st.session_state.max_prints = printer_cfg["default_max_prints"]
+
+        # 2. NEU: Maintenance Mode laden
+        try:
+            m_val = get_setting("maintenance_mode", "False")
+            st.session_state.maintenance_mode = (str(m_val).lower() == "true")
+        except:
+            st.session_state.maintenance_mode = False
 
     if "ntfy_active" not in st.session_state:
         try: st.session_state.ntfy_active = str(get_setting("ntfy_active", str(NTFY_ACTIVE_DEFAULT))).lower() == "true"
