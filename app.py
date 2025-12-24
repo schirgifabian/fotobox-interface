@@ -43,7 +43,7 @@ from ui_components import (
 # --------------------------------------------------------------------
 # GRUNDKONFIG
 # --------------------------------------------------------------------
-PAGE_TITLE = "Fotobox Drucker Status"
+PAGE_TITLE = "Fotobox Status"
 PAGE_ICON = "🖨️"
 NTFY_ACTIVE_DEFAULT = True
 
