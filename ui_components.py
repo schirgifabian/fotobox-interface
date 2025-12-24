@@ -234,31 +234,36 @@ def render_hero_card(
     # 1. Icon & Animation Logic
     pulse_class = ""
     dot_color = ""
-    
-    if status_mode == "printing":
+    icon_char = '📸' # Standard Icon
+
+    if status_mode == "maintenance":
+        pulse_class = "status-pulse-gray"
+        dot_color = "#94A3B8"
+        icon_char = '🚚'
+    elif status_mode == "printing":
         pulse_class = "status-pulse-blue"
         dot_color = "#3B82F6"
+        icon_char = '🖨️'
     elif status_mode == "ready":
         pulse_class = "status-pulse-green"
         dot_color = "#10B981"
     elif status_mode == "error":
         pulse_class = "status-pulse-red"
         dot_color = "#EF4444"
+        icon_char = '🔧'
     else:
+        # Fallback für andere Modi (orange/gelb oder grau)
         if "orange" in display_color or "yellow" in display_color:
             pulse_class = "status-pulse-orange"
             dot_color = "#F59E0B"
+            if status_mode == 'low_paper': icon_char = '⚠️'
+            elif status_mode == 'cooldown': icon_char = '❄️'
         else:
             pulse_class = "status-pulse-gray" 
             dot_color = "#64748B"
-            
-    if status_mode == "maintenance":
-        pulse_class = "status-pulse-gray"
-        dot_color = "#94A3B8" # Slate 400
-        icon_char = '🚚' # LKW Icon
-    elif status_mode == "printing":
 
-    clean_text = display_text.replace('✅ ', '').replace('🔴 ', '').replace('⚠️ ', '').replace('🖨️ ', '').replace('⏳ ', '')
+    # Text bereinigen (Icons entfernen, da wir eigene haben)
+    clean_text = display_text.replace('✅ ', '').replace('🔴 ', '').replace('⚠️ ', '').replace('🖨️ ', '').replace('⏳ ', '').replace('🚚 ', '')
 
     # 2. Progress Bar Logic
     if not max_prints or max_prints <= 0:
@@ -269,12 +274,6 @@ def render_hero_card(
     if pct < 10: bar_color = "#EF4444" 
     elif pct < 25: bar_color = "#F59E0B" 
     else: bar_color = "#3B82F6" 
-
-    icon_char = '📸'
-    if status_mode == 'printing': icon_char = '🖨️'
-    elif status_mode == 'error': icon_char = '🔧'
-    elif status_mode == 'low_paper': icon_char = '⚠️'
-    elif status_mode == 'cooldown': icon_char = '❄️'
 
     icon_bg = f"{dot_color}15" 
 
