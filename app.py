@@ -116,14 +116,6 @@ def check_login():
 
     st.stop()
 
-
-def render_logout_button():
-    if st.sidebar.button("Logout"):
-        get_cookie_manager().delete("auth_pin")
-        st.session_state["is_logged_in"] = False
-        st.rerun()
-
-
 # --------------------------------------------------------------------
 # NTFY & DSR
 # --------------------------------------------------------------------
@@ -698,92 +690,114 @@ def main():
 
     render_logout_button()
     
-    # --- UI OPTIMIERUNG SIDEBAR ---
+  # --- UI OPTIMIERUNG SIDEBAR ---
     with st.sidebar:
+        # HEADER BEREICH
         st.markdown("### ⚙️ Control Panel")
-        st.write("") # Kleiner Spacer
+        st.write("") 
 
-        # CARD 1: Ansicht Modus
+        # CARD 1: USER PROFILE & LOGOUT
+        # Wir bauen eine kleine "Profil-Karte", sieht viel hochwertiger aus
         with st.container(border=True):
-            st.markdown("#### Ansicht")
+            # Custom HTML für Avatar und Name
+            st.markdown("""
+                <div class="user-profile-card">
+                    <div class="user-avatar">A</div>
+                    <div class="user-info">
+                        <span class="user-name">Admin User</span>
+                        <span class="user-role">Administrator</span>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            if st.button("Ausloggen", key="sidebar_logout"):
+                get_cookie_manager().delete("auth_pin")
+                st.session_state["is_logged_in"] = False
+                st.rerun()
+
+        # CARD 2: ANSICHT (ÜBERSICHT)
+        with st.container(border=True):
+            st.caption("Navigation") # Kleines graues Label innerhalb der Card
             view_mode = st.radio(
                 "Ansicht wählen", 
                 ["Einzelne Fotobox", "Alle Boxen"],
                 label_visibility="collapsed"
             )
 
-        # CARD 2: Zen Mode (als Highlight)
+        # CARD 3: FOTOBOX AUSWAHL (Nur sichtbar in Einzelansicht)
+        if view_mode != "Alle Boxen":
+            with st.container(border=True):
+                st.caption("Geräte Auswahl")
+                printer_name = st.selectbox(
+                    "Fotobox auswählen", 
+                    list(PRINTERS.keys()), 
+                    label_visibility="collapsed"
+                )
+
+        # CARD 4: ZEN MODE (Visual Highlight)
         with st.container(border=True):
-            c_icon, c_btn = st.columns([1, 4])
-            with c_icon:
-                st.markdown("<div style='font-size: 24px; text-align: center; margin-top: 4px;'>🖥️</div>", unsafe_allow_html=True)
-            with c_btn:
-                if st.button("Zen Mode starten", use_container_width=True):
+            c1, c2 = st.columns([1, 4])
+            with c1:
+                # Großes Icon
+                st.markdown("<div style='font-size: 26px; display: flex; align-items: center; justify-content: center; height: 100%;'>🖥️</div>", unsafe_allow_html=True)
+            with c2:
+                st.markdown("**Zen Mode**")
+                if st.button("Starten", key="zen_start", use_container_width=True):
                     st.session_state.screensaver_mode = True
                     st.rerun()
 
-    # Logik für "Alle Boxen" View
+    # --- LOGIK TEIL (Bleibt gleich, nur eingerückt/strukturiert) ---
     if view_mode == "Alle Boxen":
         render_fleet_overview(PRINTERS)
         return
 
-    # --- CARD 3: Konfiguration (Nur sichtbar wenn Einzelansicht) ---
+    # Config laden (für Einzelansicht)
+    printer_cfg = PRINTERS[printer_name]
+    printer_key = printer_cfg["key"]
+    # ... (Alle Variablen laden wie zuvor) ...
+    media_factor = printer_cfg.get("media_factor", 2)
+    cost_per_roll = printer_cfg.get("cost_per_roll_eur")
+    warning_threshold = printer_cfg.get("warning_threshold", 20)
+    printer_has_admin = printer_cfg.get("has_admin", True)
+    fotoshare_url = printer_cfg.get("fotoshare_url")
+    
+    printers_secrets = st.secrets.get("printers", {})
+    printer_secret = printers_secrets.get(printer_key, {})
+    sheet_id = printer_secret.get("sheet_id")
+    ntfy_topic = printer_secret.get("ntfy_topic")
+
+    if not sheet_id:
+        st.error(f"Keine 'sheet_id' für '{printer_name}' gefunden.")
+        st.stop()
+
+    st.session_state.sheet_id = sheet_id
+    st.session_state.ntfy_topic = ntfy_topic
+    
+    if st.session_state.selected_printer != printer_name:
+        st.session_state.selected_printer = printer_name
+        st.session_state.confirm_reset = False
+        st.session_state.socket_state = "unknown"
+        st.session_state.last_warn_status = None
+        st.session_state.last_sound_status = None
+        
+        try:
+            pkg = get_setting("package_size", printer_cfg["default_max_prints"])
+            st.session_state.max_prints = int(pkg)
+        except: 
+            st.session_state.max_prints = printer_cfg["default_max_prints"]
+
+        try:
+            m_val = get_setting("maintenance_mode", "False")
+            st.session_state.maintenance_mode = (str(m_val).lower() == "true")
+        except:
+            st.session_state.maintenance_mode = False
+
+    # --- SETTINGS TOGGLES (CARD 5) ---
     with st.sidebar:
         with st.container(border=True):
-            st.markdown("#### Fotobox")
-            printer_name = st.selectbox(
-                "Fotobox auswählen", 
-                list(PRINTERS.keys()), 
-                label_visibility="collapsed"
-            )
-
-            # --- Laden der Config für gewählten Drucker ---
-            printer_cfg = PRINTERS[printer_name]
-            printer_key = printer_cfg["key"]
-            # ... (Config Variablen Zuweisung wie bisher) ...
-            media_factor = printer_cfg.get("media_factor", 2)
-            cost_per_roll = printer_cfg.get("cost_per_roll_eur")
-            warning_threshold = printer_cfg.get("warning_threshold", 20)
-            printer_has_admin = printer_cfg.get("has_admin", True)
-            fotoshare_url = printer_cfg.get("fotoshare_url")
+            st.caption("Einstellungen")
             
-            printers_secrets = st.secrets.get("printers", {})
-            printer_secret = printers_secrets.get(printer_key, {})
-            sheet_id = printer_secret.get("sheet_id")
-            ntfy_topic = printer_secret.get("ntfy_topic")
-
-            if not sheet_id:
-                st.error(f"Keine 'sheet_id' für '{printer_name}' gefunden.")
-                st.stop()
-
-            # Session State Updates (wie bisher)
-            st.session_state.sheet_id = sheet_id
-            st.session_state.ntfy_topic = ntfy_topic
-            
-            if st.session_state.selected_printer != printer_name:
-                st.session_state.selected_printer = printer_name
-                st.session_state.confirm_reset = False
-                st.session_state.socket_state = "unknown"
-                st.session_state.last_warn_status = None
-                st.session_state.last_sound_status = None
-                
-                try:
-                    pkg = get_setting("package_size", printer_cfg["default_max_prints"])
-                    st.session_state.max_prints = int(pkg)
-                except: 
-                    st.session_state.max_prints = printer_cfg["default_max_prints"]
-
-                try:
-                    m_val = get_setting("maintenance_mode", "False")
-                    st.session_state.maintenance_mode = (str(m_val).lower() == "true")
-                except:
-                    st.session_state.maintenance_mode = False
-
-        # --- CARD 4: Einstellungen / Toggles ---
-        with st.container(border=True):
-            st.markdown("#### Optionen")
-            
-            # Session State Initialisierung für Toggles (wie bisher)
+            # Session State Init
             if "ntfy_active" not in st.session_state:
                 try: st.session_state.ntfy_active = str(get_setting("ntfy_active", str(NTFY_ACTIVE_DEFAULT))).lower() == "true"
                 except: st.session_state.ntfy_active = NTFY_ACTIVE_DEFAULT
@@ -794,12 +808,14 @@ def main():
 
             if "sound_enabled" not in st.session_state: st.session_state.sound_enabled = False
 
-            # Die Toggles
+            # Toggles mit etwas Abstand
             event_mode = st.toggle("Event-Ansicht", value=st.session_state.event_mode)
+            st.write("") # Spacer
             sound_enabled = st.toggle("Sound Effekte", value=st.session_state.sound_enabled)
+            st.write("") # Spacer
             ntfy_active_ui = st.toggle("Push Nachrichten", value=st.session_state.ntfy_active)
 
-            # Toggle Logik (Speichern der States)
+            # Logic Save
             if event_mode != st.session_state.event_mode:
                 st.session_state.event_mode = event_mode
                 try: set_setting("default_view", "event" if event_mode else "admin")
@@ -811,7 +827,7 @@ def main():
                 except: pass
 
             st.session_state.sound_enabled = sound_enabled
-
+            
     # --- HAUPTBEREICH RENDERN (Bleibt weitgehend gleich) ---
     st.title(f"{PAGE_ICON} {PAGE_TITLE}")
     
