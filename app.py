@@ -87,6 +87,11 @@ def check_login():
         return
 
     cookie_manager = get_cookie_manager()
+    
+    # --- NEU: Manager für den Rest des Skripts speichern ---
+    st.session_state["cookie_manager_ref"] = cookie_manager
+    # -------------------------------------------------------
+
     cookie_val = cookie_manager.get("auth_pin")
 
     if st.session_state.get("is_logged_in", False):
@@ -695,9 +700,7 @@ def main():
         st.write("") 
 
         # CARD 1: USER PROFILE & LOGOUT
-        # Wir bauen eine kleine "Profil-Karte", sieht viel hochwertiger aus
         with st.container(border=True):
-            # Custom HTML für Avatar und Name
             st.markdown("""
                 <div class="user-profile-card">
                     <div class="user-avatar">A</div>
@@ -709,7 +712,11 @@ def main():
             """, unsafe_allow_html=True)
             
             if st.button("Ausloggen", key="sidebar_logout"):
-                get_cookie_manager().delete("auth_pin")
+                # --- FIX: Vorhandenen Manager nutzen statt neuen erstellen ---
+                if "cookie_manager_ref" in st.session_state:
+                    st.session_state["cookie_manager_ref"].delete("auth_pin")
+                # -------------------------------------------------------------
+                
                 st.session_state["is_logged_in"] = False
                 st.rerun()
 
