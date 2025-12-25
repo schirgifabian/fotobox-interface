@@ -712,12 +712,15 @@ def main():
             """, unsafe_allow_html=True)
             
             if st.button("Ausloggen", key="sidebar_logout"):
-                # --- FIX: Vorhandenen Manager nutzen statt neuen erstellen ---
                 if "cookie_manager_ref" in st.session_state:
                     st.session_state["cookie_manager_ref"].delete("auth_pin")
-                # -------------------------------------------------------------
                 
                 st.session_state["is_logged_in"] = False
+                
+                # --- WICHTIG: KURZE PAUSE FÜR DEN BROWSER ---
+                time.sleep(0.5) 
+                # --------------------------------------------
+                
                 st.rerun()
 
         # CARD 2: ANSICHT (ÜBERSICHT)
