@@ -144,6 +144,37 @@ div.stButton > button[kind="primary"]:hover {
     gap: 8px;
 }
 
+/* =========================================
+   ANTI-JUMP & NO-SPINNER FIX
+   ========================================= */
+
+/* 1. Den Standard-Spinner von Streamlit (oben rechts und in Elementen) ausblenden */
+.stSpinner, div[data-testid="stSpinner"] {
+    display: none !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* 2. Den "Running"-Man oben rechts ausblenden (falls gewünscht) */
+div[data-testid="stStatusWidget"] {
+    visibility: hidden;
+}
+
+/* 3. Animationen bei Fragment-Updates unterdrücken 
+   (Verhindert das "Grau-Werden" beim Neuladen) */
+div[data-testid="stFragment"] {
+    animation: none !important;
+    transition: none !important;
+}
+
+/* 4. Verhindert das Zusammenfallen von Containern während des Ladens */
+div[data-testid="stVerticalBlock"] {
+    min-height: 1px; /* Erzwingt, dass der Block existiert */
+}
+
+
 </style>
 """
 
