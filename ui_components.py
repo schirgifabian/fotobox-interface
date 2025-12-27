@@ -10,17 +10,11 @@ from sheets_helpers import get_data_event, get_spreadsheet, get_fleet_data_paral
 MODERN_CSS = """
 <style>
 /* 1. GRUNDGERÜST & SCHRIFTEN */
-#MainMenu, footer, header {visibility: hidden;}
-
-.block-container {
-    padding-top: 2rem !important;
-    padding-bottom: 5rem !important;
-    max-width: 1000px;
-}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 html, body, [class*="css"] {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    color: #1E293B; /* Dunkleres Grau für bessere Lesbarkeit */
+    color: #1E293B; 
     background-color: #F8FAFC; 
 }
 
@@ -28,102 +22,104 @@ html, body, [class*="css"] {
 section[data-testid="stSidebar"] {
     background-color: #F1F5F9; /* Kühles Grau als Basis */
     border-right: 1px solid #E2E8F0;
+    padding-top: 1rem;
 }
 
-/* Sidebar Header (Control Panel) */
+/* Sidebar Titel ausblenden oder stylen */
+section[data-testid="stSidebar"] .block-container {
+    padding-top: 1rem;
+    padding-bottom: 2rem;
+}
+
+/* 3. DIE "FLOATING CARDS" IN DER SIDEBAR */
+/* Wir stylen spezifisch die Container in der Sidebar */
+section[data-testid="stSidebar"] div[data-testid="stVerticalBlockBorderWrapper"] {
+    background-color: #FFFFFF !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02) !important;
+    padding: 16px !important;
+    margin-bottom: 12px;
+}
+
+/* Überschriften innerhalb der Sidebar-Cards kleiner und grauer */
 section[data-testid="stSidebar"] h1, 
 section[data-testid="stSidebar"] h2, 
-section[data-testid="stSidebar"] h3 {
-    color: #0F172A;
-    font-size: 1.2rem !important;
-    font-weight: 800;
-    margin-bottom: 20px;
-    letter-spacing: -0.02em;
+section[data-testid="stSidebar"] h3,
+section[data-testid="stSidebar"] h4 {
+    color: #64748B !important;
+    font-size: 0.75rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    margin-bottom: 12px !important;
+    margin-top: 0px !important;
+    border: none !important;
 }
 
-/* Die kleinen Labels über den Inputs in der Sidebar */
-section[data-testid="stSidebar"] label {
+/* Captions in der Sidebar unsichtbar machen oder stylen, 
+   da wir eigene Header nutzen */
+section[data-testid="stSidebar"] .stCaption {
+    color: #94A3B8;
     font-size: 0.7rem;
-    font-weight: 700;
-    color: #64748B;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 4px;
-}
-
-/* 3. DIE "FLOATING CARDS" (Container Override) */
-/* Dies betrifft alle st.container(border=True) */
-div[data-testid="stVerticalBlockBorderWrapper"] > div {
-    background-color: #FFFFFF !important;
-    border: 1px solid transparent !important; /* Rahmen weg, Schatten her */
-    border-radius: 16px !important;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
-    padding: 20px !important;
-    margin-bottom: 16px;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-/* Hover-Effekt für die Cards (optional, macht es interaktiv) */
-div[data-testid="stVerticalBlockBorderWrapper"] > div:hover {
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04) !important;
 }
 
 /* 4. BUTTONS & INPUTS */
 div.stButton > button {
-    border-radius: 10px;
+    border-radius: 8px;
     border: 1px solid #E2E8F0;
-    background-color: #F8FAFC;
+    background-color: #FFFFFF;
     color: #475569;
     font-weight: 600;
-    font-size: 0.9rem;
-    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    padding: 0.4rem 0.8rem;
     transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 div.stButton > button:hover {
     border-color: #CBD5E1;
-    background-color: #FFFFFF;
+    background-color: #F8FAFC;
     color: #0F172A;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
-/* Primary Button (Blau) */
+/* Primary Button */
 div.stButton > button[kind="primary"] {
-    background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+    background: #3B82F6;
     color: white;
     border: none;
-    box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2);
 }
 div.stButton > button[kind="primary"]:hover {
-    box-shadow: 0 6px 10px rgba(37, 99, 235, 0.3);
+    background: #2563EB;
+    box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2);
 }
 
-/* 5. USER PROFILE STYLING (Custom HTML Helper) */
+/* 5. USER PROFILE STYLING */
 .user-profile-card {
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-bottom: 10px;
+    /* margin-bottom wird vom Container handled */
 }
 .user-avatar {
-    width: 40px;
-    height: 40px;
-    background: #EFF6FF;
-    color: #3B82F6;
-    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    background: #DBEAFE; /* Helles Blau */
+    color: #2563EB;
+    border-radius: 8px; /* Eckig statt rund wirkt moderner */
     display: flex;
     align-items: center;
     justify-content: center;
-    font-weight: bold;
-    font-size: 1.2rem;
+    font-weight: 700;
+    font-size: 1rem;
 }
 .user-info {
     display: flex;
     flex-direction: column;
+    line-height: 1.2;
 }
 .user-name {
-    font-weight: 700;
-    font-size: 0.95rem;
+    font-weight: 600;
+    font-size: 0.9rem;
     color: #1E293B;
 }
 .user-role {
@@ -131,29 +127,23 @@ div.stButton > button[kind="primary"]:hover {
     color: #64748B;
 }
 
-/* Restliche Dashboard Styles (bleiben gleich) */
-.status-dot { height: 12px; width: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; flex-shrink: 0; }
-.status-pulse-green { background-color: #10B981; animation: pulse-green 2s infinite; }
-.status-pulse-blue { background-color: #3B82F6; animation: pulse-blue 2s infinite; }
-.status-pulse-orange { background-color: #F59E0B; animation: pulse-orange 2s infinite; }
-.status-pulse-red { background-color: #EF4444; animation: pulse-red 2s infinite; }
-.status-pulse-gray { background-color: #64748B; animation: pulse-gray 2s infinite; }
-.dashboard-card { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 20px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); margin-bottom: 24px; }
-.metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; padding-top: 24px; border-top: 1px solid #F1F5F9; }
-.metric-item { text-align: center; }
-.metric-label { font-size: 0.75rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 4px; }
-.metric-value { font-size: 1.25rem; font-weight: 700; color: #1E293B; }
-.metric-sub { font-size: 0.7rem; color: #64748B; margin-top: 2px; }
-.progress-bg { background-color: #F1F5F9; border-radius: 99px; height: 12px; width: 100%; margin-top: 8px; overflow: hidden; }
-.progress-fill { height: 100%; border-radius: 99px; transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
-a.dashboard-link { text-decoration: none !important; color: inherit !important; display: block; transition: transform 0.2s ease, box-shadow 0.2s ease; }
-a.dashboard-link:hover .dashboard-card { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); border-color: #CBD5E1; }
+/* 6. SETTINGS ROW STYLING */
+.settings-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+    color: #334155;
+    font-weight: 500;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
 
-@keyframes pulse-green { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
-@keyframes pulse-blue { 0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); } 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); } }
-@keyframes pulse-orange { 0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); } 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); } }
-@keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
-@keyframes pulse-gray { 0% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(100, 116, 139, 0); } 100% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0); } }
+/* Radio Buttons kompakter */
+.stRadio > div {
+    gap: 8px;
+}
+
 </style>
 """
 
@@ -520,41 +510,22 @@ def inject_screensaver_css():
     st.markdown(css, unsafe_allow_html=True)
 
 
-def render_screensaver_content(
-    status_mode: str,
-    media_remaining: int,
-    display_text: str,
-    display_color: str,
-    timestamp: str
-):
-    """
-    Rendert NUR den Inhalt (HTML), kein CSS.
-    """
-    color_map = {
-        "green": "#10B981",
-        "blue": "#3B82F6",
-        "orange": "#F59E0B",
-        "red": "#EF4444",
-        "gray": "#64748B"
-    }
+def render_screensaver_content(status_mode, media_remaining, display_text, display_color, timestamp):
+    # (Unverändert lassen)
+    color_map = {"green": "#10B981", "blue": "#3B82F6", "orange": "#F59E0B", "red": "#EF4444", "gray": "#64748B"}
     accent_color = color_map.get(display_color, "#64748B")
-    
     clean_text = display_text.replace('✅', '').replace('⚠️', '').replace('🔴', '').strip()
-    
-    # Inline Styles für dynamische Farben nutzen
     html = f"""
     <div class="screensaver-container">
         <div class="label-text">Verbleibende Bilder</div>
-        <div class="big-number" style="color: {accent_color}; text-shadow: 0 0 40px {accent_color}40;">
-            {media_remaining}
-        </div>
-        <div class="status-pill" style="color: {accent_color};">
-            <span class="status-dot" style="background-color: {accent_color}; box-shadow: 0 0 10px {accent_color};"></span>
-            {clean_text}
-        </div>
-        <div class="meta-info">
-            Zuletzt aktualisiert: {timestamp}
-        </div>
+        <div class="big-number" style="color: {accent_color}; text-shadow: 0 0 40px {accent_color}40;">{media_remaining}</div>
+        <div class="status-pill" style="color: {accent_color};"><span class="status-dot" style="background-color: {accent_color}; box-shadow: 0 0 10px {accent_color};"></span>{clean_text}</div>
+        <div class="meta-info">Zuletzt aktualisiert: {timestamp}</div>
     </div>
     """
     st.markdown(html, unsafe_allow_html=True)
+
+def inject_screensaver_css():
+    # (Unverändert lassen)
+    css = """<style>.stApp {background-color: #000000 !important; color: #E2E8F0 !important;} section[data-testid="stSidebar"] {display: none !important;} header, footer {visibility: hidden !important;} .screensaver-container {display: flex; flex-direction: column; align-items: center; justify-content: center; height: 85vh; text-align: center; font-family: 'Inter', sans-serif;} .big-number {font-size: 15vw; font-weight: 800; line-height: 1; margin-bottom: 2vh; font-variant-numeric: tabular-nums;} .label-text {font-size: 2vh; text-transform: uppercase; letter-spacing: 0.3em; color: #64748B;} .status-pill {background-color: #111827; border: 1px solid #1F2937; padding: 1.5vh 4vw; border-radius: 99px; font-size: 3vh; font-weight: 600; display: flex; align-items: center; gap: 12px; margin-top: 4vh; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);} .status-dot {height: 2vh; width: 2vh; border-radius: 50%;} .meta-info {margin-top: 5vh; color: #374151; font-family: monospace; font-size: 1.5vh;} .stButton {position: fixed !important; bottom: 40px !important; left: 50% !important; transform: translateX(-50%) !important; width: auto !important; z-index: 99999;} .stButton > button {background-color: transparent !important; border: 1px solid rgba(255, 255, 255, 0.2) !important; color: rgba(255, 255, 255, 0.4) !important; border-radius: 50px !important; padding: 8px 30px !important; font-size: 0.75rem !important; text-transform: uppercase; letter-spacing: 0.15em; transition: all 0.3s ease !important;} .stButton > button:hover {border-color: #ffffff !important; color: #ffffff !important; background-color: rgba(255, 255, 255, 0.1) !important; box-shadow: 0 0 15px rgba(255, 255, 255, 0.2); transform: translateY(-2px);} .stButton > button:active, .stButton > button:focus {border-color: #ffffff !important; color: #ffffff !important; background-color: rgba(255, 255, 255, 0.2) !important;}</style>"""
+    st.markdown(css, unsafe_allow_html=True)
