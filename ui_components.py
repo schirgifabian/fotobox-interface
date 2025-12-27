@@ -20,19 +20,16 @@ html, body, [class*="css"] {
 
 /* 2. SIDEBAR - PROFISSIONELLER LOOK */
 section[data-testid="stSidebar"] {
-    background-color: #F1F5F9; /* Kühles Grau als Basis */
+    background-color: #F1F5F9; 
     border-right: 1px solid #E2E8F0;
     padding-top: 1rem;
 }
 
-/* Sidebar Titel ausblenden oder stylen */
 section[data-testid="stSidebar"] .block-container {
     padding-top: 1rem;
     padding-bottom: 2rem;
 }
 
-/* 3. DIE "FLOATING CARDS" IN DER SIDEBAR */
-/* Wir stylen spezifisch die Container in der Sidebar */
 section[data-testid="stSidebar"] div[data-testid="stVerticalBlockBorderWrapper"] {
     background-color: #FFFFFF !important;
     border: 1px solid #E2E8F0 !important;
@@ -42,7 +39,6 @@ section[data-testid="stSidebar"] div[data-testid="stVerticalBlockBorderWrapper"]
     margin-bottom: 12px;
 }
 
-/* Überschriften innerhalb der Sidebar-Cards kleiner und grauer */
 section[data-testid="stSidebar"] h1, 
 section[data-testid="stSidebar"] h2, 
 section[data-testid="stSidebar"] h3,
@@ -57,14 +53,12 @@ section[data-testid="stSidebar"] h4 {
     border: none !important;
 }
 
-/* Captions in der Sidebar unsichtbar machen oder stylen, 
-   da wir eigene Header nutzen */
 section[data-testid="stSidebar"] .stCaption {
     color: #94A3B8;
     font-size: 0.7rem;
 }
 
-/* 4. BUTTONS & INPUTS */
+/* 3. BUTTONS & INPUTS */
 div.stButton > button {
     border-radius: 8px;
     border: 1px solid #E2E8F0;
@@ -82,7 +76,6 @@ div.stButton > button:hover {
     color: #0F172A;
 }
 
-/* Primary Button */
 div.stButton > button[kind="primary"] {
     background: #3B82F6;
     color: white;
@@ -93,19 +86,18 @@ div.stButton > button[kind="primary"]:hover {
     box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2);
 }
 
-/* 5. USER PROFILE STYLING */
+/* 4. USER PROFILE STYLING */
 .user-profile-card {
     display: flex;
     align-items: center;
     gap: 12px;
-    /* margin-bottom wird vom Container handled */
 }
 .user-avatar {
     width: 36px;
     height: 36px;
-    background: #DBEAFE; /* Helles Blau */
+    background: #DBEAFE; 
     color: #2563EB;
-    border-radius: 8px; /* Eckig statt rund wirkt moderner */
+    border-radius: 8px; 
     display: flex;
     align-items: center;
     justify-content: center;
@@ -127,7 +119,7 @@ div.stButton > button[kind="primary"]:hover {
     color: #64748B;
 }
 
-/* 6. SETTINGS ROW STYLING */
+/* 5. SETTINGS ROW STYLING */
 .settings-row {
     display: flex;
     justify-content: space-between;
@@ -138,17 +130,11 @@ div.stButton > button[kind="primary"]:hover {
     padding-top: 4px;
     padding-bottom: 4px;
 }
-
-/* Radio Buttons kompakter */
 .stRadio > div {
     gap: 8px;
 }
 
-/* =========================================
-   ANTI-JUMP & NO-SPINNER FIX
-   ========================================= */
-
-/* 1. Den Standard-Spinner von Streamlit (oben rechts und in Elementen) ausblenden */
+/* 6. ANTI-JUMP & NO-SPINNER FIX (V2 Features) */
 .stSpinner, div[data-testid="stSpinner"] {
     display: none !important;
     opacity: 0 !important;
@@ -156,24 +142,53 @@ div.stButton > button[kind="primary"]:hover {
     margin: 0 !important;
     padding: 0 !important;
 }
-
-/* 2. Den "Running"-Man oben rechts ausblenden (falls gewünscht) */
 div[data-testid="stStatusWidget"] {
     visibility: hidden;
 }
-
-/* 3. Animationen bei Fragment-Updates unterdrücken 
-   (Verhindert das "Grau-Werden" beim Neuladen) */
 div[data-testid="stFragment"] {
     animation: none !important;
     transition: none !important;
 }
-
-/* 4. Verhindert das Zusammenfallen von Containern während des Ladens */
 div[data-testid="stVerticalBlock"] {
-    min-height: 1px; /* Erzwingt, dass der Block existiert */
+    min-height: 1px;
 }
 
+/* 7. DASHBOARD CARDS & HERO (WICHTIG: Aus V1 wiederhergestellt!) */
+.status-dot { height: 12px; width: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; flex-shrink: 0; }
+.status-pulse-green { background-color: #10B981; animation: pulse-green 2s infinite; }
+.status-pulse-blue { background-color: #3B82F6; animation: pulse-blue 2s infinite; }
+.status-pulse-orange { background-color: #F59E0B; animation: pulse-orange 2s infinite; }
+.status-pulse-red { background-color: #EF4444; animation: pulse-red 2s infinite; }
+.status-pulse-gray { background-color: #64748B; animation: pulse-gray 2s infinite; }
+
+.dashboard-card { 
+    background: #FFFFFF; 
+    border: 1px solid #E2E8F0; 
+    border-radius: 20px; 
+    padding: 24px; 
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); 
+    margin-bottom: 24px; 
+}
+
+.metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; padding-top: 24px; border-top: 1px solid #F1F5F9; }
+.metric-item { text-align: center; }
+.metric-label { font-size: 0.75rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 4px; }
+.metric-value { font-size: 1.25rem; font-weight: 700; color: #1E293B; }
+.metric-sub { font-size: 0.7rem; color: #64748B; margin-top: 2px; }
+
+.progress-bg { background-color: #F1F5F9; border-radius: 99px; height: 12px; width: 100%; margin-top: 8px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 99px; transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+
+/* Link Styling */
+a.dashboard-link { text-decoration: none !important; color: inherit !important; display: block; transition: transform 0.2s ease, box-shadow 0.2s ease; }
+a.dashboard-link:hover .dashboard-card { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); border-color: #CBD5E1; }
+
+/* Animation Keyframes */
+@keyframes pulse-green { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+@keyframes pulse-blue { 0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); } 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); } }
+@keyframes pulse-orange { 0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); } 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); } }
+@keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+@keyframes pulse-gray { 0% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(100, 116, 139, 0); } 100% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0); } }
 
 </style>
 """
