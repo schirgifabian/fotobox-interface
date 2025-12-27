@@ -671,7 +671,7 @@ def run_screensaver_loop(media_factor: int):
 def main():
     st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="centered")
     
-    # 1. CSS IMMER INJIZIEREN
+    # 1. CSS laden
     inject_custom_css()
     
     init_session_state()
@@ -689,9 +689,9 @@ def main():
         return
     # -------------------------
     
-    # --- SIDEBAR: CLEAN & STRUCTURED ---
+    # --- SIDEBAR TEIL 1: NAVIGATION ---
     with st.sidebar:
-        # LOGO / HEADER
+        # HEADER
         st.markdown("### ⚙️ Control Panel")
         
         # 1. USER PROFILE
@@ -706,7 +706,6 @@ def main():
                 </div>
             """, unsafe_allow_html=True)
             
-            # Etwas Abstand via Spacer
             st.write("") 
             if st.button("Ausloggen", key="sidebar_logout", use_container_width=True):
                 if "cookie_manager_ref" in st.session_state:
@@ -715,7 +714,7 @@ def main():
                 time.sleep(0.5) 
                 st.rerun()
 
-        # 2. NAVIGATION & AUSWAHL (Zusammengefasst)
+        # 2. NAVIGATION & AUSWAHL
         with st.container(border=True):
             st.markdown("#### Navigation")
             view_mode = st.radio(
@@ -724,20 +723,31 @@ def main():
                 label_visibility="collapsed"
             )
 
-            # Dropdown nur zeigen, wenn nötig (spart Platz)
+            # Dropdown nur zeigen, wenn nötig
             if view_mode != "Alle Boxen":
-                st.write("") # Kleiner Abstand
+                st.write("") 
                 st.markdown("#### Aktives Gerät")
                 printer_name = st.selectbox(
                     "Fotobox auswählen", 
                     list(PRINTERS.keys()), 
                     label_visibility="collapsed"
                 )
+            else:
+                printer_name = None
 
-    # --- LOGIK TEIL (Bleibt gleich, nur eingerückt/strukturiert) ---
-    if view_mode != "Alle Boxen":
+    # --- LOGIK WEICHE ---
+    
+    # FALL 1: FLEET OVERVIEW (Alle Boxen)
+    # Wenn wir hier rein gehen, beenden wir die Funktion danach mit 'return'.
+    # Das spart uns Einrückungs-Probleme für den Rest.
+    if view_mode == "Alle Boxen":
+        st.title(f"{PAGE_ICON} {PAGE_TITLE}")
+        render_fleet_overview(PRINTERS)
+        return 
 
-    # Config laden (für Einzelansicht)
+    # --- FALL 2: EINZELANSICHT ---
+    # Ab hier läuft der Code für die Einzelansicht weiter.
+    
     printer_cfg = PRINTERS[printer_name]
     printer_key = printer_cfg["key"]
     media_factor = printer_cfg.get("media_factor", 2)
@@ -752,82 +762,73 @@ def main():
     ntfy_topic = printer_secret.get("ntfy_topic")
 
     if not sheet_id:
-                st.error(f"Keine 'sheet_id' für '{printer_name}' gefunden.")
-                st.stop()
+        st.error(f"Keine 'sheet_id' für '{printer_name}' gefunden.")
+        st.stop()
 
-            st.session_state.sheet_id = sheet_id
-            st.session_state.ntfy_topic = ntfy_topic
-            
-            if st.session_state.selected_printer != printer_name:
-                st.session_state.selected_printer = printer_name
-                st.session_state.confirm_reset = False
-                st.session_state.socket_state = "unknown"
-                st.session_state.last_warn_status = None
-                st.session_state.last_sound_status = None
-                try: st.session_state.max_prints = int(get_setting("package_size", printer_cfg["default_max_prints"]))
-                except: st.session_state.max_prints = printer_cfg["default_max_prints"]
-                try: st.session_state.maintenance_mode = (str(get_setting("maintenance_mode", "False")).lower() == "true")
-                except: st.session_state.maintenance_mode = False
+    st.session_state.sheet_id = sheet_id
+    st.session_state.ntfy_topic = ntfy_topic
+    
+    # Reset Logic bei Druckerwechsel
+    if st.session_state.selected_printer != printer_name:
+        st.session_state.selected_printer = printer_name
+        st.session_state.confirm_reset = False
+        st.session_state.socket_state = "unknown"
+        st.session_state.last_warn_status = None
+        st.session_state.last_sound_status = None
+        try: st.session_state.max_prints = int(get_setting("package_size", printer_cfg["default_max_prints"]))
+        except: st.session_state.max_prints = printer_cfg["default_max_prints"]
+        try: st.session_state.maintenance_mode = (str(get_setting("maintenance_mode", "False")).lower() == "true")
+        except: st.session_state.maintenance_mode = False
 
-            # --- DAS NEUE SETTINGS CARD DESIGN ---
-            with st.container(border=True):
-                st.markdown("#### Einstellungen")
-                
-                # Init Session Vars (unverändert)
-                if "ntfy_active" not in st.session_state:
-                    try: st.session_state.ntfy_active = str(get_setting("ntfy_active", str(NTFY_ACTIVE_DEFAULT))).lower() == "true"
-                    except: st.session_state.ntfy_active = NTFY_ACTIVE_DEFAULT
-                if "event_mode" not in st.session_state:
-                    try: st.session_state.event_mode = get_setting("default_view", "admin") == "event"
-                    except: st.session_state.event_mode = False
-                if "sound_enabled" not in st.session_state: st.session_state.sound_enabled = False
-
-                # Zeile 1: Event Mode
-                c1, c2 = st.columns([1, 4]) # Toggle links oder rechts? Hier Toggle rechts.
-                # Besser: Text links (groß), Toggle rechts (klein)
-                c_txt, c_tog = st.columns([3, 1])
-                with c_txt:
-                    st.markdown('<div class="settings-row">Event-Ansicht</div>', unsafe_allow_html=True)
-                with c_tog:
-                    event_mode = st.toggle("Event", value=st.session_state.event_mode, label_visibility="collapsed")
-                
-                # Zeile 2: Sound
-                c_txt, c_tog = st.columns([3, 1])
-                with c_txt:
-                    st.markdown('<div class="settings-row">Sound Effekte</div>', unsafe_allow_html=True)
-                with c_tog:
-                    sound_enabled = st.toggle("Sound", value=st.session_state.sound_enabled, label_visibility="collapsed")
-
-                # Zeile 3: Push
-                c_txt, c_tog = st.columns([3, 1])
-                with c_txt:
-                    st.markdown('<div class="settings-row">Push Nachrichten</div>', unsafe_allow_html=True)
-                with c_tog:
-                    ntfy_active_ui = st.toggle("Push", value=st.session_state.ntfy_active, label_visibility="collapsed")
-
-                # Logik Update (unverändert)
-                if event_mode != st.session_state.event_mode:
-                    st.session_state.event_mode = event_mode
-                    try: set_setting("default_view", "event" if event_mode else "admin")
-                    except: pass
-                if ntfy_active_ui != st.session_state.ntfy_active:
-                    st.session_state.ntfy_active = ntfy_active_ui
-                    try: set_setting("ntfy_active", ntfy_active_ui)
-                    except: pass
-                st.session_state.sound_enabled = sound_enabled
-
-        # 4. ZEN MODE (Als Button ganz unten)
+    # --- SIDEBAR TEIL 2: SETTINGS ---
+    # Diese Boxen zeigen wir nur in der Einzelansicht an
+    with st.sidebar:
         with st.container(border=True):
-             # Icons und Text in einer Zeile
+            st.markdown("#### Einstellungen")
+            
+            # Init Session Vars
+            if "ntfy_active" not in st.session_state:
+                try: st.session_state.ntfy_active = str(get_setting("ntfy_active", str(NTFY_ACTIVE_DEFAULT))).lower() == "true"
+                except: st.session_state.ntfy_active = NTFY_ACTIVE_DEFAULT
+            if "event_mode" not in st.session_state:
+                try: st.session_state.event_mode = get_setting("default_view", "admin") == "event"
+                except: st.session_state.event_mode = False
+            if "sound_enabled" not in st.session_state: st.session_state.sound_enabled = False
+
+            # UI Layout (Schön ausgerichtet)
+            c_txt, c_tog = st.columns([3, 1])
+            with c_txt: st.markdown('<div class="settings-row">Event-Ansicht</div>', unsafe_allow_html=True)
+            with c_tog: event_mode = st.toggle("Event", value=st.session_state.event_mode, label_visibility="collapsed")
+            
+            c_txt, c_tog = st.columns([3, 1])
+            with c_txt: st.markdown('<div class="settings-row">Sound Effekte</div>', unsafe_allow_html=True)
+            with c_tog: sound_enabled = st.toggle("Sound", value=st.session_state.sound_enabled, label_visibility="collapsed")
+
+            c_txt, c_tog = st.columns([3, 1])
+            with c_txt: st.markdown('<div class="settings-row">Push Nachrichten</div>', unsafe_allow_html=True)
+            with c_tog: ntfy_active_ui = st.toggle("Push", value=st.session_state.ntfy_active, label_visibility="collapsed")
+
+            # Logic Update & Save
+            if event_mode != st.session_state.event_mode:
+                st.session_state.event_mode = event_mode
+                try: set_setting("default_view", "event" if event_mode else "admin")
+                except: pass
+            if ntfy_active_ui != st.session_state.ntfy_active:
+                st.session_state.ntfy_active = ntfy_active_ui
+                try: set_setting("ntfy_active", ntfy_active_ui)
+                except: pass
+            st.session_state.sound_enabled = sound_enabled
+
+        # Zen Mode Button
+        with st.container(border=True):
              c1, c2 = st.columns([1, 4])
-             with c1:
-                 st.write("🖥️")
+             with c1: st.write("🖥️")
              with c2:
                  if st.button("Zen Mode starten", key="zen_start", use_container_width=True):
                     st.session_state.screensaver_mode = True
                     st.rerun()
-            
-    # --- HAUPTBEREICH RENDERN (Bleibt weitgehend gleich) ---
+
+    # --- HAUPTBEREICH RENDERN ---
     st.title(f"{PAGE_ICON} {PAGE_TITLE}")
     
     view_event_mode = event_mode or not printer_has_admin
