@@ -201,7 +201,7 @@ def init_session_state():
 # --------------------------------------------------------------------
 # LIVE-STATUS VIEW
 # --------------------------------------------------------------------
-@st.fragment(run_every=10, show_spinner=False)
+@st.fragment(run_every=10)
 def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: bool, event_mode: bool, cloud_url: str = None) -> None:
     df = get_data(st.session_state.sheet_id, event_mode=event_mode)
     if df.empty:
@@ -623,7 +623,7 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
 # --------------------------------------------------------------------
 
 
-@st.fragment(run_every=10, show_spinner=False)
+@st.fragment(run_every=10)
 def run_screensaver_loop(media_factor: int):
     # Daten holen
     df = get_data(st.session_state.sheet_id, event_mode=True)
