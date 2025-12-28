@@ -43,7 +43,7 @@ from ui_components import (
 # --------------------------------------------------------------------
 # GRUNDKONFIG
 # --------------------------------------------------------------------
-PAGE_TITLE = "Testserver"
+PAGE_TITLE = "Fotobox Status"
 PAGE_ICON = "🖨️"
 NTFY_ACTIVE_DEFAULT = True
 
