@@ -43,7 +43,7 @@ from ui_components import (
 # --------------------------------------------------------------------
 # GRUNDKONFIG
 # --------------------------------------------------------------------
-PAGE_TITLE = "Stefan isch gay"
+PAGE_TITLE = "Testserver"
 PAGE_ICON = "🖨️"
 NTFY_ACTIVE_DEFAULT = True
 
