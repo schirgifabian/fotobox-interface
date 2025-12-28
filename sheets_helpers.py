@@ -111,7 +111,7 @@ def get_data_admin(sheet_id: str):
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=30)  # 30 Sekunden Cache für Event-Ansicht
+@st.cache_data(ttl=10)  # 30 Sekunden Cache für Event-Ansicht
 def get_data_event(sheet_id: str):
     try:
         ws = get_spreadsheet(sheet_id).sheet1

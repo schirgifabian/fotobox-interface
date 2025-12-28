@@ -5,226 +5,190 @@ import textwrap
 from sheets_helpers import get_data_event, get_spreadsheet, get_fleet_data_parallel
 
 # -----------------------------------------------------------------------------
-# GLOBAL STYLING (PERFEKTIONIERT + DASHBOARD UI)
+# GLOBAL STYLING (Sidebar + Dashboard + Animationen)
 # -----------------------------------------------------------------------------
 MODERN_CSS = """
 <style>
-/* 1. App-Container & Reset */
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
+/* 1. GRUNDGERÜST & SCHRIFTEN */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
-.block-container {
-    padding-top: 1rem !important;
-    padding-bottom: 5rem !important;
-    max-width: 1000px;
-}
-
-/* 2. Typografie */
 html, body, [class*="css"] {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    color: #334155;
-    font-weight: 400;
+    color: #1E293B; 
+    background-color: #F8FAFC; 
 }
 
-h1, h2, h3 {
-    color: #0F172A;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-}
-
-/* 3. Sidebar Cleaner */
+/* 2. SIDEBAR - PROFISSIONELLER LOOK */
 section[data-testid="stSidebar"] {
-    background-color: #FFFFFF;
-    border-right: 1px solid #F1F5F9;
+    background-color: #F1F5F9; 
+    border-right: 1px solid #E2E8F0;
+    padding-top: 1rem;
 }
 
-/* 4. Cards (Expander) */
-.stExpander {
-    background: #FFFFFF;
-    border: 1px solid #E2E8F0;
-    border-radius: 12px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-}
-div[data-testid="stExpanderDetails"] {
-    background: #FFFFFF;
+section[data-testid="stSidebar"] .block-container {
+    padding-top: 1rem;
+    padding-bottom: 2rem;
 }
 
-/* 5. Buttons */
+section[data-testid="stSidebar"] div[data-testid="stVerticalBlockBorderWrapper"] {
+    background-color: #FFFFFF !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02) !important;
+    padding: 16px !important;
+    margin-bottom: 12px;
+}
+
+section[data-testid="stSidebar"] h1, 
+section[data-testid="stSidebar"] h2, 
+section[data-testid="stSidebar"] h3,
+section[data-testid="stSidebar"] h4 {
+    color: #64748B !important;
+    font-size: 0.75rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    margin-bottom: 12px !important;
+    margin-top: 0px !important;
+    border: none !important;
+}
+
+section[data-testid="stSidebar"] .stCaption {
+    color: #94A3B8;
+    font-size: 0.7rem;
+}
+
+/* 3. BUTTONS & INPUTS */
 div.stButton > button {
-    width: 100%;
     border-radius: 8px;
     border: 1px solid #E2E8F0;
     background-color: #FFFFFF;
     color: #475569;
-    font-weight: 500;
-    padding: 0.5rem 1rem;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-    transition: all 0.15s ease-in-out;
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding: 0.4rem 0.8rem;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 div.stButton > button:hover {
     border-color: #CBD5E1;
     background-color: #F8FAFC;
-    color: #1E293B;
-    transform: translateY(-1px);
+    color: #0F172A;
 }
 
-/* --------------------------------------------------------------------------
-   NEU: DASHBOARD STYLES (Hero Card & Animationen)
-   -------------------------------------------------------------------------- */
-
-/* Pulsierende Animationen für ALLE Farben */
-@keyframes pulse-green {
-    0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
-    70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+div.stButton > button[kind="primary"] {
+    background: #3B82F6;
+    color: white;
+    border: none;
 }
-@keyframes pulse-blue {
-    0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
-    70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
-}
-@keyframes pulse-orange {
-    0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
-    70% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
-}
-@keyframes pulse-red {
-    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-    70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-}
-@keyframes pulse-gray {
-    0% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0.4); }
-    70% { box-shadow: 0 0 0 10px rgba(100, 116, 139, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0); }
+div.stButton > button[kind="primary"]:hover {
+    background: #2563EB;
+    box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2);
 }
 
-.status-dot {
-    height: 12px;
-    width: 12px;
-    border-radius: 50%;
-    display: inline-block;
-    margin-right: 8px;
-    flex-shrink: 0;
+/* 4. USER PROFILE STYLING */
+.user-profile-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
-
-/* Klassenzuweisung der Animationen */
-.status-pulse-green {
-    background-color: #10B981;
-    animation: pulse-green 2s infinite;
-}
-.status-pulse-blue {
-    background-color: #3B82F6;
-    animation: pulse-blue 2s infinite;
-}
-.status-pulse-orange {
-    background-color: #F59E0B;
-    animation: pulse-orange 2s infinite;
-}
-.status-pulse-red {
-    background-color: #EF4444;
-    animation: pulse-red 2s infinite;
-}
-.status-pulse-gray {
-    background-color: #64748B;
-    animation: pulse-gray 2s infinite;
-}
-
-/* Die große Dashboard-Karte */
-.dashboard-card {
-    background: #FFFFFF;
-    border: 1px solid #E2E8F0;
-    border-radius: 20px;
-    padding: 24px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-    margin-bottom: 24px;
-}
-
-/* Grid Layout für Metriken innerhalb der Karte */
-.metrics-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-    margin-top: 24px;
-    padding-top: 24px;
-    border-top: 1px solid #F1F5F9;
-}
-
-.metric-item {
-    text-align: center;
-}
-
-.metric-label {
-    font-size: 0.75rem;
-    color: #94A3B8;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-weight: 600;
-    margin-bottom: 4px;
-}
-
-.metric-value {
-    font-size: 1.25rem;
+.user-avatar {
+    width: 36px;
+    height: 36px;
+    background: #DBEAFE; 
+    color: #2563EB;
+    border-radius: 8px; 
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-weight: 700;
-    color: #1E293B;
+    font-size: 1rem;
 }
-
-.metric-sub {
-    font-size: 0.7rem;
-    color: #64748B;
-    margin-top: 2px;
-}
-
-/* Custom Progress Bar */
-.progress-bg {
-    background-color: #F1F5F9;
-    border-radius: 99px;
-    height: 12px;
-    width: 100%;
-    margin-top: 8px;
-    overflow: hidden;
-}
-.progress-fill {
-    height: 100%;
-    border-radius: 99px;
-    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Device Cards Styles (Legacy) */
-.device-card {
-    background: white;
-    border-radius: 16px;
-    padding: 24px;
-    margin-bottom: 12px;
-    border: 1px solid #E2E8F0;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
-    position: relative;
-    min-height: 190px; 
-    height: auto;
+.user-info {
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    line-height: 1.2;
 }
-.device-header { display: flex; align-items: flex-start; margin-bottom: 12px; padding-right: 0px; }
-.device-icon-box { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-right: 16px; flex-shrink: 0; }
-.device-content { display: flex; flex-direction: column; justify-content: center; padding-top: 2px; }
-.device-title-label { font-size: 0.7rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; margin-bottom: 4px; }
-.device-status-text { font-size: 1.1rem; font-weight: 700; color: #1E293B; line-height: 1.2; }
-.device-description { font-size: 0.85rem; color: #64748B; line-height: 1.5; font-weight: 400; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.status-badge-absolute { position: absolute; top: 24px; right: 24px; padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; background: #F1F5F9; }
-
-a.dashboard-link {
-    text-decoration: none !important;
-    color: inherit !important;
-    display: block;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+.user-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #1E293B;
 }
-a.dashboard-link:hover .dashboard-card {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-    border-color: #CBD5E1;
+.user-role {
+    font-size: 0.75rem;
+    color: #64748B;
 }
 
+/* 5. SETTINGS ROW STYLING */
+.settings-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+    color: #334155;
+    font-weight: 500;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+.stRadio > div {
+    gap: 8px;
+}
+
+/* 6. ANTI-JUMP & NO-SPINNER FIX (V2 Features) */
+.stSpinner, div[data-testid="stSpinner"] {
+    display: none !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+div[data-testid="stStatusWidget"] {
+    visibility: hidden;
+}
+div[data-testid="stFragment"] {
+    animation: none !important;
+    transition: none !important;
+}
+div[data-testid="stVerticalBlock"] {
+    min-height: 1px;
+}
+
+/* 7. DASHBOARD CARDS & HERO (WICHTIG: Aus V1 wiederhergestellt!) */
+.status-dot { height: 12px; width: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; flex-shrink: 0; }
+.status-pulse-green { background-color: #10B981; animation: pulse-green 2s infinite; }
+.status-pulse-blue { background-color: #3B82F6; animation: pulse-blue 2s infinite; }
+.status-pulse-orange { background-color: #F59E0B; animation: pulse-orange 2s infinite; }
+.status-pulse-red { background-color: #EF4444; animation: pulse-red 2s infinite; }
+.status-pulse-gray { background-color: #64748B; animation: pulse-gray 2s infinite; }
+
+.dashboard-card { 
+    background: #FFFFFF; 
+    border: 1px solid #E2E8F0; 
+    border-radius: 20px; 
+    padding: 24px; 
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); 
+    margin-bottom: 24px; 
+}
+
+.metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; padding-top: 24px; border-top: 1px solid #F1F5F9; }
+.metric-item { text-align: center; }
+.metric-label { font-size: 0.75rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 4px; }
+.metric-value { font-size: 1.25rem; font-weight: 700; color: #1E293B; }
+.metric-sub { font-size: 0.7rem; color: #64748B; margin-top: 2px; }
+
+.progress-bg { background-color: #F1F5F9; border-radius: 99px; height: 12px; width: 100%; margin-top: 8px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 99px; transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+
+/* Link Styling */
+a.dashboard-link { text-decoration: none !important; color: inherit !important; display: block; transition: transform 0.2s ease, box-shadow 0.2s ease; }
+a.dashboard-link:hover .dashboard-card { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); border-color: #CBD5E1; }
+
+/* Animation Keyframes */
+@keyframes pulse-green { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+@keyframes pulse-blue { 0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); } 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); } }
+@keyframes pulse-orange { 0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); } 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); } }
+@keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+@keyframes pulse-gray { 0% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(100, 116, 139, 0); } 100% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0); } }
 
 </style>
 """
@@ -234,9 +198,48 @@ def inject_custom_css():
 
 
 # -----------------------------------------------------------------------------
-# CORE COMPONENTS
+# NEUE KOMPONENTE: Card Header für Admin-Bereiche
 # -----------------------------------------------------------------------------
+def render_card_header(icon: str, title: str, subtitle: str, color_class: str = "blue"):
+    colors = {
+        "blue":  {"bg": "#EFF6FF", "fg": "#3B82F6"},
+        "green": {"bg": "#ECFDF5", "fg": "#10B981"},
+        "orange":{"bg": "#FFFBEB", "fg": "#F59E0B"},
+        "red":   {"bg": "#FEF2F2", "fg": "#EF4444"},
+        "slate": {"bg": "#F1F5F9", "fg": "#64748B"},
+    }
+    c = colors.get(color_class, colors["slate"])
+    
+    html = f"""
+    <div style="display: flex; align-items: center; margin-bottom: 20px;">
+        <div style="
+            background: {c['bg']}; 
+            color: {c['fg']}; 
+            width: 48px; height: 48px; 
+            border-radius: 12px; 
+            display: flex; align-items: center; justify-content: center; 
+            font-size: 24px;
+            margin-right: 16px;
+            flex-shrink: 0;
+        ">
+            {icon}
+        </div>
+        <div>
+            <div style="font-size: 1.1rem; font-weight: 700; color: #1E293B; line-height: 1.2;">
+                {title}
+            </div>
+            <div style="font-size: 0.85rem; color: #64748B; margin-top: 2px;">
+                {subtitle}
+            </div>
+        </div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
 
+
+# -----------------------------------------------------------------------------
+# CORE COMPONENTS (Hero & co)
+# -----------------------------------------------------------------------------
 def render_hero_card(
     status_mode: str,
     display_text: str,
@@ -249,37 +252,38 @@ def render_hero_card(
     end_time_str: str,
     cost_txt: str
 ):
-    """
-    Rendert EINE große Karte (Hero Widget).
-    FIX: textwrap.dedent verhindert, dass HTML als Code-Block angezeigt wird.
-    """
-    
     # 1. Icon & Animation Logic
     pulse_class = ""
     dot_color = ""
-    
-    if status_mode == "printing":
+    icon_char = '📸' 
+
+    if status_mode == "maintenance":
+        pulse_class = "status-pulse-gray"
+        dot_color = "#94A3B8"
+        icon_char = '🚚'
+    elif status_mode == "printing":
         pulse_class = "status-pulse-blue"
         dot_color = "#3B82F6"
+        icon_char = '🖨️'
     elif status_mode == "ready":
         pulse_class = "status-pulse-green"
         dot_color = "#10B981"
     elif status_mode == "error":
-        pulse_class = "status-pulse-red" # Jetzt auch animiert
+        pulse_class = "status-pulse-red"
         dot_color = "#EF4444"
+        icon_char = '🔧'
     else:
-        # Check ob Warnung (orange/yellow) vorliegt
         if "orange" in display_color or "yellow" in display_color:
             pulse_class = "status-pulse-orange"
             dot_color = "#F59E0B"
+            if status_mode == 'low_paper': icon_char = '⚠️'
+            elif status_mode == 'cooldown': icon_char = '❄️'
         else:
-            # Fallback (z.B. Offline/Unbekannt) jetzt auch animiert (Grau)
             pulse_class = "status-pulse-gray" 
             dot_color = "#64748B"
 
-    clean_text = display_text.replace('✅ ', '').replace('🔴 ', '').replace('⚠️ ', '').replace('🖨️ ', '').replace('⏳ ', '')
+    clean_text = display_text.replace('✅ ', '').replace('🔴 ', '').replace('⚠️ ', '').replace('🖨️ ', '').replace('⏳ ', '').replace('🚚 ', '')
 
-    # 2. Progress Bar Logic
     if not max_prints or max_prints <= 0:
         pct = 0
     else:
@@ -289,15 +293,8 @@ def render_hero_card(
     elif pct < 25: bar_color = "#F59E0B" 
     else: bar_color = "#3B82F6" 
 
-    icon_char = '📸'
-    if status_mode == 'printing': icon_char = '🖨️'
-    elif status_mode == 'error': icon_char = '🔧'
-    elif status_mode == 'low_paper': icon_char = '⚠️'
-    elif status_mode == 'cooldown': icon_char = '❄️'
-
     icon_bg = f"{dot_color}15" 
 
-    # 3. HTML Zusammenbauen
     html_content = f"""
 <div class="dashboard-card">
     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
@@ -346,75 +343,7 @@ def render_hero_card(
     </div>
 </div>
 """
-    
     st.markdown(html_content, unsafe_allow_html=True)
-
-
-def render_toggle_card(
-    section_title: str,
-    description: str,
-    state: str,
-    title_on: str,
-    title_off: str,
-    title_unknown: str,
-    badge_prefix: str,
-    icon_on: str,
-    icon_off: str,
-    icon_unknown: str,
-    btn_left_label: str,
-    btn_right_label: str,
-    btn_left_key: str,
-    btn_right_key: str,
-):
-    # Farblogik
-    if state == "on":
-        color_theme = "#059669" # Emerald
-        bg_theme = "#ECFDF5"
-        icon = icon_on
-        status_text = title_on
-        badge_border = "rgba(5, 150, 105, 0.1)"
-    elif state == "off":
-        color_theme = "#64748B" # Slate
-        bg_theme = "#F8FAFC"
-        icon = icon_off
-        status_text = title_off
-        badge_border = "#E2E8F0"
-    else:
-        color_theme = "#D97706" # Amber
-        bg_theme = "#FFFBEB"
-        icon = icon_unknown
-        status_text = title_unknown
-        badge_border = "rgba(217, 119, 6, 0.1)"
-
-    html_content = textwrap.dedent(f"""
-        <div class="device-card">
-            <div class="status-badge-absolute" style="background-color:{bg_theme}; color:{color_theme}; border: 1px solid {badge_border};">
-                {badge_prefix}: {state.upper()}
-            </div>
-            <div class="device-header">
-                <div class="device-icon-box" style="background-color: {bg_theme}; color: {color_theme};">
-                    {icon}
-                </div>
-                <div class="device-content">
-                    <div class="device-title-label">{section_title}</div>
-                    <div class="device-status-text">{status_text}</div>
-                </div>
-            </div>
-            <div class="device-description">
-                {description}
-            </div>
-        </div>
-    """)
-    st.markdown(html_content, unsafe_allow_html=True)
-
-    col1, col2 = st.columns(2)
-    with col1:
-        click_left = st.button(btn_left_label, key=btn_left_key, use_container_width=True)
-    with col2:
-        click_right = st.button(btn_right_label, key=btn_right_key, use_container_width=True)
-    
-    st.write("") 
-    return click_left, click_right
 
 
 def render_fleet_overview(PRINTERS: dict):
@@ -428,7 +357,7 @@ def render_fleet_overview(PRINTERS: dict):
         data = fleet_data.get(name)
         
         last_ts = "N/A"
-        status_color = "#64748B" # Grau
+        status_color = "#64748B" 
         status_bg = "#F1F5F9"
         status_msg = "Offline / ??"
         media_str = "–"
@@ -456,94 +385,193 @@ def render_fleet_overview(PRINTERS: dict):
                 <div style="
                     background: white;
                     border: 1px solid #E2E8F0;
-                    border-radius: 16px;
-                    padding: 20px;
+                    border-radius: 20px;
+                    padding: 24px;
                     text-align: center;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-                    height: 180px;
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+                    height: 200px;
                     display: flex;
                     flex-direction: column;
                     justify-content: center;
                     align-items: center;
                 ">
-                    <div style="font-weight: 700; color: #0F172A; margin-bottom: 12px; font-size: 1rem;">{name}</div>
+                    <div style="font-weight: 700; color: #0F172A; margin-bottom: 12px; font-size: 1.1rem;">{name}</div>
                     <div style="
                         display: inline-block;
                         background: {status_bg};
                         color: {status_color};
-                        padding: 4px 12px;
+                        padding: 6px 16px;
                         border-radius: 99px;
-                        font-size: 0.75rem;
+                        font-size: 0.8rem;
                         font-weight: 600;
-                        margin-bottom: 12px;
+                        margin-bottom: 16px;
                         letter-spacing: 0.05em;
                         text-transform: uppercase;
                     ">
                         {status_msg}
                     </div>
-                    <div style="font-size: 0.9rem; color: #334155; margin-bottom: 4px; font-weight: 500;">
+                    <div style="font-size: 1.1rem; color: #334155; margin-bottom: 6px; font-weight: 600;">
                         {media_str}
                     </div>
-                    <div style="font-size: 0.7rem; color: #94A3B8;">
+                    <div style="font-size: 0.75rem; color: #94A3B8;">
                         Update: {last_ts}
                     </div>
                 </div>
             """)
             st.markdown(card_html, unsafe_allow_html=True)
-        idx += 1
+            idx += 1
 
 
-def render_health_overview(aqara_enabled: bool, dsr_enabled: bool):
-    sheets_ok = False
-    try:
-        if st.session_state.get("sheet_id"):
-            _ = get_spreadsheet(st.session_state.get("sheet_id"))
-            sheets_ok = True
-    except: pass
-    
-    ntfy_ok = bool(st.session_state.get("ntfy_topic")) and st.session_state.get("ntfy_active", False)
-    
-    items = [("Sheets", sheets_ok), ("Push", ntfy_ok), ("Strom", aqara_enabled), ("Sperre", dsr_enabled)]
-    
-    html_items = ""
-    for name, ok in items:
-        color = "#10B981" if ok else "#CBD5E1" 
-        html_items += f"""<div style="display:flex; align-items:center; gap:6px; margin-right:16px;"><span style="color:{color}; font-size:12px;">●</span><span style="font-size:12px; font-weight:500; color:#475569;">{name}</span></div>"""
-        
-    st.markdown(f"""<div style="display: flex; flex-wrap: wrap; background: white; padding: 8px 16px; border-radius: 99px; border: 1px solid #E2E8F0; width: fit-content; margin-bottom: 24px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">{html_items}</div>""", unsafe_allow_html=True)
-
-
-# -----------------------------------------------------------------------------
-# NEUE FUNKTION: Link Card im Hero-Style
-# -----------------------------------------------------------------------------
 def render_link_card(url: str, title: str, subtitle: str, icon: str = "☁️"):
-    """
-    Rendert einen Link, der optisch exakt wie die Hero-Card aussieht.
-    """
-    if not url:
-        return
-
-    # WICHTIG: Der HTML-Code klebt hier absichtlich ganz links am Rand,
-    # damit keine Leerzeichen als Code-Block interpretiert werden.
+    if not url: return
     html_content = f"""
 <a href="{url}" target="_blank" class="dashboard-link">
-<div class="dashboard-card" style="display: flex; justify-content: space-between; align-items: center; padding: 20px 24px;">
+<div class="dashboard-card" style="display: flex; justify-content: space-between; align-items: center; padding: 24px;">
 <div>
-<div style="display: flex; align-items: center; margin-bottom: 4px;">
+<div style="display: flex; align-items: center; margin-bottom: 6px;">
 <span style="font-size: 0.75rem; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em;">External Link</span>
 </div>
 <div style="font-size: 1.5rem; font-weight: 800; color: #1E293B; line-height: 1.1;">
 {title}
 </div>
-<div style="font-size: 0.85rem; color: #64748B; margin-top: 4px; font-weight: 500;">
+<div style="font-size: 0.9rem; color: #64748B; margin-top: 4px; font-weight: 500;">
 {subtitle} ➜
 </div>
 </div>
-<div style="background: #F1F5F9; color: #3B82F6; width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 28px;">
+<div style="background: #F1F5F9; color: #3B82F6; width: 64px; height: 64px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 32px;">
 {icon}
 </div>
 </div>
 </a>
 """
-    
     st.markdown(html_content, unsafe_allow_html=True)
+
+# -----------------------------------------------------------------------------
+# SCREENSAVER / ZEN MODE (FIX)
+# -----------------------------------------------------------------------------
+
+def inject_screensaver_css():
+    """
+    Setzt das CSS für den Screensaver.
+    Muss AUSSERHALB des Fragments/Loops aufgerufen werden, damit es nicht flackert.
+    """
+    css = """
+    <style>
+        .stApp {
+            background-color: #000000 !important;
+            color: #E2E8F0 !important;
+        }
+        section[data-testid="stSidebar"] { display: none !important; }
+        header { visibility: hidden !important; }
+        footer { visibility: hidden !important; }
+        
+        .screensaver-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 85vh;
+            text-align: center;
+            font-family: 'Inter', sans-serif;
+        }
+        .big-number {
+            font-size: 15vw; /* Responsive Größe */
+            font-weight: 800;
+            line-height: 1;
+            margin-bottom: 2vh;
+            font-variant-numeric: tabular-nums;
+        }
+        .label-text {
+            font-size: 2vh;
+            text-transform: uppercase;
+            letter-spacing: 0.3em;
+            color: #64748B;
+            margin-bottom: 0px;
+        }
+        .status-pill {
+            background-color: #111827;
+            border: 1px solid #1F2937;
+            padding: 1.5vh 4vw;
+            border-radius: 99px;
+            font-size: 3vh;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 4vh;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+        }
+        .status-dot {
+            height: 2vh;
+            width: 2vh;
+            border-radius: 50%;
+        }
+        .meta-info {
+            margin-top: 5vh;
+            color: #374151;
+            font-family: monospace;
+            font-size: 1.5vh;
+        }
+        /* Button-Container: Fixiert am unteren Bildschirmrand, exakt mittig */
+        .stButton {
+            position: fixed !important;
+            bottom: 40px !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            width: auto !important;
+            z-index: 99999;
+        }
+
+        /* Das eigentliche Button-Styling (Pillen-Form, dezent) */
+        .stButton > button {
+            background-color: transparent !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            color: rgba(255, 255, 255, 0.4) !important;
+            border-radius: 50px !important; /* Macht ihn rund (Pille) */
+            padding: 8px 30px !important;
+            font-size: 0.75rem !important;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            transition: all 0.3s ease !important;
+        }
+
+        /* Hover-Effekt: Wird weiß und sichtbar */
+        .stButton > button:hover {
+            border-color: #ffffff !important;
+            color: #ffffff !important;
+            background-color: rgba(255, 255, 255, 0.1) !important;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        /* Den Button beim Klicken nicht rot werden lassen */
+        .stButton > button:active, .stButton > button:focus {
+            border-color: #ffffff !important;
+            color: #ffffff !important;
+            background-color: rgba(255, 255, 255, 0.2) !important;
+        }
+        
+    </style>
+    """
+    st.markdown(css, unsafe_allow_html=True)
+
+
+def render_screensaver_content(status_mode, media_remaining, display_text, display_color, timestamp):
+    # (Unverändert lassen)
+    color_map = {"green": "#10B981", "blue": "#3B82F6", "orange": "#F59E0B", "red": "#EF4444", "gray": "#64748B"}
+    accent_color = color_map.get(display_color, "#64748B")
+    clean_text = display_text.replace('✅', '').replace('⚠️', '').replace('🔴', '').strip()
+    html = f"""
+    <div class="screensaver-container">
+        <div class="label-text">Verbleibende Bilder</div>
+        <div class="big-number" style="color: {accent_color}; text-shadow: 0 0 40px {accent_color}40;">{media_remaining}</div>
+        <div class="status-pill" style="color: {accent_color};"><span class="status-dot" style="background-color: {accent_color}; box-shadow: 0 0 10px {accent_color};"></span>{clean_text}</div>
+        <div class="meta-info">Zuletzt aktualisiert: {timestamp}</div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+
+def inject_screensaver_css():
+    # (Unverändert lassen)
+    css = """<style>.stApp {background-color: #000000 !important; color: #E2E8F0 !important;} section[data-testid="stSidebar"] {display: none !important;} header, footer {visibility: hidden !important;} .screensaver-container {display: flex; flex-direction: column; align-items: center; justify-content: center; height: 85vh; text-align: center; font-family: 'Inter', sans-serif;} .big-number {font-size: 15vw; font-weight: 800; line-height: 1; margin-bottom: 2vh; font-variant-numeric: tabular-nums;} .label-text {font-size: 2vh; text-transform: uppercase; letter-spacing: 0.3em; color: #64748B;} .status-pill {background-color: #111827; border: 1px solid #1F2937; padding: 1.5vh 4vw; border-radius: 99px; font-size: 3vh; font-weight: 600; display: flex; align-items: center; gap: 12px; margin-top: 4vh; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);} .status-dot {height: 2vh; width: 2vh; border-radius: 50%;} .meta-info {margin-top: 5vh; color: #374151; font-family: monospace; font-size: 1.5vh;} .stButton {position: fixed !important; bottom: 40px !important; left: 50% !important; transform: translateX(-50%) !important; width: auto !important; z-index: 99999;} .stButton > button {background-color: transparent !important; border: 1px solid rgba(255, 255, 255, 0.2) !important; color: rgba(255, 255, 255, 0.4) !important; border-radius: 50px !important; padding: 8px 30px !important; font-size: 0.75rem !important; text-transform: uppercase; letter-spacing: 0.15em; transition: all 0.3s ease !important;} .stButton > button:hover {border-color: #ffffff !important; color: #ffffff !important; background-color: rgba(255, 255, 255, 0.1) !important; box-shadow: 0 0 15px rgba(255, 255, 255, 0.2); transform: translateY(-2px);} .stButton > button:active, .stButton > button:focus {border-color: #ffffff !important; color: #ffffff !important; background-color: rgba(255, 255, 255, 0.2) !important;}</style>"""
+    st.markdown(css, unsafe_allow_html=True)
