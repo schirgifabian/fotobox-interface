@@ -228,13 +228,20 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
         maint_active = st.session_state.get("maintenance_mode", False)
         
         status_mode, display_text, display_color, push, minutes_diff = evaluate_status(
-            raw_status, media_remaining, timestamp
+            raw_status, media_remaining, timestamp, 
+            maintenance_active=maint_active # Wichtig: Maintenance Status übergeben!
         )
 
-        if push is not None:
-            title, msg, tags = push
-            send_ntfy_push(title, msg, tags=tags)
-
+        # --- ÄNDERUNG HIER: ---
+        # Wir senden KEINEN Push mehr von der UI aus. 
+        # Das macht jetzt exklusiv die monitor.py!
+        # Der 'push'-Return-Wert wird nur noch für interne Logik (z.B. Toasts im Browser) genutzt, falls gewünscht.
+        
+        # if push is not None:
+        #    title, msg, tags = push
+        #    send_ntfy_push(title, msg, tags=tags)  <-- DIESE ZEILEN AUSKOMMENTIEREN ODER LÖSCHEN
+        
+        # Sound darf bleiben, da er nur im Browser des Betrachters abgespielt wird
         maybe_play_sound(status_mode, sound_enabled)
         heartbeat_info = f" (vor {minutes_diff} Min)" if minutes_diff is not None else ""
 
