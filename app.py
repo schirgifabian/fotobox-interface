@@ -61,13 +61,13 @@ PRINTERS = {
     },
     "Weinkellerei": {
         "key": "Weinkellerei",
-        "warning_threshold": 20,
-        "default_max_prints": 400,
+        "warning_threshold": 30,
+        "default_max_prints": 200,
         "cost_per_roll_eur": 55,
         "has_admin": True,
         "has_aqara": False,
         "has_dsr": False,
-        "media_factor": 2,
+        "media_factor": 0.5,
         "fotoshare_url": "https://weinkellerei.tirol/fame",
     },
 }
@@ -88,18 +88,27 @@ def check_login():
 
     cookie_manager = get_cookie_manager()
     
-    # --- NEU: Manager für den Rest des Skripts speichern ---
+    # Manager Referenz speichern
     st.session_state["cookie_manager_ref"] = cookie_manager
-    # -------------------------------------------------------
 
-    cookie_val = cookie_manager.get("auth_pin")
+    # --- FIX START: Manuellen Logout prüfen ---
+    # Wenn der Nutzer gerade "Ausloggen" geklickt hat, ignorieren wir das Cookie
+    # für diesen Durchlauf, damit der Browser Zeit hat, es zu löschen.
+    if st.session_state.get("manual_logout", False):
+        st.session_state["manual_logout"] = False # Reset für das nächste Mal
+        st.session_state["is_logged_in"] = False
+        # Wir springen direkt zum Login-Formular weiter unten
+    else:
+        # Normaler Check: Cookie lesen
+        cookie_val = cookie_manager.get("auth_pin")
 
-    if st.session_state.get("is_logged_in", False):
-        return True
+        if st.session_state.get("is_logged_in", False):
+            return True
 
-    if cookie_val is not None and str(cookie_val) == secret_pin:
-        st.session_state["is_logged_in"] = True
-        return True
+        if cookie_val is not None and str(cookie_val) == secret_pin:
+            st.session_state["is_logged_in"] = True
+            return True
+    # --- FIX END ---
 
     st.title("Dashboard dieFotobox.")
     msg_placeholder = st.empty()
@@ -219,13 +228,20 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
         maint_active = st.session_state.get("maintenance_mode", False)
         
         status_mode, display_text, display_color, push, minutes_diff = evaluate_status(
-            raw_status, media_remaining, timestamp
+            raw_status, media_remaining, timestamp, 
+            maintenance_active=maint_active # Wichtig: Maintenance Status übergeben!
         )
 
-        if push is not None:
-            title, msg, tags = push
-            send_ntfy_push(title, msg, tags=tags)
-
+        # --- ÄNDERUNG HIER: ---
+        # Wir senden KEINEN Push mehr von der UI aus. 
+        # Das macht jetzt exklusiv die monitor.py!
+        # Der 'push'-Return-Wert wird nur noch für interne Logik (z.B. Toasts im Browser) genutzt, falls gewünscht.
+        
+        # if push is not None:
+        #    title, msg, tags = push
+        #    send_ntfy_push(title, msg, tags=tags)  <-- DIESE ZEILEN AUSKOMMENTIEREN ODER LÖSCHEN
+        
+        # Sound darf bleiben, da er nur im Browser des Betrachters abgespielt wird
         maybe_play_sound(status_mode, sound_enabled)
         heartbeat_info = f" (vor {minutes_diff} Min)" if minutes_diff is not None else ""
 
@@ -688,33 +704,37 @@ def main():
         run_screensaver_loop(media_factor)
         return
     # -------------------------
+
+    # --- DEFINITION DER PROFILE/LOGOUT SIDEBAR FUNKTION ---
+    # Damit können wir das Profil immer ganz am Ende rendern
+    def render_sidebar_profile():
+        with st.sidebar:
+            st.write("---")
+            with st.container(border=True):
+                st.markdown("""
+                    <div class="user-profile-card">
+                        <div class="user-avatar">A</div>
+                        <div class="user-info">
+                            <span class="user-name">Admin User</span>
+                            <span class="user-role">Administrator</span>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                st.write("") 
+                if st.button("Ausloggen", key="sidebar_logout", use_container_width=True):
+                    if "cookie_manager_ref" in st.session_state:
+                        st.session_state["cookie_manager_ref"].delete("auth_pin")
+                    st.session_state["is_logged_in"] = False
+                    time.sleep(0.5) 
+                    st.rerun()
     
     # --- SIDEBAR TEIL 1: NAVIGATION ---
     with st.sidebar:
         # HEADER
         st.markdown("### ⚙️ Control Panel")
         
-        # 1. USER PROFILE
-        with st.container(border=True):
-            st.markdown("""
-                <div class="user-profile-card">
-                    <div class="user-avatar">A</div>
-                    <div class="user-info">
-                        <span class="user-name">Admin User</span>
-                        <span class="user-role">Administrator</span>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            st.write("") 
-            if st.button("Ausloggen", key="sidebar_logout", use_container_width=True):
-                if "cookie_manager_ref" in st.session_state:
-                    st.session_state["cookie_manager_ref"].delete("auth_pin")
-                st.session_state["is_logged_in"] = False
-                time.sleep(0.5) 
-                st.rerun()
-
-        # 2. NAVIGATION & AUSWAHL
+        # 1. NAVIGATION & AUSWAHL (JETZT OBEN)
         with st.container(border=True):
             st.markdown("#### Navigation")
             view_mode = st.radio(
@@ -741,6 +761,9 @@ def main():
     # Wenn wir hier rein gehen, beenden wir die Funktion danach mit 'return'.
     # Das spart uns Einrückungs-Probleme für den Rest.
     if view_mode == "Alle Boxen":
+        # Sidebar Footer rendern
+        render_sidebar_profile()
+        
         st.title(f"{PAGE_ICON} {PAGE_TITLE}")
         render_fleet_overview(PRINTERS)
         return 
@@ -827,6 +850,9 @@ def main():
                  if st.button("Zen Mode starten", key="zen_start", use_container_width=True):
                     st.session_state.screensaver_mode = True
                     st.rerun()
+
+    # JETZT: Sidebar Footer rendern (für Einzelansicht)
+    render_sidebar_profile()
 
     # --- HAUPTBEREICH RENDERN ---
     st.title(f"{PAGE_ICON} {PAGE_TITLE}")

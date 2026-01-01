@@ -100,11 +100,12 @@ def humanize_minutes(minutes: float) -> str:
         return f"{r} Min."
 
 
-def evaluate_status(raw_status: str, media_remaining: int, timestamp: str, maintenance_active: bool = False):
+def evaluate_status(raw_status: str, media_remaining: int, timestamp: str, maintenance_active: bool = False, warning_threshold: int = 20):
     """
     Leitet aus Roh-Status + Papierstand den UI-Status ab
     und entscheidet, ob ein Push gesendet werden soll.
     Parameter maintenance_active unterdrückt Stale-Warnungen.
+    Parameter warning_threshold bestimmt, wann 'Wenig Papier' ausgelöst wird.
     """
     raw_status_l = (raw_status or "").lower().strip()
 
@@ -140,10 +141,10 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str, maint
         display_text = "⏳ Druckkopf kühlt ab…"
         display_color = "orange"
 
-    # 4) Papier fast leer (nur wenn kein Fehler)
-    elif media_remaining <= 0:
+    # 4) Papier fast leer (Nutzt jetzt den Threshold!)
+    elif media_remaining <= warning_threshold:
         status_mode = "low_paper"
-        display_text = "⚠️ Papier fast leer!"
+        display_text = f"⚠️ Papier fast leer (<{warning_threshold})!"
         display_color = "orange"
 
     # 5) Druckt gerade
@@ -180,19 +181,16 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str, maint
         # Wenn zu lange keine Daten und KEIN Fehler vorliegt
         if minutes_diff >= HEARTBEAT_WARN_MINUTES and status_mode not in ["error"]:
             if maintenance_active:
-                # Wartungsmodus: Keine Warnung, sondern Info
                 status_mode = "maintenance"
                 display_text = "Box im Lager / Wartung"
                 display_color = "slate"
             else:
-                # Normaler Modus: Warnung
                 status_mode = "stale"
                 display_text = "⚠️ Keine aktuellen Daten"
                 display_color = "orange"
 
-    # PUSH LOGIK
+    # PUSH LOGIK VORBEREITUNG (Wird von app.py ignoriert, aber für Rückgabewerte wichtig)
     critical_states = ["error", "cover_open", "low_paper", "stale"]
-    # HINWEIS: "maintenance" ist hier NICHT enthalten, löst also keinen Push aus.
     push = None
 
     prev_sig = st.session_state.get("last_warn_signature")
@@ -225,19 +223,15 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str, maint
                 "low_paper": f"Nur noch {media_remaining} Bilder!",
                 "stale": f"Seit {minutes_diff} Min kein Signal.",
             }
-            # Falls status_mode im Map ist (sollte durch critical_states Filter so sein)
             if status_mode in title_map:
                 push = (title_map[status_mode], msg_map[status_mode], "warning")
 
             st.session_state.last_warn_signature = current_sig
             st.session_state.last_warn_time = now_ts
     else:
-        # Extra-Case: Störung behoben
-        # Wenn vorher "error" war und jetzt nicht mehr (und auch nicht critical), dann Entwarnung
         if prev_sig is not None and prev_sig.get("status_mode") == "error":
             push = ("✅ Störung behoben", "Drucker läuft wieder.", "white_check_mark")
         
-        # Reset Warnung
         st.session_state.last_warn_signature = None
         st.session_state.last_warn_time = None
 
