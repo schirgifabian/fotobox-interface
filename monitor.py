@@ -70,12 +70,15 @@ def get_printer_settings(gc, sheet_id):
         
         for row in records:
             k = row.get("Key")
-            v = str(row.get("Value")).lower()
+            # Sicherstellen, dass wir Strings vergleichen, egal was Gspread liefert
+            v_raw = row.get("Value")
+            v = str(v_raw).lower().strip()
             
             if k == "ntfy_active":
-                push_active = (v == "true")
+                # Prüft auf "true", "1", "yes" oder echtes True
+                push_active = v in ["true", "1", "yes", "on"]
             elif k == "maintenance_mode":
-                maintenance_active = (v == "true")
+                maintenance_active = v in ["true", "1", "yes", "on"]
                 
         return push_active, maintenance_active
         
