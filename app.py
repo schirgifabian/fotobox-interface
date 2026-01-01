@@ -67,7 +67,7 @@ PRINTERS = {
         "has_admin": True,
         "has_aqara": False,
         "has_dsr": False,
-        "media_factor": 2,
+        "media_factor": 0.5,
         "fotoshare_url": "https://weinkellerei.tirol/fame",
     },
 }
