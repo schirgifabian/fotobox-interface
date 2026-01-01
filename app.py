@@ -833,18 +833,17 @@ def main():
                     st.session_state.screensaver_mode = True
                     st.rerun()
 
-    # --- HAUPTBEREICH RENDERN ---
+# --- HAUPTBEREICH RENDERN ---
     st.title(f"{PAGE_ICON} {PAGE_TITLE}")
     
     view_event_mode = event_mode or not printer_has_admin
 
-if view_event_mode:
-        # MIT warning_threshold
+    # Ab hier den alten Code ersetzen:
+    if view_event_mode:
         show_live_status(media_factor, cost_per_roll, warning_threshold, sound_enabled, event_mode=True, cloud_url=fotoshare_url)
     else:
         tab_live, tab_hist = st.tabs(["Live-Status", "Historie & Analyse"])
         with tab_live:
-            # MIT warning_threshold
             show_live_status(media_factor, cost_per_roll, warning_threshold, sound_enabled, event_mode=False, cloud_url=fotoshare_url)
         with tab_hist:
             show_history(media_factor, cost_per_roll)
