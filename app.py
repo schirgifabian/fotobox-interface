@@ -88,18 +88,27 @@ def check_login():
 
     cookie_manager = get_cookie_manager()
     
-    # --- NEU: Manager für den Rest des Skripts speichern ---
+    # Manager Referenz speichern
     st.session_state["cookie_manager_ref"] = cookie_manager
-    # -------------------------------------------------------
 
-    cookie_val = cookie_manager.get("auth_pin")
+    # --- FIX START: Manuellen Logout prüfen ---
+    # Wenn der Nutzer gerade "Ausloggen" geklickt hat, ignorieren wir das Cookie
+    # für diesen Durchlauf, damit der Browser Zeit hat, es zu löschen.
+    if st.session_state.get("manual_logout", False):
+        st.session_state["manual_logout"] = False # Reset für das nächste Mal
+        st.session_state["is_logged_in"] = False
+        # Wir springen direkt zum Login-Formular weiter unten
+    else:
+        # Normaler Check: Cookie lesen
+        cookie_val = cookie_manager.get("auth_pin")
 
-    if st.session_state.get("is_logged_in", False):
-        return True
+        if st.session_state.get("is_logged_in", False):
+            return True
 
-    if cookie_val is not None and str(cookie_val) == secret_pin:
-        st.session_state["is_logged_in"] = True
-        return True
+        if cookie_val is not None and str(cookie_val) == secret_pin:
+            st.session_state["is_logged_in"] = True
+            return True
+    # --- FIX END ---
 
     st.title("Dashboard dieFotobox.")
     msg_placeholder = st.empty()
