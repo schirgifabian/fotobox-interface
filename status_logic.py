@@ -13,7 +13,7 @@ LOCAL_TZ = pytz.timezone("Europe/Vienna")
 HEARTBEAT_WARN_MINUTES = 60
 
 # Sound für Warnungen
-ALERT_SOUND_URL = "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
+ALERT_SOUND_URL = "https://actions.google.com/sounds/v1/alarms/medium_severity_alert.ogg"
 
 
 def _prepare_history_df(df: pd.DataFrame) -> pd.DataFrame:
