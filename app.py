@@ -62,7 +62,7 @@ PRINTERS = {
     "Weinkellerei": {
         "key": "Weinkellerei",
         "warning_threshold": 20,
-        "default_max_prints": 400,
+        "default_max_prints": 200,
         "cost_per_roll_eur": 55,
         "has_admin": True,
         "has_aqara": False,
