@@ -202,7 +202,7 @@ def init_session_state():
 # LIVE-STATUS VIEW
 # --------------------------------------------------------------------
 @st.fragment(run_every=10)
-def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: bool, event_mode: bool, cloud_url: str = None) -> None:
+def show_live_status(media_factor: int, cost_per_roll: float, warning_threshold: int, sound_enabled: bool, event_mode: bool, cloud_url: str = None) -> None:
     df = get_data(st.session_state.sheet_id, event_mode=event_mode)
     if df.empty:
         st.info("System wartet auf Start…")
@@ -218,13 +218,18 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
 
         maint_active = st.session_state.get("maintenance_mode", False)
         
+        # ÄNDERUNG: warning_threshold übergeben
         status_mode, display_text, display_color, push, minutes_diff = evaluate_status(
-            raw_status, media_remaining, timestamp
+            raw_status, media_remaining, timestamp, 
+            maintenance_active=maint_active,
+            warning_threshold=warning_threshold
         )
 
-        if push is not None:
-            title, msg, tags = push
-            send_ntfy_push(title, msg, tags=tags)
+        # ÄNDERUNG: Automatischer Push hier deaktiviert (auskommentiert), 
+        # damit nur monitor.py sendet!
+        # if push is not None:
+        #     title, msg, tags = push
+        #     send_ntfy_push(title, msg, tags=tags)
 
         maybe_play_sound(status_mode, sound_enabled)
         heartbeat_info = f" (vor {minutes_diff} Min)" if minutes_diff is not None else ""
@@ -833,12 +838,14 @@ def main():
     
     view_event_mode = event_mode or not printer_has_admin
 
-    if view_event_mode:
-        show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=True, cloud_url=fotoshare_url)
+if view_event_mode:
+        # MIT warning_threshold
+        show_live_status(media_factor, cost_per_roll, warning_threshold, sound_enabled, event_mode=True, cloud_url=fotoshare_url)
     else:
         tab_live, tab_hist = st.tabs(["Live-Status", "Historie & Analyse"])
         with tab_live:
-            show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=False, cloud_url=fotoshare_url)
+            # MIT warning_threshold
+            show_live_status(media_factor, cost_per_roll, warning_threshold, sound_enabled, event_mode=False, cloud_url=fotoshare_url)
         with tab_hist:
             show_history(media_factor, cost_per_roll)
         
