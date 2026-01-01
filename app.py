@@ -43,7 +43,7 @@ from ui_components import (
 # --------------------------------------------------------------------
 # GRUNDKONFIG
 # --------------------------------------------------------------------
-PAGE_TITLE = "Testserver"
+PAGE_TITLE = "Fotobox Status"
 PAGE_ICON = "🖨️"
 NTFY_ACTIVE_DEFAULT = True
 
@@ -62,12 +62,12 @@ PRINTERS = {
     "Weinkellerei": {
         "key": "Weinkellerei",
         "warning_threshold": 20,
-        "default_max_prints": 200,
+        "default_max_prints": 400,
         "cost_per_roll_eur": 55,
         "has_admin": True,
         "has_aqara": False,
         "has_dsr": False,
-        "media_factor": 0.5,
+        "media_factor": 2,
         "fotoshare_url": "https://weinkellerei.tirol/fame",
     },
 }
@@ -202,7 +202,7 @@ def init_session_state():
 # LIVE-STATUS VIEW
 # --------------------------------------------------------------------
 @st.fragment(run_every=10)
-def show_live_status(media_factor: int, cost_per_roll: float, warning_threshold: int, sound_enabled: bool, event_mode: bool, cloud_url: str = None) -> None:
+def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: bool, event_mode: bool, cloud_url: str = None) -> None:
     df = get_data(st.session_state.sheet_id, event_mode=event_mode)
     if df.empty:
         st.info("System wartet auf Start…")
@@ -218,18 +218,13 @@ def show_live_status(media_factor: int, cost_per_roll: float, warning_threshold:
 
         maint_active = st.session_state.get("maintenance_mode", False)
         
-        # ÄNDERUNG: warning_threshold übergeben
         status_mode, display_text, display_color, push, minutes_diff = evaluate_status(
-            raw_status, media_remaining, timestamp, 
-            maintenance_active=maint_active,
-            warning_threshold=warning_threshold
+            raw_status, media_remaining, timestamp
         )
 
-        # ÄNDERUNG: Automatischer Push hier deaktiviert (auskommentiert), 
-        # damit nur monitor.py sendet!
-        # if push is not None:
-        #     title, msg, tags = push
-        #     send_ntfy_push(title, msg, tags=tags)
+        if push is not None:
+            title, msg, tags = push
+            send_ntfy_push(title, msg, tags=tags)
 
         maybe_play_sound(status_mode, sound_enabled)
         heartbeat_info = f" (vor {minutes_diff} Min)" if minutes_diff is not None else ""
@@ -693,33 +688,37 @@ def main():
         run_screensaver_loop(media_factor)
         return
     # -------------------------
+
+    # --- DEFINITION DER PROFILE/LOGOUT SIDEBAR FUNKTION ---
+    # Damit können wir das Profil immer ganz am Ende rendern
+    def render_sidebar_profile():
+        with st.sidebar:
+            st.write("---")
+            with st.container(border=True):
+                st.markdown("""
+                    <div class="user-profile-card">
+                        <div class="user-avatar">A</div>
+                        <div class="user-info">
+                            <span class="user-name">Admin User</span>
+                            <span class="user-role">Administrator</span>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                st.write("") 
+                if st.button("Ausloggen", key="sidebar_logout", use_container_width=True):
+                    if "cookie_manager_ref" in st.session_state:
+                        st.session_state["cookie_manager_ref"].delete("auth_pin")
+                    st.session_state["is_logged_in"] = False
+                    time.sleep(0.5) 
+                    st.rerun()
     
     # --- SIDEBAR TEIL 1: NAVIGATION ---
     with st.sidebar:
         # HEADER
         st.markdown("### ⚙️ Control Panel")
         
-        # 1. USER PROFILE
-        with st.container(border=True):
-            st.markdown("""
-                <div class="user-profile-card">
-                    <div class="user-avatar">A</div>
-                    <div class="user-info">
-                        <span class="user-name">Admin User</span>
-                        <span class="user-role">Administrator</span>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            st.write("") 
-            if st.button("Ausloggen", key="sidebar_logout", use_container_width=True):
-                if "cookie_manager_ref" in st.session_state:
-                    st.session_state["cookie_manager_ref"].delete("auth_pin")
-                st.session_state["is_logged_in"] = False
-                time.sleep(0.5) 
-                st.rerun()
-
-        # 2. NAVIGATION & AUSWAHL
+        # 1. NAVIGATION & AUSWAHL (JETZT OBEN)
         with st.container(border=True):
             st.markdown("#### Navigation")
             view_mode = st.radio(
@@ -746,6 +745,9 @@ def main():
     # Wenn wir hier rein gehen, beenden wir die Funktion danach mit 'return'.
     # Das spart uns Einrückungs-Probleme für den Rest.
     if view_mode == "Alle Boxen":
+        # Sidebar Footer rendern
+        render_sidebar_profile()
+        
         st.title(f"{PAGE_ICON} {PAGE_TITLE}")
         render_fleet_overview(PRINTERS)
         return 
@@ -833,18 +835,20 @@ def main():
                     st.session_state.screensaver_mode = True
                     st.rerun()
 
-# --- HAUPTBEREICH RENDERN ---
+    # JETZT: Sidebar Footer rendern (für Einzelansicht)
+    render_sidebar_profile()
+
+    # --- HAUPTBEREICH RENDERN ---
     st.title(f"{PAGE_ICON} {PAGE_TITLE}")
     
     view_event_mode = event_mode or not printer_has_admin
 
-    # Ab hier den alten Code ersetzen:
     if view_event_mode:
-        show_live_status(media_factor, cost_per_roll, warning_threshold, sound_enabled, event_mode=True, cloud_url=fotoshare_url)
+        show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=True, cloud_url=fotoshare_url)
     else:
         tab_live, tab_hist = st.tabs(["Live-Status", "Historie & Analyse"])
         with tab_live:
-            show_live_status(media_factor, cost_per_roll, warning_threshold, sound_enabled, event_mode=False, cloud_url=fotoshare_url)
+            show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=False, cloud_url=fotoshare_url)
         with tab_hist:
             show_history(media_factor, cost_per_roll)
         
