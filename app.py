@@ -74,7 +74,7 @@ PRINTERS = {
 }
 
 # --------------------------------------------------------------------
-# LOGIN (High-End Design)
+# LOGIN (High-End "Card" Design)
 # --------------------------------------------------------------------
 def get_cookie_manager():
     return stx.CookieManager(key="fotobox_auth")
@@ -99,7 +99,7 @@ def check_login():
     cookie_manager = get_cookie_manager()
     st.session_state["cookie_manager_ref"] = cookie_manager
 
-    # --- LOGOUT CHECK ---
+    # --- LOGOUT LOGIK ---
     if st.session_state.get("manual_logout", False):
         st.session_state["manual_logout"] = False 
         st.session_state["is_logged_in"] = False
@@ -112,207 +112,198 @@ def check_login():
             return True
 
     # ==========================================
-    # DESIGN & CSS MAGIC
+    # 1. GLOBAL CSS & LAYOUT MAGIC
     # ==========================================
     st.markdown("""
     <style>
-        /* 1. HINTERGRUND: Sauberer, technischer Grau-Ton */
+        /* HINTERGRUND: Sanftes Grau */
         .stApp {
-            background-color: #F3F4F6;
+            background-color: #F8FAFC;
         }
         
-        /* Layout-Korrekturen: Weniger Rand oben */
-        .block-container {
-            padding-top: 2rem !important;
-            padding-bottom: 5rem !important;
-        }
-        
-        /* 2. HEADER BRANDING (Oben Links) */
-        .brand-header {
+        /* HEADER (Oben Links) - Fixiert */
+        .fixed-header {
             position: fixed;
-            top: 25px;
-            left: 30px;
-            font-family: 'Inter', sans-serif;
+            top: 24px;
+            left: 32px;
+            z-index: 9999;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             font-size: 1.1rem;
             font-weight: 800;
-            color: #111827;
-            z-index: 999;
+            color: #0F172A;
+            letter-spacing: -0.5px;
         }
-        .brand-sub {
-            color: #6B7280;
+        .header-sub {
+            color: #64748B;
             font-weight: 500;
+            margin-left: 4px;
         }
 
-        /* 3. CARD CONTAINER (Der Rahmen um den Login) 
-           Da wir keine echten Divs um Streamlit-Widgets legen können, 
-           stylen wir den Container der Spalte 2 via CSS-Selektor Tricks 
-           oder nutzen gleich visuelle Tricks im Markdown. 
-        */
-        
-        /* PIN Input Feld: High-End Look */
+        /* FOOTER (Unten Mitte) - Fixiert */
+        .fixed-footer {
+            position: fixed;
+            bottom: 24px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            z-index: 9999;
+            color: #94A3B8;
+            font-size: 0.75rem;
+            font-family: 'Inter', monospace;
+            letter-spacing: 0.5px;
+        }
+
+        /* CARD STYLING (Der Container in der Mitte) */
+        /* Wir stylen den Streamlit Container Border Wrapper */
+        div[data-testid="stVerticalBlockBorderWrapper"] {
+            background-color: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            border-radius: 24px;
+            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.08);
+            padding: 32px;
+            max-width: 100%;
+        }
+
+        /* INPUT FELD: High-End PIN Look */
         div[data-testid="stTextInput"] input {
             text-align: center !important;
             font-size: 32px !important;
             letter-spacing: 12px !important;
             font-weight: 700 !important;
-            color: #1F2937 !important;
-            background-color: #FFFFFF !important;
-            border: 2px solid #E5E7EB !important;
+            color: #1E293B !important;
+            background-color: #F1F5F9 !important; /* Leicht graues Feld */
+            border: 2px solid transparent !important;
             border-radius: 16px !important;
-            padding: 20px 10px !important;
-            height: auto !important;
-            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
-            transition: all 0.2s ease-in-out;
+            padding: 18px 0px !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         
-        /* Fokus-Zustand: Blauer Glow */
+        /* Input Focus State */
         div[data-testid="stTextInput"] input:focus {
+            background-color: #FFFFFF !important;
             border-color: #3B82F6 !important;
             box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15) !important;
-            outline: none !important;
-            transform: translateY(-1px);
+            transform: scale(1.02);
         }
         
         /* Verstecke Label */
         div[data-testid="stTextInput"] label { display: none; }
 
-        /* BUTTON: Der Call-to-Action */
+        /* BUTTON: Gradient & Shadow */
         div.stButton > button {
             width: 100% !important;
-            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;
+            background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%) !important;
             color: #FFFFFF !important;
             border: none !important;
             border-radius: 14px !important;
-            padding: 16px 24px !important;
-            font-size: 18px !important;
+            padding: 14px 24px !important;
+            font-size: 16px !important;
             font-weight: 600 !important;
-            letter-spacing: 0.5px !important;
-            margin-top: 15px !important;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
-            transition: all 0.3s ease !important;
+            margin-top: 12px !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+            transition: all 0.2s ease !important;
         }
         
         div.stButton > button:hover {
-            transform: translateY(-2px) !important;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.15) !important;
         }
         
         div.stButton > button:active {
-            transform: scale(0.98) !important;
-        }
-
-        /* 4. FOOTER (Unten fixiert) */
-        .fixed-footer {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            text-align: center;
-            padding: 20px;
-            color: #9CA3AF;
-            font-size: 0.75rem;
-            background: transparent; /* oder #F3F4F6 */
-            font-family: monospace;
+            transform: scale(0.98);
         }
         
-        /* Verstecke Streamlit Standard Footer/Menu */
+        /* Streamlit UI Cleanup */
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
+        header {visibility: hidden;}
         
     </style>
     
-    <div class="brand-header">
-        dieFotobox. <span class="brand-sub">Dashboard</span>
+    <div class="fixed-header">
+        dieFotobox.<span class="header-sub">Dashboard</span>
     </div>
     
     <div class="fixed-footer">
-        dieFotobox - anfrage@diefotobox.tirol - +436603436775
+        dieFotobox &nbsp;&bull;&nbsp; anfrage@diefotobox.tirol &nbsp;&bull;&nbsp; +43 660 3436775
     </div>
     """, unsafe_allow_html=True)
 
     # ==========================================
-    # LAYOUT GRID (Zentrierte "Karte")
+    # 2. DAS LAYOUT GRID
     # ==========================================
     
-    # Wir nutzen Spalten, um das Layout schmal und mittig zu halten
-    c1, c2, c3 = st.columns([1, 1.5, 1])
+    # Vertikale Zentrierung simulieren
+    st.markdown("<div style='height: 10vh;'></div>", unsafe_allow_html=True)
+    
+    # Spalten für horizontale Zentrierung
+    c1, c2, c3 = st.columns([1, 1.4, 1])
     
     with c2:
-        # VISUELLER CONTAINER START (Simuliert die weiße Karte)
-        # Wir nutzen einen Markdown Container mit CSS Styling inline für den Background
-        st.markdown("""
-        <div style="
-            background-color: white; 
-            padding: 40px; 
-            border-radius: 24px; 
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-            margin-top: 60px;
-            text-align: center;
-        ">
-        """, unsafe_allow_html=True)
-
-        # 1. ANIMATION (Yeti/Security Monster)
-        lottie_monster = load_lottieurl("https://lottie.host/625df3e8-5b23-4416-b184-7a3044a1705e/sKkZlD4H3r.json")
-        
-        if lottie_monster:
-            st_lottie(lottie_monster, height=180, key="monster_anim")
-        else:
-            st.markdown("<h1>🔒</h1>", unsafe_allow_html=True)
-
-        # 2. HEADLINE
-        st.markdown("""
-            <h2 style="
-                margin-top: 0px; 
-                margin-bottom: 5px; 
-                color: #111827; 
-                font-weight: 800; 
-                font-size: 1.8rem;
-                font-family: 'Inter', sans-serif;
-            ">
-                Willkommen zurück!
-            </h2>
-            <p style="
-                color: #6B7280; 
-                font-size: 0.95rem; 
-                margin-bottom: 30px;
-            ">
-                Bitte PIN eingeben um fortzufahren
-            </p>
-        """, unsafe_allow_html=True)
-
-        # 3. DAS ECHTE FORMULAR
-        # Das Formular muss "innerhalb" des visuellen Divs gerendert werden, 
-        # aber Streamlit erlaubt kein Nesting von Widgets in HTML-Tags.
-        # TRICK: Wir schließen das Div erst NACH dem Formular.
-        
-        with st.form("login_form"):
-            # Das Input Feld (Styling kommt vom CSS oben)
-            user_input = st.text_input(
-                "PIN", 
-                type="password", 
-                placeholder="••••", 
-                max_chars=4
-            )
+        # HIER IST DER TRICK: st.container(border=True)
+        # Durch das CSS oben wird dieser Container zur weißen "Karte"
+        with st.container(border=True):
             
-            # Button
-            submitted = st.form_submit_button("Anmelden")
+            # A. ANIMATION
+            # URL für ein cooles animiertes Schloss
+            lottie_lock = load_lottieurl("https://lottie.host/625df3e8-5b23-4416-b184-7a3044a1705e/sKkZlD4H3r.json")
+            if lottie_lock:
+                st_lottie(lottie_lock, height=140, key="lock_anim")
+            else:
+                st.markdown("<div style='text-align: center; font-size: 60px; margin-bottom: 20px;'>🔐</div>", unsafe_allow_html=True)
 
-            if submitted:
-                if str(user_input) == secret_pin:
-                    st.session_state["is_logged_in"] = True
-                    expires = datetime.datetime.now() + datetime.timedelta(days=30)
-                    cookie_manager.set("auth_pin", user_input, expires_at=expires)
-                    # Kleiner Success Toast
-                    st.toast("Login erfolgreich!", icon="🔓")
-                    time.sleep(0.5)
-                    st.rerun()
-                else:
-                    st.error("PIN ungültig.")
-        
-        # VISUELLER CONTAINER ENDE
-        st.markdown("</div>", unsafe_allow_html=True)
+            # B. TEXT
+            st.markdown("""
+                <div style="text-align: center; margin-bottom: 24px;">
+                    <h1 style="
+                        font-family: 'Inter', sans-serif;
+                        font-weight: 800; 
+                        font-size: 1.6rem; 
+                        color: #1E293B; 
+                        margin: 0 0 8px 0;
+                        letter-spacing: -0.5px;
+                    ">
+                        Willkommen zurück!
+                    </h1>
+                    <p style="
+                        font-family: 'Inter', sans-serif;
+                        color: #64748B; 
+                        font-size: 0.9rem; 
+                        margin: 0;
+                    ">
+                        Bitte PIN eingeben um fortzufahren
+                    </p>
+                </div>
+            """, unsafe_allow_html=True)
 
-    # App hier stoppen
+            # C. FORMULAR
+            with st.form("login_form", clear_on_submit=False):
+                # PIN Feld (Gestylt durch CSS oben)
+                user_input = st.text_input(
+                    "PIN", 
+                    type="password", 
+                    placeholder="••••", 
+                    max_chars=4
+                )
+                
+                # Leerraum
+                st.write("")
+                
+                # Button
+                submitted = st.form_submit_button("Anmelden")
+
+                if submitted:
+                    if str(user_input) == secret_pin:
+                        st.session_state["is_logged_in"] = True
+                        expires = datetime.datetime.now() + datetime.timedelta(days=30)
+                        cookie_manager.set("auth_pin", user_input, expires_at=expires)
+                        st.toast("Login erfolgreich!", icon="🔓")
+                        time.sleep(0.5)
+                        st.rerun()
+                    else:
+                        st.error("PIN ungültig.")
+    
+    # App Stop
     st.stop()
     
 # --------------------------------------------------------------------
