@@ -894,12 +894,26 @@ def main():
                 """, unsafe_allow_html=True)
                 
                 st.write("") 
+                
+                # Hier ist die Änderung:
                 if st.button("Ausloggen", key="sidebar_logout", use_container_width=True):
+                    # 1. Cookie löschen
                     if "cookie_manager_ref" in st.session_state:
                         st.session_state["cookie_manager_ref"].delete("auth_pin")
-                    st.session_state["is_logged_in"] = False
-                    time.sleep(0.5) 
-                    st.rerun()
+                    
+                    # 2. Optional: Session State komplett leeren für Sicherheit
+                    for key in list(st.session_state.keys()):
+                        del st.session_state[key]
+                    
+                    # 3. JavaScript für echten Browser-Reload injizieren
+                    st.markdown("""
+                        <script>
+                            parent.window.location.reload();
+                        </script>
+                    """, unsafe_allow_html=True)
+                    
+                    # 4. Script stoppen, damit nichts mehr nachläuft
+                    st.stop()
     
     # --- SIDEBAR TEIL 1: NAVIGATION ---
     with st.sidebar:
