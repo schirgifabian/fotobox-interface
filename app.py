@@ -74,7 +74,7 @@ PRINTERS = {
 }
 
 # --------------------------------------------------------------------
-# LOGIN (Mobile Optimized & High-End)
+# LOGIN (Ultra-Premium "Glassmorphism" Design)
 # --------------------------------------------------------------------
 def get_cookie_manager():
     return stx.CookieManager(key="fotobox_auth")
@@ -112,127 +112,153 @@ def check_login():
             return True
 
     # ==========================================
-    # CSS & MOBILE OPTIMIERUNG
+    # ULTRA-PREMIUM CSS
     # ==========================================
     st.markdown("""
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
+
+        /* 1. ANIMIERTER BACKGROUND */
         .stApp {
-            background-color: #F8FAFC;
+            background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+            background: linear-gradient(120deg, #fdfbfb 0%, #ebedee 100%); /* Clean Silver/White Gradient */
+            background-size: 400% 400%;
+            font-family: 'Inter', sans-serif;
         }
 
-        /* 1. HEADER - Größer und Markanter */
+        /* 2. HEADER - Groß & Modern */
         .fixed-header {
             position: fixed;
-            top: 24px;
-            left: 32px;
+            top: 40px;
+            left: 40px;
             z-index: 9999;
-            font-family: 'Inter', sans-serif;
-            font-size: 1.5rem; /* Größer! */
+            font-size: 1.8rem;
             font-weight: 900;
-            color: #0F172A;
-            letter-spacing: -1px;
-            line-height: 1;
+            color: #111827;
+            letter-spacing: -0.05em;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.05);
         }
         .header-sub {
-            color: #64748B;
+            color: #6B7280;
             font-weight: 500;
             font-size: 1rem;
-            margin-left: 6px;
-            letter-spacing: normal;
+            margin-left: 8px;
+            opacity: 0.8;
         }
 
-        /* FOOTER */
+        /* 3. FOOTER - Dezent & Informativ */
         .fixed-footer {
             position: fixed;
-            bottom: 20px;
+            bottom: 30px;
             left: 0;
             width: 100%;
             text-align: center;
-            z-index: 999;
+            z-index: 9999;
             color: #94A3B8;
-            font-size: 0.8rem;
-            font-family: 'Inter', monospace;
+            font-size: 0.85rem;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            opacity: 0.8;
+            transition: opacity 0.3s;
         }
+        .fixed-footer:hover { opacity: 1; }
 
-        /* CARD CONTAINER */
+        /* 4. GLASSMORPHISM CARD (Der Container) */
+        /* Wir zielen auf den Wrapper der inneren Spalte */
         div[data-testid="stVerticalBlockBorderWrapper"] {
-            background-color: #FFFFFF;
-            border: 1px solid #E2E8F0;
-            border-radius: 28px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1);
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            border-radius: 32px;
+            box-shadow: 
+                0 20px 50px -12px rgba(0, 0, 0, 0.1),
+                0 0 0 1px rgba(255, 255, 255, 0.5) inset; /* Inner Glow */
             padding: 40px;
+            
+            /* Entrance Animation */
+            animation: fadeUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+            opacity: 0;
+            transform: translateY(20px);
         }
 
-        /* INPUT FELD */
+        @keyframes fadeUp {
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 5. INPUT FELD - "Apple Style" */
         div[data-testid="stTextInput"] input {
             text-align: center !important;
-            font-size: 32px !important;
-            letter-spacing: 12px !important;
+            font-size: 36px !important;
+            letter-spacing: 16px !important; /* Viel Platz zwischen den Punkten */
             font-weight: 700 !important;
-            color: #1E293B !important;
-            background-color: #F8FAFC !important;
-            border: 2px solid #E2E8F0 !important;
-            border-radius: 18px !important;
-            padding: 16px 0px !important;
-            transition: all 0.2s;
+            color: #1F2937 !important;
+            background-color: rgba(243, 244, 246, 0.6) !important;
+            border: 2px solid transparent !important;
+            border-radius: 20px !important;
+            padding: 20px 0px !important;
+            margin-bottom: 10px;
+            transition: all 0.3s ease;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
         }
+        
         div[data-testid="stTextInput"] input:focus {
             background-color: #FFFFFF !important;
             border-color: #3B82F6 !important;
-            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1) !important;
+            box-shadow: 0 10px 30px -10px rgba(59, 130, 246, 0.3) !important;
+            transform: scale(1.02);
         }
         div[data-testid="stTextInput"] label { display: none; }
 
-        /* BUTTON - Zentriert & Schick */
+        /* 6. BUTTON - High Performance Gradient */
         div.stButton > button {
             width: 100% !important;
-            max-width: 280px !important; /* Nicht zu breit auf Desktop */
+            max-width: 260px !important;
             display: block !important;
-            margin-left: auto !important;
-            margin-right: auto !important;
+            margin: 20px auto 0 auto !important;
             
-            background: #0F172A !important;
+            background: linear-gradient(135deg, #0F172A 0%, #334155 100%) !important;
             color: #FFFFFF !important;
             border: none !important;
-            border-radius: 16px !important;
+            border-radius: 18px !important;
             padding: 16px 32px !important;
             font-size: 16px !important;
             font-weight: 600 !important;
-            margin-top: 20px !important;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
-            transition: transform 0.1s ease;
+            letter-spacing: 0.5px !important;
+            
+            box-shadow: 0 10px 20px -5px rgba(15, 23, 42, 0.3) !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
         }
+        
         div.stButton > button:hover {
-            transform: translateY(-2px);
-            background: #1E293B !important;
+            transform: translateY(-3px) scale(1.02) !important;
+            box-shadow: 0 20px 30px -10px rgba(15, 23, 42, 0.4) !important;
+            background: linear-gradient(135deg, #1E293B 0%, #475569 100%) !important;
         }
+        
         div.stButton > button:active {
-            transform: scale(0.97);
+            transform: scale(0.95) !important;
         }
 
         /* UI Cleanup */
         #MainMenu, footer, header {visibility: hidden;}
         
-        /* --- MOBILE OPTIMIERUNG (Media Queries) --- */
-        @media (max-width: 640px) {
-            /* Header kleiner auf Handy, damit er nicht stört */
+        /* 7. MOBILE OPTIMIERUNG */
+        @media (max-width: 768px) {
             .fixed-header {
-                font-size: 1.2rem;
-                top: 15px;
+                font-size: 1.4rem;
+                top: 20px;
                 left: 20px;
             }
-            
-            /* Card Padding reduzieren für mehr Platz */
-            div[data-testid="stVerticalBlockBorderWrapper"] {
-                padding: 25px 20px !important;
-                border-radius: 20px !important;
-            }
-            
-            /* Footer ausblenden bei kleiner Höhe (Tastatur offen), damit er nicht nervt 
-               oder einfach kleiner machen */
             .fixed-footer {
-                font-size: 0.65rem;
-                bottom: 10px;
+                font-size: 0.7rem;
+                bottom: 15px;
+                padding: 0 20px;
+                line-height: 1.5;
+            }
+            div[data-testid="stVerticalBlockBorderWrapper"] {
+                padding: 30px 20px !important;
+                margin-top: -40px; /* Zieht die Karte auf Mobile etwas höher */
             }
         }
     </style>
@@ -247,73 +273,65 @@ def check_login():
     """, unsafe_allow_html=True)
 
     # ==========================================
-    # LAYOUT GRID
+    # LAYOUT STRUKTUR
     # ==========================================
     
-    # 1. Spacer oben: Auf Desktop viel Platz, auf Mobile wenig (damit es mittig wirkt ohne Scrollen)
-    # Wir nutzen st.columns mit Markdown für responsive Abstände ist schwierig,
-    # daher ein div mit CSS Media Query Logic inline.
+    # Vertikaler Spacer für Desktop (Zentrierung), auf Mobile kleiner
     st.markdown("""
-        <div style="height: 12vh;" class="desktop-spacer"></div>
+        <div style="height: 15vh;" class="main-spacer"></div>
         <style>
-            @media (max-width: 640px) {
-                .desktop-spacer { height: 2vh !important; }
-            }
+            @media (max-width: 768px) { .main-spacer { height: 5vh !important; } }
         </style>
     """, unsafe_allow_html=True)
     
-    # Grid
-    c1, c2, c3 = st.columns([1, 8, 1]) # Mobile: Fast volle Breite
+    # 3-Spalten Grid für horizontale Zentrierung
+    # Auf Mobile (Small Screens) nutzen wir fast die ganze Breite
+    col_left, col_center, col_right = st.columns([1, 1.6, 1])
     
-    # Desktop Anpassung via Python Logic (hacky aber effektiv für Streamlit Spalten)
-    # Besser: Wir nutzen CSS max-width auf den mittleren Container.
-    
-    with c2:
-        # Eine weitere Spalte innen für Desktop-Zentrierung (Max Width Verhalten)
-        # Auf Mobile ignorieren wir das, auf Desktop nutzen wir Spalten
-        
-        # Wir bauen einen "Wrapper", damit die Box auf Desktop nicht riesig ist
-        sc1, sc2, sc3 = st.columns([1, 2, 1])
-        
-        # Leerer Container für Mobile Fallback (da st.columns auf mobile untereinander brechen)
-        # Wir schreiben direkt in den Container.
-        
+    with col_center:
+        # Hier startet die "Glass Card"
         with st.container(border=True):
             
-            # LOTTIE ANIMATION
-            # Neue URL: Ein Schloss, das sich aufbaut / pulsiert
+            # 1. LOTTIE ANIMATION (Das Schloss)
+            # URL: Ein sehr cleanes, blaues Schloss, das sich öffnet/schließt
             lottie_anim = load_lottieurl("https://lottie.host/93380fc6-7476-4d7a-b9c1-582775f50247/Gv73hN9rK1.json")
             if lottie_anim:
-                st_lottie(lottie_anim, height=150, key="login_anim_main")
+                st_lottie(lottie_anim, height=140, key="login_lottie")
+            else:
+                # Fallback
+                st.markdown("<div style='text-align: center; font-size: 50px; margin-bottom: 20px;'>🔐</div>", unsafe_allow_html=True)
             
+            # 2. ÜBERSCHRIFTEN
             st.markdown("""
-                <div style="text-align: center; margin-bottom: 25px; margin-top: -10px;">
+                <div style="text-align: center; margin-bottom: 30px; margin-top: -10px;">
                     <h2 style="
                         font-family: 'Inter', sans-serif;
                         font-weight: 800; 
-                        font-size: 1.8rem; 
-                        color: #1E293B; 
+                        font-size: 2rem; 
+                        color: #111827; 
                         margin: 0;
-                        letter-spacing: -0.5px;
+                        letter-spacing: -1px;
                     ">
                         Willkommen zurück!
                     </h2>
                     <p style="
                         font-family: 'Inter', sans-serif;
-                        color: #64748B; 
-                        font-size: 0.95rem; 
+                        color: #6B7280; 
+                        font-size: 1rem; 
                         margin-top: 8px;
+                        font-weight: 500;
                     ">
                         Bitte PIN eingeben
                     </p>
                 </div>
             """, unsafe_allow_html=True)
 
+            # 3. FORMULAR
             with st.form("login_form", clear_on_submit=False):
-                # PIN Feld
+                # Das PIN Feld (Style via CSS)
                 user_input = st.text_input("PIN", type="password", placeholder="••••", max_chars=4)
                 
-                # Button (zentriert durch CSS oben)
+                # Der Button
                 submitted = st.form_submit_button("Anmelden")
 
                 if submitted:
@@ -321,12 +339,14 @@ def check_login():
                         st.session_state["is_logged_in"] = True
                         expires = datetime.datetime.now() + datetime.timedelta(days=30)
                         cookie_manager.set("auth_pin", user_input, expires_at=expires)
-                        st.toast("Login erfolgreich!", icon="🚀")
+                        # Stylisher Success Toast
+                        st.toast("Zugang gewährt!", icon="🚀")
                         time.sleep(0.5)
                         st.rerun()
                     else:
-                        st.error("Zugriff verweigert.")
-
+                        st.error("PIN ungültig.")
+    
+    # Verhindert, dass der Rest der App kurz aufblitzt
     st.stop()
     
 # --------------------------------------------------------------------
