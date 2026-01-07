@@ -74,7 +74,7 @@ PRINTERS = {
 }
 
 # --------------------------------------------------------------------
-# LOGIN (Neu mit Monster-Design)
+# LOGIN (Premium Design Update)
 # --------------------------------------------------------------------
 def get_cookie_manager():
     return stx.CookieManager(key="fotobox_auth")
@@ -92,13 +92,11 @@ def check_login():
     try:
         secret_pin = str(st.secrets["general"]["app_pin"])
     except FileNotFoundError:
-        st.error("Secrets nicht gefunden. Bitte .streamlit/secrets.toml prüfen.")
+        st.error("Secrets nicht gefunden.")
         st.stop()
         return
 
     cookie_manager = get_cookie_manager()
-    
-    # Manager Referenz speichern
     st.session_state["cookie_manager_ref"] = cookie_manager
 
     # --- LOGOUT LOGIK ---
@@ -107,93 +105,147 @@ def check_login():
         st.session_state["is_logged_in"] = False
     else:
         cookie_val = cookie_manager.get("auth_pin")
-
         if st.session_state.get("is_logged_in", False):
             return True
-
         if cookie_val is not None and str(cookie_val) == secret_pin:
             st.session_state["is_logged_in"] = True
             return True
 
-    # --- UI: MONSTER LOGIN SCREEN ---
-    # Lade Animation (Yeti Login Stil)
-    lottie_monster = load_lottieurl("https://assets9.lottiefiles.com/private_files/lf30_m6j5igxb.json")
+    # --- UI DESIGN START ---
     
-    # Layout zentrieren: Leere Spalten links/rechts
-    c1, c2, c3 = st.columns([1, 2, 1])
+    # 1. CSS Injection: Das macht den "Look" aus
+    st.markdown("""
+    <style>
+        /* Hintergrund der ganzen Seite etwas weicher machen (optional) */
+        .stApp {
+            background-color: #f8f9fa;
+        }
+        
+        /* Das Input Feld: Groß, Zentriert, Modern */
+        div[data-testid="stTextInput"] input {
+            text-align: center !important;
+            font-size: 28px !important;
+            letter-spacing: 12px !important;
+            font-weight: 700 !important;
+            color: #1e293b !important;
+            background-color: #ffffff !important;
+            border: 2px solid #e2e8f0 !important;
+            border-radius: 12px !important;
+            padding: 15px 10px !important;
+            height: auto !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            transition: all 0.2s ease;
+        }
+        
+        /* Fokus-Effekt für das Input Feld (blauer Rahmen) */
+        div[data-testid="stTextInput"] input:focus {
+            border-color: #3b82f6 !important;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1) !important;
+            outline: none !important;
+        }
+        
+        /* Label verstecken (wir nutzen Placeholder) */
+        div[data-testid="stTextInput"] label {
+            display: none;
+        }
+
+        /* Der Button: Breit, Schwarz, Abgerundet */
+        div.stButton > button {
+            width: 100% !important;
+            background-color: #0f172a !important; /* Fast Schwarz */
+            color: white !important;
+            border: none !important;
+            border-radius: 12px !important;
+            padding: 12px 24px !important;
+            font-size: 18px !important;
+            font-weight: 600 !important;
+            margin-top: 10px !important;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2) !important;
+            transition: transform 0.1s ease;
+        }
+        
+        div.stButton > button:hover {
+            background-color: #1e293b !important;
+            transform: translateY(-2px);
+        }
+        
+        div.stButton > button:active {
+            transform: translateY(0px);
+        }
+        
+        /* Form Container sauberer machen */
+        div[data-testid="stForm"] {
+            border: none;
+            padding: 0;
+            margin-top: 20px;
+        }
+        
+        /* Fehlermeldung schöner */
+        .stAlert {
+            border-radius: 10px;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # 2. Layout Grid
+    # Wir nutzen 3 Spalten, damit die Mitte (Login) ca. 400px breit ist
+    c1, c2, c3 = st.columns([1, 1.2, 1])
     
     with c2:
-        st.markdown("<br><br>", unsafe_allow_html=True)
+        # Container simulieren durch Abstände
+        st.markdown("<div style='margin-top: 50px;'></div>", unsafe_allow_html=True)
         
-        # 1. Animation
+        # --- ANIMATION ---
+        # Diese URL ist der klassische "Yeti", der dem Video sehr nahe kommt
+        lottie_monster = load_lottieurl("https://lottie.host/020087c0-1123-455c-a56e-82635a9f2425/08wZp4gq8w.json")
+        
         if lottie_monster:
-            st_lottie(lottie_monster, height=180, key="login_anim")
+            st_lottie(lottie_monster, height=220, key="monster_anim")
         else:
-            st.image("https://placehold.co/200x200?text=Login", width=200)
+            # Fallback Icon, falls Internet fehlt
+            st.markdown("<div style='text-align: center; font-size: 80px;'>🔒</div>", unsafe_allow_html=True)
 
-        # 2. Überschrift
+        # --- TEXT ---
         st.markdown(
             """
-            <h2 style='text-align: center; color: #333; margin-top: -20px;'>Willkommen zurück!</h2>
-            <p style='text-align: center; color: #666; font-size: 0.9rem;'>Bitte PIN eingeben</p>
+            <div style="text-align: center; margin-bottom: 30px;">
+                <h1 style="margin: 0; padding: 0; font-size: 28px; font-weight: 800; color: #1e293b;">
+                    Welcome Back!
+                </h1>
+                <p style="margin: 8px 0 0 0; color: #64748b; font-size: 16px;">
+                    Bitte PIN eingeben um fortzufahren
+                </p>
+            </div>
             """, 
             unsafe_allow_html=True
         )
 
-        # 3. Formular
+        # --- INPUT FORM ---
         with st.form("login_form"):
-            # Zentriertes Styling für das Input-Feld via CSS Injection nur für diesen Block
-            st.markdown("""
-            <style>
-                /* Versteckt den Label-Text visuell, behält ihn aber für Screenreader */
-                div[data-testid="stTextInput"] label {display: none;}
-                
-                /* Zentriert den Text im Input Feld */
-                div[data-testid="stTextInput"] input {
-                    text-align: center; 
-                    font-size: 24px; 
-                    letter-spacing: 8px; 
-                    font-family: monospace;
-                    background-color: #f8f9fa;
-                    border: 2px solid #eee;
-                    border-radius: 12px;
-                    padding: 10px;
-                }
-                div[data-testid="stTextInput"] input:focus {
-                    border-color: #3B82F6;
-                    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-                }
-                
-                /* Button Styling */
-                div.stButton > button {
-                    width: 100%;
-                    border-radius: 12px;
-                    margin-top: 10px;
-                    background-color: #1E293B;
-                    color: white;
-                }
-                
-                /* Entfernt den Form-Rand */
-                div[data-testid="stForm"] {border: none; padding: 0;}
-            </style>
-            """, unsafe_allow_html=True)
-
-            user_input = st.text_input("PIN", type="password", placeholder="••••", max_chars=4)
+            # Das Input Feld
+            user_input = st.text_input(
+                "PIN", 
+                type="password", 
+                placeholder="••••", 
+                max_chars=4
+            )
             
-            submitted = st.form_submit_button("Entsperren")
+            # WICHTIG: type="primary" sorgt für bessere Standard-Klassen,
+            # aber unser CSS oben überschreibt das meiste sowieso.
+            submitted = st.form_submit_button("Anmelden", type="primary")
 
             if submitted:
                 if str(user_input) == secret_pin:
                     st.session_state["is_logged_in"] = True
                     expires = datetime.datetime.now() + datetime.timedelta(days=30)
                     cookie_manager.set("auth_pin", user_input, expires_at=expires)
-                    st.success("Erfolgreich!")
+                    st.toast("Login erfolgreich!", icon="🎉")
                     time.sleep(0.5)
                     st.rerun()
                 else:
-                    st.error("Falscher PIN!")
+                    st.error("Falscher PIN! Versuch es nochmal.")
 
-    # App hier stoppen, damit der Rest nicht geladen wird, solange man nicht eingeloggt ist
+    # Stoppt die App hier, wenn nicht eingeloggt
     st.stop()
     
 # --------------------------------------------------------------------
