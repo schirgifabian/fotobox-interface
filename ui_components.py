@@ -452,6 +452,8 @@ def render_link_card(url: str, title: str, subtitle: str, icon: str = "☁️"):
 """
     st.markdown(html_content, unsafe_allow_html=True)
 
+# ... (oberer Teil von ui_components.py bleibt) ...
+
 # -----------------------------------------------------------------------------
 # SCREENSAVER / ZEN MODE (NEXT LEVEL)
 # -----------------------------------------------------------------------------
@@ -512,8 +514,7 @@ def inject_screensaver_css():
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             
-            /* Der eigentliche Glow kommt via Drop-Shadow im Inline-Style, 
-               aber hier ein Basis-Schatten */
+            /* Der eigentliche Glow kommt via Drop-Shadow im Inline-Style */
             filter: drop-shadow(0 10px 30px rgba(0,0,0,0.5));
             
             animation: floatUp 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -685,24 +686,3 @@ def render_screensaver_content(status_mode, media_remaining, display_text, displ
     </div>
     """
     st.markdown(html, unsafe_allow_html=True)
-
-
-def render_screensaver_content(status_mode, media_remaining, display_text, display_color, timestamp):
-    # (Unverändert lassen)
-    color_map = {"green": "#10B981", "blue": "#3B82F6", "orange": "#F59E0B", "red": "#EF4444", "gray": "#64748B"}
-    accent_color = color_map.get(display_color, "#64748B")
-    clean_text = display_text.replace('✅', '').replace('⚠️', '').replace('🔴', '').strip()
-    html = f"""
-    <div class="screensaver-container">
-        <div class="label-text">Verbleibende Bilder</div>
-        <div class="big-number" style="color: {accent_color}; text-shadow: 0 0 40px {accent_color}40;">{media_remaining}</div>
-        <div class="status-pill" style="color: {accent_color};"><span class="status-dot" style="background-color: {accent_color}; box-shadow: 0 0 10px {accent_color};"></span>{clean_text}</div>
-        <div class="meta-info">Zuletzt aktualisiert: {timestamp}</div>
-    </div>
-    """
-    st.markdown(html, unsafe_allow_html=True)
-
-def inject_screensaver_css():
-    # (Unverändert lassen)
-    css = """<style>.stApp {background-color: #000000 !important; color: #E2E8F0 !important;} section[data-testid="stSidebar"] {display: none !important;} header, footer {visibility: hidden !important;} .screensaver-container {display: flex; flex-direction: column; align-items: center; justify-content: center; height: 85vh; text-align: center; font-family: 'Inter', sans-serif;} .big-number {font-size: 15vw; font-weight: 800; line-height: 1; margin-bottom: 2vh; font-variant-numeric: tabular-nums;} .label-text {font-size: 2vh; text-transform: uppercase; letter-spacing: 0.3em; color: #64748B;} .status-pill {background-color: #111827; border: 1px solid #1F2937; padding: 1.5vh 4vw; border-radius: 99px; font-size: 3vh; font-weight: 600; display: flex; align-items: center; gap: 12px; margin-top: 4vh; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);} .status-dot {height: 2vh; width: 2vh; border-radius: 50%;} .meta-info {margin-top: 5vh; color: #374151; font-family: monospace; font-size: 1.5vh;} .stButton {position: fixed !important; bottom: 40px !important; left: 50% !important; transform: translateX(-50%) !important; width: auto !important; z-index: 99999;} .stButton > button {background-color: transparent !important; border: 1px solid rgba(255, 255, 255, 0.2) !important; color: rgba(255, 255, 255, 0.4) !important; border-radius: 50px !important; padding: 8px 30px !important; font-size: 0.75rem !important; text-transform: uppercase; letter-spacing: 0.15em; transition: all 0.3s ease !important;} .stButton > button:hover {border-color: #ffffff !important; color: #ffffff !important; background-color: rgba(255, 255, 255, 0.1) !important; box-shadow: 0 0 15px rgba(255, 255, 255, 0.2); transform: translateY(-2px);} .stButton > button:active, .stButton > button:focus {border-color: #ffffff !important; color: #ffffff !important; background-color: rgba(255, 255, 255, 0.2) !important;}</style>"""
-    st.markdown(css, unsafe_allow_html=True)
