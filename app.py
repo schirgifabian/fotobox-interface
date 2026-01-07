@@ -73,10 +73,15 @@ PRINTERS = {
     },
 }
 
+# --------------------------------------------------------------------
+# LOGIN LOGIK & UI
+# --------------------------------------------------------------------
+
 def get_cookie_manager():
     return stx.CookieManager(key="fotobox_auth")
 
 def load_lottieurl(url: str):
+    """Lädt die Lottie-Animation sicher herunter."""
     try:
         r = requests.get(url)
         if r.status_code != 200:
@@ -109,173 +114,123 @@ def check_login():
             return True
 
     # ==========================================
-    # NEXT-LEVEL CSS (Mesh Gradient & Deep Glass)
+    # ULTRA-MODERN CSS (Button + Animation Fix)
     # ==========================================
     st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
 
-        /* 1. BACKGROUND: Subtiler, bewegter Mesh Gradient */
+        /* 1. BACKGROUND */
         .stApp {
-            background-color: #F8FAFC;
-            background-image: 
-                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%), 
-                radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.15) 0px, transparent 50%), 
-                radial-gradient(at 100% 100%, rgba(20, 184, 166, 0.15) 0px, transparent 50%), 
-                radial-gradient(at 0% 100%, rgba(245, 158, 11, 0.10) 0px, transparent 50%);
-            background-attachment: fixed;
-            background-size: 100% 100%;
+            background-color: #F1F5F9; /* Helles Slate */
             font-family: 'Inter', sans-serif;
         }
 
-        /* 2. HEADER & FOOTER */
-        .login-header {
-            position: fixed;
-            top: 32px;
-            left: 32px;
-            font-size: 1.25rem;
-            font-weight: 800;
-            color: #0F172A;
-            letter-spacing: -0.03em;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            z-index: 9999;
-        }
-        .login-pill {
-            background: rgba(15, 23, 42, 0.05);
-            color: #64748B;
-            padding: 4px 12px;
-            border-radius: 99px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-        
-        /* 3. DIE KARTE (Deep Glassmorphism) */
+        /* 2. CARD DESIGN (Zentriert & Clean) */
         div[data-testid="stVerticalBlockBorderWrapper"] {
-            background: rgba(255, 255, 255, 0.65);
-            backdrop-filter: blur(40px) saturate(180%);
-            -webkit-backdrop-filter: blur(40px) saturate(180%);
-            border: 1px solid rgba(255, 255, 255, 0.8);
-            box-shadow: 
-                0 25px 50px -12px rgba(0, 0, 0, 0.08), 
-                0 0 0 1px rgba(255, 255, 255, 0.5) inset;
-            border-radius: 32px;
-            padding: 48px 40px !important;
-            
-            /* Sanfte Entrance Animation */
-            opacity: 0;
-            animation: slideUpFade 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-            transform: translateY(20px);
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+            border-radius: 24px;
+            padding: 40px 32px !important;
+            max-width: 400px;
+            margin: auto; /* Zentriert die Karte */
         }
 
-        @keyframes slideUpFade {
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* 4. PIN INPUT (Clean & Zentriert) */
-        div[data-testid="stTextInput"] {
-            margin-top: 20px;
-        }
+        /* 3. INPUT FELD (Modern & Minimal) */
         div[data-testid="stTextInput"] input {
             text-align: center !important;
-            font-family: 'Inter', sans-serif !important;
-            font-size: 24px !important;
-            letter-spacing: 0.8em !important; /* Großer Abstand zwischen den Punkten */
-            font-weight: 700 !important;
+            font-size: 20px !important;
+            letter-spacing: 12px !important;
+            font-weight: 600 !important;
             color: #1E293B !important;
-            
-            background-color: rgba(255, 255, 255, 0.5) !important;
-            border: 1px solid rgba(203, 213, 225, 0.6) !important;
-            border-radius: 16px !important;
-            padding: 18px 0 !important;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.01);
-            transition: all 0.3s ease;
+            background-color: #F8FAFC !important;
+            border: 1px solid #E2E8F0 !important;
+            border-radius: 12px !important;
+            padding: 16px !important;
+            transition: all 0.2s ease;
         }
-        
         div[data-testid="stTextInput"] input:focus {
-            background-color: #FFFFFF !important;
             border-color: #3B82F6 !important;
-            box-shadow: 
-                0 0 0 4px rgba(59, 130, 246, 0.15),
-                0 10px 20px -5px rgba(59, 130, 246, 0.1) !important;
-            transform: translateY(-1px);
+            background-color: #FFFFFF !important;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1) !important;
         }
-        div[data-testid="stTextInput"] input::placeholder {
-            color: #CBD5E1;
-            letter-spacing: 0.2em;
-            font-weight: 400;
-        }
+        /* Verstecke Label */
         div[data-testid="stTextInput"] label { display: none; }
 
-        /* 5. BUTTON (Modern Gradient) */
+        /* 4. DER MODERNE BUTTON */
         div.stButton > button {
             width: 100% !important;
-            background: linear-gradient(135deg, #1E293B 0%, #334155 100%) !important;
-            color: white !important;
-            border: none !important;
-            padding: 16px !important;
-            font-size: 1rem !important;
+            background-color: #0F172A !important; /* Sehr dunkles Blau/Schwarz */
+            color: #FFFFFF !important;
+            border: 1px solid #0F172A !important;
+            border-radius: 12px !important;
+            padding: 14px 24px !important;
+            font-size: 16px !important;
             font-weight: 600 !important;
-            border-radius: 16px !important;
-            margin-top: 10px !important;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-            box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.1), 0 2px 4px -1px rgba(15, 23, 42, 0.06) !important;
+            line-height: 1.5 !important;
+            letter-spacing: 0.01em !important;
+            margin-top: 12px !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+
+        div.stButton > button:hover {
+            background-color: #1E293B !important; /* Etwas heller beim Hover */
+            border-color: #1E293B !important;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.15) !important;
+        }
+
+        div.stButton > button:active {
+            transform: translateY(0);
+            box-shadow: none !important;
         }
         
-        div.stButton > button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.2) !important;
-            background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%) !important;
-        }
-        div.stButton > button:active {
-            transform: scale(0.98);
+        div.stButton > button p {
+            font-weight: 600 !important;
         }
 
-        /* Verstecke Standard-Elemente */
+        /* Header/Footer ausblenden */
         #MainMenu, footer, header {visibility: hidden;}
+        [data-testid="stHeaderAction"] {display: none;}
+        
     </style>
-    
-    <div class="login-header">
-        dieFotobox <span class="login-pill">Dashboard</span>
-    </div>
     """, unsafe_allow_html=True)
 
     # ==========================================
-    # LAYOUT STRUKTUR
+    # LAYOUT
     # ==========================================
     
-    # Vertikaler Spacer für perfekte Zentrierung
-    st.markdown("""
-        <div style="height: 18vh;" class="main-spacer"></div>
-        <style> @media (max-width: 768px) { .main-spacer { height: 8vh !important; } } </style>
-    """, unsafe_allow_html=True)
+    # Vertikaler Abstand
+    st.markdown('<div style="height: 15vh;"></div>', unsafe_allow_html=True)
     
-    # Grid für horizontale Zentrierung (schmaler für eleganteren Look)
-    col_left, col_center, col_right = st.columns([1, 1.2, 1])
+    # Spalten für Zentrierung
+    _, col_center, _ = st.columns([1, 1.5, 1])
     
     with col_center:
-        # Hier startet die "Glass Card"
         with st.container(border=True):
             
-            # 1. ANIMATION (Schloss) - Etwas kleiner für mehr Eleganz
-            lottie_anim = load_lottieurl("https://lottie.host/93380fc6-7476-4d7a-b9c1-582775f50247/Gv73hN9rK1.json")
-            if lottie_anim:
-                st_lottie(lottie_anim, height=100, key="login_lottie")
-            else:
-                st.markdown("<div style='text-align: center; font-size: 40px; margin-bottom: 10px;'>🔐</div>", unsafe_allow_html=True)
+            # 1. ANIMATION (Neue URL, zuverlässiger)
+            # Eine sehr cleane Schloss-Animation (Blau/Gelb Akzent)
+            lottie_url = "https://lottie.host/9f506046-5900-410a-86c8-04f5e71b2d1c/D1hQv2w8Kk.json"
+            lottie_anim = load_lottieurl(lottie_url)
             
+            if lottie_anim:
+                st_lottie(lottie_anim, height=120, key="lock_anim")
+            else:
+                # Fallback, falls Internet blockiert ist
+                st.markdown("<div style='text-align: center; font-size: 60px;'>🔐</div>", unsafe_allow_html=True)
+
             # 2. TEXT
             st.markdown("""
                 <div style="text-align: center; margin-bottom: 24px;">
                     <h2 style="
                         font-family: 'Inter', sans-serif;
                         font-weight: 800; 
-                        font-size: 1.75rem; 
-                        color: #1E293B; 
-                        margin: 0;
+                        font-size: 1.8rem; 
+                        color: #0F172A; 
+                        margin: 0 0 8px 0;
                         letter-spacing: -0.02em;
                     ">
                         Zugang erforderlich
@@ -284,7 +239,7 @@ def check_login():
                         font-family: 'Inter', sans-serif;
                         color: #64748B; 
                         font-size: 0.95rem; 
-                        margin-top: 6px;
+                        margin: 0;
                         font-weight: 500;
                     ">
                         Bitte identifiziere dich via PIN.
@@ -294,7 +249,6 @@ def check_login():
 
             # 3. FORMULAR
             with st.form("login_form", clear_on_submit=False):
-                # Das PIN Feld
                 user_input = st.text_input("PIN", type="password", placeholder="••••", max_chars=4)
                 
                 # Der Button
@@ -305,13 +259,13 @@ def check_login():
                         st.session_state["is_logged_in"] = True
                         expires = datetime.datetime.now() + datetime.timedelta(days=30)
                         cookie_manager.set("auth_pin", user_input, expires_at=expires)
-                        st.toast("Anmeldung erfolgreich...", icon="🔓")
+                        st.toast("Erfolgreich eingeloggt", icon="🔓")
                         time.sleep(0.5)
                         st.rerun()
                     else:
-                        st.toast("Zugriff verweigert: Falsche PIN", icon="⛔")
+                        st.toast("Falsche PIN", icon="⛔")
     
-    # Stop execution for unauthorized users
+    # Stoppt den Rest der App, wenn nicht eingeloggt
     st.stop()
     
 # --------------------------------------------------------------------
