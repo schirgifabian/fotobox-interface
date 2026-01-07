@@ -651,8 +651,8 @@ def render_screensaver_content(status_mode, media_remaining, display_text, displ
     # Bereinigung des Textes
     clean_text = display_text.replace('✅', '').replace('⚠️', '').replace('🔴', '').replace('🖨️', '').strip()
     
-    # HTML Struktur
-    html = f"""
+    # FIX: textwrap.dedent() verwenden, damit Streamlit das nicht als Code-Block rendert
+    html = textwrap.dedent(f"""
     <div class="zen-wrapper">
         
         <div class="zen-count-wrapper">
@@ -684,5 +684,6 @@ def render_screensaver_content(status_mode, media_remaining, display_text, displ
         </style>
 
     </div>
-    """
+    """)
+    
     st.markdown(html, unsafe_allow_html=True)
