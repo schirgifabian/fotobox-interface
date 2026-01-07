@@ -73,6 +73,18 @@ PRINTERS = {
     },
 }
 
+def get_cookie_manager():
+    return stx.CookieManager(key="fotobox_auth")
+
+def load_lottieurl(url: str):
+    try:
+        r = requests.get(url)
+        if r.status_code != 200:
+            return None
+        return r.json()
+    except:
+        return None
+
 def check_login():
     try:
         secret_pin = str(st.secrets["general"]["app_pin"])
