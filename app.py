@@ -5,6 +5,7 @@ import json
 import datetime
 import re
 import unicodedata
+from streamlit_lottie import st_lottie
 from typing import Optional, Tuple, Any, Dict, List
 
 import requests
@@ -73,10 +74,19 @@ PRINTERS = {
 }
 
 # --------------------------------------------------------------------
-# LOGIN (Unverändert)
+# LOGIN (Neu mit Monster-Design)
 # --------------------------------------------------------------------
 def get_cookie_manager():
     return stx.CookieManager(key="fotobox_auth")
+
+def load_lottieurl(url: str):
+    try:
+        r = requests.get(url)
+        if r.status_code != 200:
+            return None
+        return r.json()
+    except:
+        return None
 
 def check_login():
     try:
@@ -91,15 +101,11 @@ def check_login():
     # Manager Referenz speichern
     st.session_state["cookie_manager_ref"] = cookie_manager
 
-    # --- FIX START: Manuellen Logout prüfen ---
-    # Wenn der Nutzer gerade "Ausloggen" geklickt hat, ignorieren wir das Cookie
-    # für diesen Durchlauf, damit der Browser Zeit hat, es zu löschen.
+    # --- LOGOUT LOGIK ---
     if st.session_state.get("manual_logout", False):
-        st.session_state["manual_logout"] = False # Reset für das nächste Mal
+        st.session_state["manual_logout"] = False 
         st.session_state["is_logged_in"] = False
-        # Wir springen direkt zum Login-Formular weiter unten
     else:
-        # Normaler Check: Cookie lesen
         cookie_val = cookie_manager.get("auth_pin")
 
         if st.session_state.get("is_logged_in", False):
@@ -108,28 +114,88 @@ def check_login():
         if cookie_val is not None and str(cookie_val) == secret_pin:
             st.session_state["is_logged_in"] = True
             return True
-    # --- FIX END ---
 
-    st.title("Dashboard dieFotobox.")
-    msg_placeholder = st.empty()
+    # --- UI: MONSTER LOGIN SCREEN ---
+    # Lade Animation (Yeti Login Stil)
+    lottie_monster = load_lottieurl("https://assets9.lottiefiles.com/private_files/lf30_m6j5igxb.json")
+    
+    # Layout zentrieren: Leere Spalten links/rechts
+    c1, c2, c3 = st.columns([1, 2, 1])
+    
+    with c2:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        
+        # 1. Animation
+        if lottie_monster:
+            st_lottie(lottie_monster, height=180, key="login_anim")
+        else:
+            st.image("https://placehold.co/200x200?text=Login", width=200)
 
-    with st.form("login_form"):
-        user_input = st.text_input("Bitte PIN eingeben:", type="password")
-        submitted = st.form_submit_button("Login")
+        # 2. Überschrift
+        st.markdown(
+            """
+            <h2 style='text-align: center; color: #333; margin-top: -20px;'>Willkommen zurück!</h2>
+            <p style='text-align: center; color: #666; font-size: 0.9rem;'>Bitte PIN eingeben</p>
+            """, 
+            unsafe_allow_html=True
+        )
 
-        if submitted:
-            if str(user_input) == secret_pin:
-                st.session_state["is_logged_in"] = True
-                expires = datetime.datetime.now() + datetime.timedelta(days=30)
-                cookie_manager.set("auth_pin", user_input, expires_at=expires)
-                msg_placeholder.success("Login korrekt! Lade neu...")
-                time.sleep(0.5)
-                st.rerun()
-            else:
-                msg_placeholder.error("Falscher PIN!")
+        # 3. Formular
+        with st.form("login_form"):
+            # Zentriertes Styling für das Input-Feld via CSS Injection nur für diesen Block
+            st.markdown("""
+            <style>
+                /* Versteckt den Label-Text visuell, behält ihn aber für Screenreader */
+                div[data-testid="stTextInput"] label {display: none;}
+                
+                /* Zentriert den Text im Input Feld */
+                div[data-testid="stTextInput"] input {
+                    text-align: center; 
+                    font-size: 24px; 
+                    letter-spacing: 8px; 
+                    font-family: monospace;
+                    background-color: #f8f9fa;
+                    border: 2px solid #eee;
+                    border-radius: 12px;
+                    padding: 10px;
+                }
+                div[data-testid="stTextInput"] input:focus {
+                    border-color: #3B82F6;
+                    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+                }
+                
+                /* Button Styling */
+                div.stButton > button {
+                    width: 100%;
+                    border-radius: 12px;
+                    margin-top: 10px;
+                    background-color: #1E293B;
+                    color: white;
+                }
+                
+                /* Entfernt den Form-Rand */
+                div[data-testid="stForm"] {border: none; padding: 0;}
+            </style>
+            """, unsafe_allow_html=True)
 
+            user_input = st.text_input("PIN", type="password", placeholder="••••", max_chars=4)
+            
+            submitted = st.form_submit_button("Entsperren")
+
+            if submitted:
+                if str(user_input) == secret_pin:
+                    st.session_state["is_logged_in"] = True
+                    expires = datetime.datetime.now() + datetime.timedelta(days=30)
+                    cookie_manager.set("auth_pin", user_input, expires_at=expires)
+                    st.success("Erfolgreich!")
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                    st.error("Falscher PIN!")
+
+    # App hier stoppen, damit der Rest nicht geladen wird, solange man nicht eingeloggt ist
     st.stop()
-
+    
 # --------------------------------------------------------------------
 # NTFY & DSR
 # --------------------------------------------------------------------
