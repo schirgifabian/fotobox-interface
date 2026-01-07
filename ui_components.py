@@ -453,113 +453,238 @@ def render_link_card(url: str, title: str, subtitle: str, icon: str = "☁️"):
     st.markdown(html_content, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# SCREENSAVER / ZEN MODE (FIX)
+# SCREENSAVER / ZEN MODE (NEXT LEVEL)
 # -----------------------------------------------------------------------------
 
 def inject_screensaver_css():
     """
-    Setzt das CSS für den Screensaver.
-    Muss AUSSERHALB des Fragments/Loops aufgerufen werden, damit es nicht flackert.
+    Setzt das High-End CSS für den Screensaver.
     """
     css = """
     <style>
+        /* 1. GLOBAL RESET & FONT */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
+        
         .stApp {
-            background-color: #000000 !important;
+            /* Bewegter Deep-Space Hintergrund */
+            background: linear-gradient(135deg, #000000, #020617, #0f172a, #020617);
+            background-size: 400% 400%;
+            animation: gradientBG 25s ease infinite;
             color: #E2E8F0 !important;
         }
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
         section[data-testid="stSidebar"] { display: none !important; }
-        header { visibility: hidden !important; }
-        footer { visibility: hidden !important; }
+        header, footer, #MainMenu { visibility: hidden !important; display: none !important; }
         
-        .screensaver-container {
+        /* 2. LAYOUT CONTAINER */
+        .zen-wrapper {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 85vh;
-            text-align: center;
-            font-family: 'Inter', sans-serif;
+            z-index: 10;
         }
-        .big-number {
-            font-size: 15vw; /* Responsive Größe */
-            font-weight: 800;
-            line-height: 1;
+
+        /* 3. BIG NUMBER (GLOWING) */
+        .zen-count-wrapper {
+            position: relative;
             margin-bottom: 2vh;
+        }
+        
+        .zen-number {
+            font-family: 'Inter', sans-serif;
+            font-size: 22vw; /* Massive Größe */
+            font-weight: 800;
+            line-height: 0.9;
+            letter-spacing: -0.04em;
             font-variant-numeric: tabular-nums;
+            
+            /* Subtiler Gradient auf der Zahl selbst */
+            background: linear-gradient(to bottom, #FFFFFF 30%, #94A3B8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            
+            /* Der eigentliche Glow kommt via Drop-Shadow im Inline-Style, 
+               aber hier ein Basis-Schatten */
+            filter: drop-shadow(0 10px 30px rgba(0,0,0,0.5));
+            
+            animation: floatUp 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            opacity: 0;
+            transform: translateY(40px);
         }
-        .label-text {
-            font-size: 2vh;
-            text-transform: uppercase;
-            letter-spacing: 0.3em;
+
+        .zen-label {
+            position: absolute;
+            top: -3vh;
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5vh;
             color: #64748B;
-            margin-bottom: 0px;
+            text-transform: uppercase;
+            letter-spacing: 0.4em;
+            white-space: nowrap;
+            opacity: 0.8;
         }
-        .status-pill {
-            background-color: #111827;
-            border: 1px solid #1F2937;
-            padding: 1.5vh 4vw;
+
+        /* 4. GLASS STATUS PILL */
+        .zen-status-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 1.5vh 3vw;
             border-radius: 99px;
-            font-size: 3vh;
-            font-weight: 600;
+            
             display: flex;
             align-items: center;
-            gap: 12px;
-            margin-top: 4vh;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+            gap: 1.5vw;
+            
+            box-shadow: 0 20px 40px -10px rgba(0,0,0,0.5);
+            
+            animation: fadeIn 1.5s ease forwards;
+            animation-delay: 0.3s;
+            opacity: 0;
         }
-        .status-dot {
-            height: 2vh;
-            width: 2vh;
+
+        .zen-dot {
+            height: 1.2vh;
+            width: 1.2vh;
             border-radius: 50%;
+            box-shadow: 0 0 15px currentColor; /* Leuchtet in eigener Farbe */
         }
-        .meta-info {
-            margin-top: 5vh;
-            color: #374151;
-            font-family: monospace;
-            font-size: 1.5vh;
+        
+        .zen-status-text {
+            font-family: 'Inter', sans-serif;
+            font-size: 2.2vh;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            color: rgba(255,255,255,0.9);
+            text-transform: uppercase;
         }
-        /* Button-Container: Fixiert am unteren Bildschirmrand, exakt mittig */
+
+        /* 5. FOOTER META */
+        .zen-footer {
+            position: absolute;
+            bottom: 12vh; /* Platz für den Button lassen */
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.2vh;
+            color: #475569;
+            letter-spacing: 0.1em;
+            animation: fadeIn 2s ease forwards;
+            opacity: 0;
+        }
+
+        /* 6. ANIMATIONS */
+        @keyframes floatUp {
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeIn {
+            to { opacity: 1; }
+        }
+
+        /* 7. EXIT BUTTON (Unten fixiert, minimalistisch) */
         .stButton {
             position: fixed !important;
-            bottom: 40px !important;
+            bottom: 4vh !important;
             left: 50% !important;
             transform: translateX(-50%) !important;
             width: auto !important;
             z-index: 99999;
         }
-
-        /* Das eigentliche Button-Styling (Pillen-Form, dezent) */
+        
         .stButton > button {
-            background-color: transparent !important;
-            border: 1px solid rgba(255, 255, 255, 0.2) !important;
-            color: rgba(255, 255, 255, 0.4) !important;
-            border-radius: 50px !important; /* Macht ihn rund (Pille) */
-            padding: 8px 30px !important;
-            font-size: 0.75rem !important;
-            text-transform: uppercase;
-            letter-spacing: 0.15em;
-            transition: all 0.3s ease !important;
+            background: rgba(0,0,0,0.4) !important;
+            border: 1px solid rgba(255,255,255,0.1) !important;
+            color: rgba(255,255,255,0.3) !important;
+            font-family: 'JetBrains Mono', monospace !important;
+            font-size: 0.7rem !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.2em !important;
+            padding: 10px 30px !important;
+            border-radius: 99px !important;
+            backdrop-filter: blur(4px);
+            transition: all 0.4s ease !important;
+        }
+        
+        .stButton > button:hover {
+            background: rgba(255,255,255,0.1) !important;
+            border-color: rgba(255,255,255,0.4) !important;
+            color: #FFFFFF !important;
+            box-shadow: 0 0 20px rgba(255,255,255,0.1);
+            transform: scale(1.05);
+        }
+        .stButton > button:active {
+            transform: scale(0.95);
         }
 
-        /* Hover-Effekt: Wird weiß und sichtbar */
-        .stButton > button:hover {
-            border-color: #ffffff !important;
-            color: #ffffff !important;
-            background-color: rgba(255, 255, 255, 0.1) !important;
-            box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
-            transform: translateY(-2px);
-        }
-        
-        /* Den Button beim Klicken nicht rot werden lassen */
-        .stButton > button:active, .stButton > button:focus {
-            border-color: #ffffff !important;
-            color: #ffffff !important;
-            background-color: rgba(255, 255, 255, 0.2) !important;
-        }
-        
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
+
+
+def render_screensaver_content(status_mode, media_remaining, display_text, display_color, timestamp):
+    # Farb-Mapping für den Glow-Effekt
+    color_map = {
+        "green":  "16, 185, 129", # Emerald
+        "blue":   "59, 130, 246", # Blue
+        "orange": "245, 158, 11", # Amber
+        "red":    "239, 68, 68",  # Red
+        "gray":   "148, 163, 184" # Slate
+    }
+    
+    # Standard fallback
+    rgb_val = color_map.get(display_color, "148, 163, 184")
+    
+    # Glow Intensity basierend auf Status
+    glow_intensity = "0.4" if display_color in ["green", "blue"] else "0.8"
+    
+    # Bereinigung des Textes
+    clean_text = display_text.replace('✅', '').replace('⚠️', '').replace('🔴', '').replace('🖨️', '').strip()
+    
+    # HTML Struktur
+    html = f"""
+    <div class="zen-wrapper">
+        
+        <div class="zen-count-wrapper">
+            <div class="zen-label">Verbleibende Aufnahmen</div>
+            
+            <div class="zen-number" style="filter: drop-shadow(0 0 40px rgba({rgb_val}, {glow_intensity}));">
+                {media_remaining}
+            </div>
+        </div>
+
+        <div class="zen-status-card">
+            <div class="zen-dot" style="background-color: rgb({rgb_val}); animation: pulseDot 2s infinite;"></div>
+            
+            <div class="zen-status-text">
+                {clean_text}
+            </div>
+        </div>
+
+        <div class="zen-footer">
+             SYNCED: {timestamp} &bull; SYSTEM ACTIVE
+        </div>
+        
+        <style>
+            @keyframes pulseDot {{
+                0% {{ box-shadow: 0 0 0 0 rgba({rgb_val}, 0.6); }}
+                70% {{ box-shadow: 0 0 0 15px rgba({rgb_val}, 0); }}
+                100% {{ box-shadow: 0 0 0 0 rgba({rgb_val}, 0); }}
+            }}
+        </style>
+
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def render_screensaver_content(status_mode, media_remaining, display_text, display_color, timestamp):
