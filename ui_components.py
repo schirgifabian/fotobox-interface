@@ -190,6 +190,12 @@ a.dashboard-link:hover .dashboard-card { transform: translateY(-2px); box-shadow
 @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
 @keyframes pulse-gray { 0% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(100, 116, 139, 0); } 100% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0); } }
 
+/* 8. HEADER ANCHOR LINKS AUSBLENDEN */
+[data-testid="stHeaderAction"] {
+    display: none !important;
+    visibility: hidden !important;
+}
+
 </style>
 """
 
