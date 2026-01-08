@@ -630,7 +630,6 @@ def inject_screensaver_css():
     """).strip()
     st.markdown(css, unsafe_allow_html=True)
 
-
 def render_screensaver_content(status_mode, media_remaining, display_text, display_color, timestamp):
     # Farb-Mapping
     color_map = {
@@ -646,38 +645,33 @@ def render_screensaver_content(status_mode, media_remaining, display_text, displ
     
     clean_text = display_text.replace('✅', '').replace('⚠️', '').replace('🔴', '').replace('🖨️', '').strip()
     
-    # HTML Inhalt definieren
-    # textwrap.dedent entfernt die Einrückung, .strip() die führenden Leerzeilen
-    html_content = textwrap.dedent(f"""
-        <div class="zen-wrapper">
-            <div class="zen-count-wrapper">
-                <div class="zen-label">Verbleibende Aufnahmen</div>
-                
-                <div class="zen-number" style="filter: drop-shadow(0 0 40px rgba({rgb_val}, {glow_intensity}));">
-                    {media_remaining}
-                </div>
-            </div>
-
-            <div class="zen-status-card">
-                <div class="zen-dot" style="background-color: rgb({rgb_val}); animation: pulseDot 2s infinite;"></div>
-                
-                <div class="zen-status-text">
-                    {clean_text}
-                </div>
-            </div>
-
-            <div class="zen-footer">
-                 SYNCED: {timestamp} &bull; SYSTEM ACTIVE
-            </div>
-            
-            <style>
-                @keyframes pulseDot {{
-                    0% {{ box-shadow: 0 0 0 0 rgba({rgb_val}, 0.6); }}
-                    70% {{ box-shadow: 0 0 0 15px rgba({rgb_val}, 0); }}
-                    100% {{ box-shadow: 0 0 0 0 rgba({rgb_val}, 0); }}
-                }}
-            </style>
-        </div>
-    """).strip()
+    # FIX: HTML-Tags müssen ganz links stehen (ohne Einrückung),
+    # sonst interpretiert Markdown sie als Code-Block!
+    html_content = f"""
+<div class="zen-wrapper">
+<div class="zen-count-wrapper">
+<div class="zen-label">Verbleibende Aufnahmen</div>
+<div class="zen-number" style="filter: drop-shadow(0 0 40px rgba({rgb_val}, {glow_intensity}));">
+{media_remaining}
+</div>
+</div>
+<div class="zen-status-card">
+<div class="zen-dot" style="background-color: rgb({rgb_val}); animation: pulseDot 2s infinite;"></div>
+<div class="zen-status-text">
+{clean_text}
+</div>
+</div>
+<div class="zen-footer">
+SYNCED: {timestamp} &bull; SYSTEM ACTIVE
+</div>
+<style>
+@keyframes pulseDot {{
+0% {{ box-shadow: 0 0 0 0 rgba({rgb_val}, 0.6); }}
+70% {{ box-shadow: 0 0 0 15px rgba({rgb_val}, 0); }}
+100% {{ box-shadow: 0 0 0 0 rgba({rgb_val}, 0); }}
+}}
+</style>
+</div>
+"""
 
     st.markdown(html_content, unsafe_allow_html=True)
