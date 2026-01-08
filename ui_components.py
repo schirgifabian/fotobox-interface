@@ -462,7 +462,8 @@ def inject_screensaver_css():
     """
     Setzt das High-End CSS für den Screensaver.
     """
-    css = """
+    # WICHTIG: Auch hier textwrap verwenden, sonst wird das CSS als Text angezeigt!
+    css = textwrap.dedent("""
     <style>
         /* 1. GLOBAL RESET & FONT */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
@@ -628,7 +629,8 @@ def inject_screensaver_css():
         }
 
     </style>
-    """
+    """).strip()
+    
     st.markdown(css, unsafe_allow_html=True)
 
 
