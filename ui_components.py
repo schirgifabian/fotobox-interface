@@ -14,13 +14,13 @@ MODERN_CSS = """
 
 html, body, [class*="css"] {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    color: #1E293B; 
-    background-color: #F8FAFC; 
+    color: #1E293B;
+    background-color: #F8FAFC;
 }
 
 /* 2. SIDEBAR - PROFISSIONELLER LOOK */
 section[data-testid="stSidebar"] {
-    background-color: #F1F5F9; 
+    background-color: #F1F5F9;
     border-right: 1px solid #E2E8F0;
     padding-top: 1rem;
 }
@@ -39,8 +39,8 @@ section[data-testid="stSidebar"] div[data-testid="stVerticalBlockBorderWrapper"]
     margin-bottom: 12px;
 }
 
-section[data-testid="stSidebar"] h1, 
-section[data-testid="stSidebar"] h2, 
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
 section[data-testid="stSidebar"] h3,
 section[data-testid="stSidebar"] h4 {
     color: #64748B !important;
@@ -95,9 +95,9 @@ div.stButton > button[kind="primary"]:hover {
 .user-avatar {
     width: 36px;
     height: 36px;
-    background: #DBEAFE; 
+    background: #DBEAFE;
     color: #2563EB;
-    border-radius: 8px; 
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -153,7 +153,7 @@ div[data-testid="stVerticalBlock"] {
     min-height: 1px;
 }
 
-/* 7. DASHBOARD CARDS & HERO (WICHTIG: Aus V1 wiederhergestellt!) */
+/* 7. DASHBOARD CARDS & HERO */
 .status-dot { height: 12px; width: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; flex-shrink: 0; }
 .status-pulse-green { background-color: #10B981; animation: pulse-green 2s infinite; }
 .status-pulse-blue { background-color: #3B82F6; animation: pulse-blue 2s infinite; }
@@ -161,13 +161,13 @@ div[data-testid="stVerticalBlock"] {
 .status-pulse-red { background-color: #EF4444; animation: pulse-red 2s infinite; }
 .status-pulse-gray { background-color: #64748B; animation: pulse-gray 2s infinite; }
 
-.dashboard-card { 
-    background: #FFFFFF; 
-    border: 1px solid #E2E8F0; 
-    border-radius: 20px; 
-    padding: 24px; 
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); 
-    margin-bottom: 24px; 
+.dashboard-card {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    margin-bottom: 24px;
 }
 
 .metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; padding-top: 24px; border-top: 1px solid #F1F5F9; }
@@ -216,7 +216,7 @@ def render_card_header(icon: str, title: str, subtitle: str, color_class: str = 
     }
     c = colors.get(color_class, colors["slate"])
     
-    html = f"""
+    html = textwrap.dedent(f"""
     <div style="display: flex; align-items: center; margin-bottom: 20px;">
         <div style="
             background: {c['bg']}; 
@@ -239,7 +239,7 @@ def render_card_header(icon: str, title: str, subtitle: str, color_class: str = 
             </div>
         </div>
     </div>
-    """
+    """).strip()
     st.markdown(html, unsafe_allow_html=True)
 
 
@@ -301,54 +301,54 @@ def render_hero_card(
 
     icon_bg = f"{dot_color}15" 
 
-    html_content = f"""
-<div class="dashboard-card">
-    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-        <div>
-            <div style="display: flex; align-items: center; margin-bottom: 8px;">
-                <span class="{pulse_class} status-dot"></span>
-                <span style="font-size: 0.8rem; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em;">System Status</span>
+    html_content = textwrap.dedent(f"""
+    <div class="dashboard-card">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+                <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                    <span class="{pulse_class} status-dot"></span>
+                    <span style="font-size: 0.8rem; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em;">System Status</span>
+                </div>
+                <div style="font-size: 2rem; font-weight: 800; color: #1E293B; line-height: 1.1; margin-bottom: 6px;">
+                    {clean_text}
+                </div>
+                <div style="font-size: 0.8rem; color: #94A3B8; display: flex; align-items: center; gap: 4px;">
+                    <span>🕒</span> {timestamp} {heartbeat_info}
+                </div>
             </div>
-            <div style="font-size: 2rem; font-weight: 800; color: #1E293B; line-height: 1.1; margin-bottom: 6px;">
-                {clean_text}
-            </div>
-            <div style="font-size: 0.8rem; color: #94A3B8; display: flex; align-items: center; gap: 4px;">
-                <span>🕒</span> {timestamp} {heartbeat_info}
+            <div style="background: {icon_bg}; color: {dot_color}; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px;">
+                    {icon_char}
             </div>
         </div>
-        <div style="background: {icon_bg}; color: {dot_color}; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px;">
-                {icon_char}
+        <div style="margin-top: 24px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 6px; font-weight: 500; color: #475569;">
+                <span>Verbrauch ({pct}%)</span>
+                <span>{media_remaining} / {max_prints} Bilder</span>
+            </div>
+            <div class="progress-bg">
+                <div class="progress-fill" style="width: {pct}%; background-color: {bar_color};"></div>
+            </div>
+        </div>
+        <div class="metrics-grid">
+            <div class="metric-item">
+                <div class="metric-label">Papier</div>
+                <div class="metric-value" style="color: {bar_color}">{media_remaining}</div>
+                <div class="metric-sub">Verbleibend</div>
+            </div>
+            <div class="metric-item" style="border-left: 1px solid #F1F5F9; border-right: 1px solid #F1F5F9;">
+                <div class="metric-label">Prognose</div>
+                <div class="metric-value">{forecast_str.split(' ')[0]}</div>
+                <div class="metric-sub">{ " ".join(forecast_str.split(' ')[1:]) if 'Min' in forecast_str else forecast_str }</div>
+                <div class="metric-sub" style="font-size: 0.65rem; color: #CBD5E1; margin-top:0;">{end_time_str}</div>
+            </div>
+            <div class="metric-item">
+                <div class="metric-label">Kosten</div>
+                <div class="metric-value">{cost_txt}</div>
+                <div class="metric-sub">Laufend</div>
+            </div>
         </div>
     </div>
-    <div style="margin-top: 24px;">
-        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 6px; font-weight: 500; color: #475569;">
-            <span>Verbrauch ({pct}%)</span>
-            <span>{media_remaining} / {max_prints} Bilder</span>
-        </div>
-        <div class="progress-bg">
-            <div class="progress-fill" style="width: {pct}%; background-color: {bar_color};"></div>
-        </div>
-    </div>
-    <div class="metrics-grid">
-        <div class="metric-item">
-            <div class="metric-label">Papier</div>
-            <div class="metric-value" style="color: {bar_color}">{media_remaining}</div>
-            <div class="metric-sub">Verbleibend</div>
-        </div>
-        <div class="metric-item" style="border-left: 1px solid #F1F5F9; border-right: 1px solid #F1F5F9;">
-            <div class="metric-label">Prognose</div>
-            <div class="metric-value">{forecast_str.split(' ')[0]}</div>
-            <div class="metric-sub">{ " ".join(forecast_str.split(' ')[1:]) if 'Min' in forecast_str else forecast_str }</div>
-            <div class="metric-sub" style="font-size: 0.65rem; color: #CBD5E1; margin-top:0;">{end_time_str}</div>
-        </div>
-        <div class="metric-item">
-            <div class="metric-label">Kosten</div>
-            <div class="metric-value">{cost_txt}</div>
-            <div class="metric-sub">Laufend</div>
-        </div>
-    </div>
-</div>
-"""
+    """).strip()
     st.markdown(html_content, unsafe_allow_html=True)
 
 
@@ -423,46 +423,44 @@ def render_fleet_overview(PRINTERS: dict):
                         Update: {last_ts}
                     </div>
                 </div>
-            """)
+            """).strip()
             st.markdown(card_html, unsafe_allow_html=True)
             idx += 1
 
 
 def render_link_card(url: str, title: str, subtitle: str, icon: str = "☁️"):
     if not url: return
-    html_content = f"""
-<a href="{url}" target="_blank" class="dashboard-link">
-<div class="dashboard-card" style="display: flex; justify-content: space-between; align-items: center; padding: 24px;">
-<div>
-<div style="display: flex; align-items: center; margin-bottom: 6px;">
-<span style="font-size: 0.75rem; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em;">External Link</span>
-</div>
-<div style="font-size: 1.5rem; font-weight: 800; color: #1E293B; line-height: 1.1;">
-{title}
-</div>
-<div style="font-size: 0.9rem; color: #64748B; margin-top: 4px; font-weight: 500;">
-{subtitle} ➜
-</div>
-</div>
-<div style="background: #F1F5F9; color: #3B82F6; width: 64px; height: 64px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 32px;">
-{icon}
-</div>
-</div>
-</a>
-"""
+    html_content = textwrap.dedent(f"""
+    <a href="{url}" target="_blank" class="dashboard-link">
+    <div class="dashboard-card" style="display: flex; justify-content: space-between; align-items: center; padding: 24px;">
+    <div>
+    <div style="display: flex; align-items: center; margin-bottom: 6px;">
+    <span style="font-size: 0.75rem; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em;">External Link</span>
+    </div>
+    <div style="font-size: 1.5rem; font-weight: 800; color: #1E293B; line-height: 1.1;">
+    {title}
+    </div>
+    <div style="font-size: 0.9rem; color: #64748B; margin-top: 4px; font-weight: 500;">
+    {subtitle} ➜
+    </div>
+    </div>
+    <div style="background: #F1F5F9; color: #3B82F6; width: 64px; height: 64px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 32px;">
+    {icon}
+    </div>
+    </div>
+    </a>
+    """).strip()
     st.markdown(html_content, unsafe_allow_html=True)
 
-# ... (oberer Teil von ui_components.py bleibt) ...
 
 # -----------------------------------------------------------------------------
-# SCREENSAVER / ZEN MODE (NEXT LEVEL)
+# SCREENSAVER / ZEN MODE (FIXED)
 # -----------------------------------------------------------------------------
 
 def inject_screensaver_css():
     """
     Setzt das High-End CSS für den Screensaver.
     """
-    # WICHTIG: Auch hier textwrap verwenden, sonst wird das CSS als Text angezeigt!
     css = textwrap.dedent("""
     <style>
         /* 1. GLOBAL RESET & FONT */
@@ -630,13 +628,10 @@ def inject_screensaver_css():
 
     </style>
     """).strip()
-    
     st.markdown(css, unsafe_allow_html=True)
 
 
 def render_screensaver_content(status_mode, media_remaining, display_text, display_color, timestamp):
-    import textwrap  # Zur Sicherheit lokal importieren
-
     # Farb-Mapping
     color_map = {
         "green":  "16, 185, 129",
@@ -652,8 +647,7 @@ def render_screensaver_content(status_mode, media_remaining, display_text, displ
     clean_text = display_text.replace('✅', '').replace('⚠️', '').replace('🔴', '').replace('🖨️', '').strip()
     
     # HTML Inhalt definieren
-    # WICHTIG: textwrap.dedent entfernt die Einrückung aus dem Python-Code.
-    # .strip() entfernt die erste leere Zeile, die durch f""" entsteht.
+    # textwrap.dedent entfernt die Einrückung, .strip() die führenden Leerzeilen
     html_content = textwrap.dedent(f"""
         <div class="zen-wrapper">
             <div class="zen-count-wrapper">
@@ -686,5 +680,4 @@ def render_screensaver_content(status_mode, media_remaining, display_text, displ
         </div>
     """).strip()
 
-    # Übergabe an Streamlit
     st.markdown(html_content, unsafe_allow_html=True)
