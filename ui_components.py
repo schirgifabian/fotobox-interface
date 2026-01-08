@@ -633,57 +633,56 @@ def inject_screensaver_css():
 
 
 def render_screensaver_content(status_mode, media_remaining, display_text, display_color, timestamp):
-    # Farb-Mapping für den Glow-Effekt
+    import textwrap  # Zur Sicherheit lokal importieren
+
+    # Farb-Mapping
     color_map = {
-        "green":  "16, 185, 129", # Emerald
-        "blue":   "59, 130, 246", # Blue
-        "orange": "245, 158, 11", # Amber
-        "red":    "239, 68, 68",  # Red
-        "gray":   "148, 163, 184" # Slate
+        "green":  "16, 185, 129",
+        "blue":   "59, 130, 246",
+        "orange": "245, 158, 11",
+        "red":    "239, 68, 68",
+        "gray":   "148, 163, 184"
     }
     
-    # Standard fallback
     rgb_val = color_map.get(display_color, "148, 163, 184")
-    
-    # Glow Intensity basierend auf Status
     glow_intensity = "0.4" if display_color in ["green", "blue"] else "0.8"
     
-    # Bereinigung des Textes
     clean_text = display_text.replace('✅', '').replace('⚠️', '').replace('🔴', '').replace('🖨️', '').strip()
     
-    # FIX: textwrap.dedent() verwenden, damit Streamlit das nicht als Code-Block rendert
-    html = textwrap.dedent(f"""
-    <div class="zen-wrapper">
-        
-        <div class="zen-count-wrapper">
-            <div class="zen-label">Verbleibende Aufnahmen</div>
-            
-            <div class="zen-number" style="filter: drop-shadow(0 0 40px rgba({rgb_val}, {glow_intensity}));">
-                {media_remaining}
+    # HTML Inhalt definieren
+    # WICHTIG: textwrap.dedent entfernt die Einrückung aus dem Python-Code.
+    # .strip() entfernt die erste leere Zeile, die durch f""" entsteht.
+    html_content = textwrap.dedent(f"""
+        <div class="zen-wrapper">
+            <div class="zen-count-wrapper">
+                <div class="zen-label">Verbleibende Aufnahmen</div>
+                
+                <div class="zen-number" style="filter: drop-shadow(0 0 40px rgba({rgb_val}, {glow_intensity}));">
+                    {media_remaining}
+                </div>
             </div>
-        </div>
 
-        <div class="zen-status-card">
-            <div class="zen-dot" style="background-color: rgb({rgb_val}); animation: pulseDot 2s infinite;"></div>
-            
-            <div class="zen-status-text">
-                {clean_text}
+            <div class="zen-status-card">
+                <div class="zen-dot" style="background-color: rgb({rgb_val}); animation: pulseDot 2s infinite;"></div>
+                
+                <div class="zen-status-text">
+                    {clean_text}
+                </div>
             </div>
-        </div>
 
-        <div class="zen-footer">
-             SYNCED: {timestamp} &bull; SYSTEM ACTIVE
+            <div class="zen-footer">
+                 SYNCED: {timestamp} &bull; SYSTEM ACTIVE
+            </div>
+            
+            <style>
+                @keyframes pulseDot {{
+                    0% {{ box-shadow: 0 0 0 0 rgba({rgb_val}, 0.6); }}
+                    70% {{ box-shadow: 0 0 0 15px rgba({rgb_val}, 0); }}
+                    100% {{ box-shadow: 0 0 0 0 rgba({rgb_val}, 0); }}
+                }}
+            </style>
         </div>
-        
-        <style>
-            @keyframes pulseDot {{
-                0% {{ box-shadow: 0 0 0 0 rgba({rgb_val}, 0.6); }}
-                70% {{ box-shadow: 0 0 0 15px rgba({rgb_val}, 0); }}
-                100% {{ box-shadow: 0 0 0 0 rgba({rgb_val}, 0); }}
-            }}
-        </style>
+    """).strip()
 
-    </div>
-    """)
-    
-    st.markdown(html, unsafe_allow_html=True)
+    # Übergabe an Streamlit
+    st.markdown(html_content, unsafe_allow_html=True)
