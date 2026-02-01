@@ -411,10 +411,10 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
     st.markdown("### 🛠️ Administration") 
     st.write("")
 
-    tab_paper, tab_report, tab_devices, tab_notify = st.tabs([
-        "🧻 Papier & Reset", 
-        "📊 Report", 
+    tab_devices, tab_paper, tab_report, tab_notify = st.tabs([
         "🔌 Steuerung",
+        "🧻 Papier & Reset", 
+        "📊 Report",
         "🔔 System & Tests"
     ])
 
