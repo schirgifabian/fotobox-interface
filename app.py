@@ -418,70 +418,7 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
         "🔔 System & Tests"
     ])
 
-    # --- TAB 1: PAPIER ---
-    with tab_paper:
-        with st.container(border=True):
-            render_card_header("🧻", "Papierwechsel", "Zähler zurücksetzen und Log leeren", "blue")
-            st.write("")
-            c1, c2 = st.columns([1, 2])
-            with c1:
-                st.caption("Paketgröße wählen")
-                size_options = [200, 400]
-                try: current_size = int(st.session_state.max_prints or printer_cfg["default_max_prints"])
-                except: current_size = printer_cfg["default_max_prints"]
-                idx = 1 if current_size == 400 else 0
-                size = st.radio("Paketgröße", size_options, horizontal=True, index=idx, label_visibility="collapsed", key=f"tab_paper_size_{printer_key}")
-            with c2:
-                st.caption("Notiz (optional)")
-                reset_note = st.text_input("Notiz", key=f"reset_note_{printer_key}", label_visibility="collapsed", placeholder="z.B. neue Rolle eingelegt")
-
-            st.write("")
-            if not st.session_state.confirm_reset:
-                if st.button("Reset durchführen", use_container_width=True, key=f"btn_init_reset_{printer_key}", type="primary"):
-                    st.session_state.confirm_reset = True
-                    st.session_state.temp_package_size = size
-                    st.session_state.temp_reset_note = reset_note
-                    st.rerun()
-            else:
-                st.info(f"Wirklich Log löschen und auf {st.session_state.get('temp_package_size')}er Rolle setzen?")
-                cy, cn = st.columns(2)
-                if cy.button("Ja, Reset ✅", use_container_width=True, key=f"btn_yes_{printer_key}", type="primary"):
-                    st.session_state.max_prints = st.session_state.temp_package_size
-                    try: set_setting("package_size", st.session_state.max_prints)
-                    except: pass
-                    clear_google_sheet()
-                    log_reset_event(st.session_state.temp_package_size, st.session_state.temp_reset_note)
-                    st.session_state.confirm_reset = False
-                    st.session_state.last_warn_status = None
-                    st.rerun()
-                if cn.button("Abbrechen", use_container_width=True, key=f"btn_no_{printer_key}"):
-                    st.session_state.confirm_reset = False
-                    st.rerun()
-
-    # --- TAB 2: REPORT ---
-    with tab_report:
-        with st.container(border=True):
-            render_card_header("📄", "Event Report", "PDF Zusammenfassung generieren", "green")
-            st.write("")
-            st.caption("Erstellt ein PDF mit Verbrauchskurve, Statistiken und den letzten Fehlermeldungen.")
-            if st.button("PDF Bericht erstellen", use_container_width=True, key=f"btn_pdf_{printer_key}"):
-                df_rep = get_data_admin(st.session_state.sheet_id)
-                media_factor = printer_cfg.get("media_factor", 1)
-                stats = compute_print_stats(df_rep, media_factor=media_factor)
-                last_val = 0
-                if not df_rep.empty:
-                    try: last_val = int(df_rep.iloc[-1].get("MediaRemaining", 0)) * media_factor
-                    except: pass
-                prints_done = max(0, (st.session_state.max_prints or 0) - last_val)
-                cost_str = "N/A"
-                cpr = printer_cfg.get("cost_per_roll_eur")
-                if cpr and st.session_state.max_prints:
-                    c_used = prints_done * (cpr / st.session_state.max_prints)
-                    cost_str = f"{c_used:.2f} EUR"
-                pdf_bytes = generate_event_pdf(df=df_rep, printer_name=st.session_state.selected_printer, stats=stats, prints_since_reset=prints_done, cost_info=cost_str, media_factor=media_factor)
-                st.download_button(label="⬇️ PDF jetzt herunterladen", data=pdf_bytes, file_name=f"report_{datetime.date.today()}.pdf", mime="application/pdf", use_container_width=True, key=f"dl_btn_{printer_key}")
-
-# --- TAB 3: DEVICES (SHELLY) ---
+# --- TAB 1: DEVICES (SHELLY) ---
     with tab_devices:
         if not printer_has_shelly and not printer_has_dsr:
             st.info("Keine Geräte konfiguriert.")
@@ -539,6 +476,71 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                         st.session_state.maintenance_mode = new_maint
                         set_setting("maintenance_mode", new_maint)
                         st.rerun()
+
+    # --- TAB 2: PAPIER ---
+    with tab_paper:
+        with st.container(border=True):
+            render_card_header("🧻", "Papierwechsel", "Zähler zurücksetzen und Log leeren", "blue")
+            st.write("")
+            c1, c2 = st.columns([1, 2])
+            with c1:
+                st.caption("Paketgröße wählen")
+                size_options = [200, 400]
+                try: current_size = int(st.session_state.max_prints or printer_cfg["default_max_prints"])
+                except: current_size = printer_cfg["default_max_prints"]
+                idx = 1 if current_size == 400 else 0
+                size = st.radio("Paketgröße", size_options, horizontal=True, index=idx, label_visibility="collapsed", key=f"tab_paper_size_{printer_key}")
+            with c2:
+                st.caption("Notiz (optional)")
+                reset_note = st.text_input("Notiz", key=f"reset_note_{printer_key}", label_visibility="collapsed", placeholder="z.B. neue Rolle eingelegt")
+
+            st.write("")
+            if not st.session_state.confirm_reset:
+                if st.button("Reset durchführen", use_container_width=True, key=f"btn_init_reset_{printer_key}", type="primary"):
+                    st.session_state.confirm_reset = True
+                    st.session_state.temp_package_size = size
+                    st.session_state.temp_reset_note = reset_note
+                    st.rerun()
+            else:
+                st.info(f"Wirklich Log löschen und auf {st.session_state.get('temp_package_size')}er Rolle setzen?")
+                cy, cn = st.columns(2)
+                if cy.button("Ja, Reset ✅", use_container_width=True, key=f"btn_yes_{printer_key}", type="primary"):
+                    st.session_state.max_prints = st.session_state.temp_package_size
+                    try: set_setting("package_size", st.session_state.max_prints)
+                    except: pass
+                    clear_google_sheet()
+                    log_reset_event(st.session_state.temp_package_size, st.session_state.temp_reset_note)
+                    st.session_state.confirm_reset = False
+                    st.session_state.last_warn_status = None
+                    st.rerun()
+                if cn.button("Abbrechen", use_container_width=True, key=f"btn_no_{printer_key}"):
+                    st.session_state.confirm_reset = False
+                    st.rerun()
+
+    # --- TAB 3: REPORT ---
+    with tab_report:
+        with st.container(border=True):
+            render_card_header("📄", "Event Report", "PDF Zusammenfassung generieren", "green")
+            st.write("")
+            st.caption("Erstellt ein PDF mit Verbrauchskurve, Statistiken und den letzten Fehlermeldungen.")
+            if st.button("PDF Bericht erstellen", use_container_width=True, key=f"btn_pdf_{printer_key}"):
+                df_rep = get_data_admin(st.session_state.sheet_id)
+                media_factor = printer_cfg.get("media_factor", 1)
+                stats = compute_print_stats(df_rep, media_factor=media_factor)
+                last_val = 0
+                if not df_rep.empty:
+                    try: last_val = int(df_rep.iloc[-1].get("MediaRemaining", 0)) * media_factor
+                    except: pass
+                prints_done = max(0, (st.session_state.max_prints or 0) - last_val)
+                cost_str = "N/A"
+                cpr = printer_cfg.get("cost_per_roll_eur")
+                if cpr and st.session_state.max_prints:
+                    c_used = prints_done * (cpr / st.session_state.max_prints)
+                    cost_str = f"{c_used:.2f} EUR"
+                pdf_bytes = generate_event_pdf(df=df_rep, printer_name=st.session_state.selected_printer, stats=stats, prints_since_reset=prints_done, cost_info=cost_str, media_factor=media_factor)
+                st.download_button(label="⬇️ PDF jetzt herunterladen", data=pdf_bytes, file_name=f"report_{datetime.date.today()}.pdf", mime="application/pdf", use_container_width=True, key=f"dl_btn_{printer_key}")
+
+
 
     # --- TAB 4: SYSTEM & DIAGNOSE ---
     with tab_notify:
