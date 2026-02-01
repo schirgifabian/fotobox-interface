@@ -682,17 +682,15 @@ def render_power_card(name: str, is_on: bool, power: float, switch_id: int, key_
 
 def render_lock_card_dual(lock_state: str, key_prefix: str):
     """
-    Rendert die Screen-Lock Karte mit ZWEI separaten Buttons (Sperren/Freigeben),
-    da der echte Status unbekannt ist.
+    Rendert die Screen-Lock Karte mit ZWEI separaten Buttons über die volle Breite.
     """
     
-    # --- 1. SVG ICONS ---
+    # Icons
     svg_unlock = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path d="M18 1.5c2.9 0 5.25 2.35 5.25 5.25v3.75a.75.75 0 01-1.5 0V6.75a3.75 3.75 0 10-7.5 0v3a3 3 0 013 3v6.75a3 3 0 01-3 3H3.75a3 3 0 01-3-3v-6.75a3 3 0 013-3h9v-3c0-2.9 2.35-5.25 5.25-5.25z" /></svg>"""
     svg_lock = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path fill-rule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z" clip-rule="evenodd" /></svg>"""
 
-    # --- 2. OPTIK (Nur Anzeige, keine Logik-Abhängigkeit) ---
+    # Farben & Text
     is_locked = (lock_state == "on")
-
     if is_locked:
         main_text = "GESPERRT"
         status_color = "#F59E0B" # Orange
@@ -706,10 +704,11 @@ def render_lock_card_dual(lock_state: str, key_prefix: str):
         pulse_class = "status-pulse-green"
         icon_svg = svg_unlock
 
-    # --- 3. HTML (Ohne Info-Text, Zentriert) ---
+    # HTML: margin-bottom reduziert auf 0px, damit Buttons direkt anschließen
+    # border-bottom-left-radius/right auf 0, damit es mit Buttons wie eins aussieht (optional, hier dezent gelassen)
     html = f"""
-    <div class="dashboard-card" style="padding: 20px; margin-bottom: 8px; height: 100%;">
-        <div style="display: flex; justify-content: space-between; align-items: center; height: 100%;">
+    <div class="dashboard-card" style="padding: 20px; margin-bottom: 8px; height: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
             <div>
                 <div style="display: flex; align-items: center; margin-bottom: 6px;">
                     <span class="{pulse_class} status-dot"></span>
@@ -727,18 +726,17 @@ def render_lock_card_dual(lock_state: str, key_prefix: str):
     """
     st.markdown(html, unsafe_allow_html=True)
     
-    # --- 4. ZWEI BUTTONS ---
-    # Wir geben zurück, was geklickt wurde: "lock", "unlock" oder None
+    # Action Buttons
     c1, c2 = st.columns(2)
     action = None
     
     with c1:
-        # Button zum Sperren
+        # Button: Sperren (Links)
         if st.button("Sperren 🔒", key=f"btn_lock_{key_prefix}", use_container_width=True):
             action = "lock"
             
     with c2:
-        # Button zum Freigeben
+        # Button: Freigeben (Rechts)
         if st.button("Freigeben 🔓", key=f"btn_unlock_{key_prefix}", use_container_width=True):
             action = "unlock"
             
