@@ -13,7 +13,8 @@ import extra_streamlit_components as stx
 import pandas as pd
 import plotly.express as px
 
-from aqara_client import AqaraClient
+# --- NEU: Shelly Client Import ---
+from shelly_client import ShellyClient
 from report_generator import generate_event_pdf
 from sheets_helpers import (
     get_data,
@@ -54,7 +55,7 @@ PRINTERS = {
         "default_max_prints": 400,
         "cost_per_roll_eur": 46.59,
         "has_admin": True,
-        "has_aqara": False,
+        "has_shelly": True,  # Shelly aktiviert
         "has_dsr": True,
         "media_factor": 1,
         "fotoshare_url": "https://fotoshare.co/account/login",
@@ -65,7 +66,7 @@ PRINTERS = {
         "default_max_prints": 200,
         "cost_per_roll_eur": 55,
         "has_admin": True,
-        "has_aqara": False,
+        "has_shelly": False, 
         "has_dsr": False,
         "media_factor": 0.5,
         "fotoshare_url": "https://weinkellerei.tirol/fame",
@@ -87,19 +88,12 @@ def check_login():
         return
 
     cookie_manager = get_cookie_manager()
-    
-    # Manager Referenz speichern
     st.session_state["cookie_manager_ref"] = cookie_manager
 
-    # --- FIX START: Manuellen Logout prüfen ---
-    # Wenn der Nutzer gerade "Ausloggen" geklickt hat, ignorieren wir das Cookie
-    # für diesen Durchlauf, damit der Browser Zeit hat, es zu löschen.
     if st.session_state.get("manual_logout", False):
         st.session_state["manual_logout"] = False # Reset für das nächste Mal
         st.session_state["is_logged_in"] = False
-        # Wir springen direkt zum Login-Formular weiter unten
     else:
-        # Normaler Check: Cookie lesen
         cookie_val = cookie_manager.get("auth_pin")
 
         if st.session_state.get("is_logged_in", False):
@@ -108,7 +102,6 @@ def check_login():
         if cookie_val is not None and str(cookie_val) == secret_pin:
             st.session_state["is_logged_in"] = True
             return True
-    # --- FIX END ---
 
     st.title("Dashboard dieFotobox.")
     msg_placeholder = st.empty()
@@ -173,19 +166,30 @@ def send_dsr_command(cmd: str) -> None:
     except Exception: pass
 
 # --------------------------------------------------------------------
-# AQARA
+# SHELLY INIT (CLOUD)
 # --------------------------------------------------------------------
-def init_aqara() -> Tuple[bool, Optional[AqaraClient], Optional[str], str]:
+def init_shelly():
+    """
+    Lädt Shelly Cloud Auth Key und Device ID aus Google Sheets.
+    """
     try:
-        if "aqara" not in st.secrets: return False, None, None, "4.1.85"
-        aqara_cfg = st.secrets["aqara"]
-        client = AqaraClient()
-        return True, client, aqara_cfg["device_id"], aqara_cfg.get("resource_id", "4.1.85")
+        default_url = "https://shelly-api-eu.shelly.cloud:6022/jrpc"
+        
+        # Einstellungen aus Google Sheet laden (oder Default nutzen)
+        cloud_url = get_setting("shelly_cloud_url", default_url)
+        auth_key = get_setting("shelly_auth_key")
+        device_id = get_setting("shelly_device_id")
+        
+        if auth_key and device_id:
+            # URL Sanitizing
+            if not cloud_url: cloud_url = default_url
+            if not cloud_url.startswith("http"): cloud_url = f"https://{cloud_url}"
+            
+            return ShellyClient(cloud_url, auth_key, device_id)
+            
     except Exception as e:
-        print(f"Aqara Init Fehler: {e}")
-        return False, None, None, "4.1.85"
-
-AQARA_ENABLED, aqara_client, AQARA_SOCKET_DEVICE_ID, AQARA_SOCKET_RESOURCE_ID = init_aqara()
+        print(f"Shelly Init Fehler: {e}")
+    return None
 
 
 # --------------------------------------------------------------------
@@ -199,8 +203,6 @@ def init_session_state():
         "last_sound_status": None,
         "max_prints": None,
         "selected_printer": None,
-        "socket_state": "unknown",
-        "socket_debug": None,
         "lockscreen_state": "off",
         "maintenance_mode": False,
     }
@@ -229,19 +231,9 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
         
         status_mode, display_text, display_color, push, minutes_diff = evaluate_status(
             raw_status, media_remaining, timestamp, 
-            maintenance_active=maint_active # Wichtig: Maintenance Status übergeben!
+            maintenance_active=maint_active 
         )
 
-        # --- ÄNDERUNG HIER: ---
-        # Wir senden KEINEN Push mehr von der UI aus. 
-        # Das macht jetzt exklusiv die monitor.py!
-        # Der 'push'-Return-Wert wird nur noch für interne Logik (z.B. Toasts im Browser) genutzt, falls gewünscht.
-        
-        # if push is not None:
-        #    title, msg, tags = push
-        #    send_ntfy_push(title, msg, tags=tags)  <-- DIESE ZEILEN AUSKOMMENTIEREN ODER LÖSCHEN
-        
-        # Sound darf bleiben, da er nur im Browser des Betrachters abgespielt wird
         maybe_play_sound(status_mode, sound_enabled)
         heartbeat_info = f" (vor {minutes_diff} Min)" if minutes_diff is not None else ""
 
@@ -313,8 +305,6 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
     df_hist = df_hist.copy()
     df_hist["RemainingPrints"] = df_hist["MediaRemaining"] * media_factor
 
-    # --- NEU: PLOTLY CHART ---
-    # Wir erstellen ein interaktives Liniendiagramm
     fig = px.line(
         df_hist, 
         y="RemainingPrints", 
@@ -323,19 +313,16 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
         template="plotly_white"
     )
     
-    # Styling: Blaue Linie, etwas dicker
     fig.update_traces(line_color='#3B82F6', line_width=3)
     
-    # Layout: Hover-Effekt, Achsen formatieren
     fig.update_layout(
         hovermode="x unified",
         height=350,
         margin=dict(l=20, r=20, t=40, b=20),
-        yaxis=dict(rangemode="tozero") # Y-Achse startet immer bei 0
+        yaxis=dict(rangemode="tozero") 
     )
     
     st.plotly_chart(fig, use_container_width=True)
-    # -------------------------
 
     stats = compute_print_stats(df, window_min=30, media_factor=media_factor)
     last_remaining = int(df_hist["RemainingPrints"].iloc[-1])
@@ -352,20 +339,19 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
 
 
 # --------------------------------------------------------------------
-# ADMIN PANEL (DESIGN UPDATE)
+# ADMIN PANEL (DESIGN UPDATE & SHELLY)
 # --------------------------------------------------------------------
 def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, printer_key: str) -> None:
     """
-    Admin-Bereich mit Dashboard-Look (Cards statt Tabs für Inhalt).
+    Admin-Bereich mit Dashboard-Look.
     """
-    printer_has_aqara = printer_cfg.get("has_aqara", False)
+    printer_has_shelly = printer_cfg.get("has_shelly", False)
     printer_has_dsr = printer_cfg.get("has_dsr", False)
 
     st.write("")
     st.markdown("### 🛠️ Administration") 
     st.write("")
 
-    # Tabs als Navigation oben behalten, aber Inhalte als "Cards" rendern
     tab_paper, tab_report, tab_devices, tab_notify = st.tabs([
         "🧻 Papier & Reset", 
         "📊 Report", 
@@ -377,7 +363,6 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
     # TAB 1: PAPIERWECHSEL CARD
     # ------------------------------------------------------------------
     with tab_paper:
-        # Nutzung von st.container(border=True), der via CSS gestylt ist
         with st.container(border=True):
             render_card_header(
                 icon="🧻", 
@@ -385,9 +370,7 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                 subtitle="Zähler zurücksetzen und Log leeren",
                 color_class="blue"
             )
-            
-            st.write("") # Spacer
-
+            st.write("")
             c1, c2 = st.columns([1, 2])
             with c1:
                 st.caption("Paketgröße wählen")
@@ -400,16 +383,13 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                     "Paketgröße", size_options, horizontal=True, index=idx,
                     label_visibility="collapsed", key=f"tab_paper_size_{printer_key}"
                 )
-            
             with c2:
                 st.caption("Notiz (optional)")
                 reset_note = st.text_input(
                     "Notiz", key=f"reset_note_{printer_key}", label_visibility="collapsed",
                     placeholder="z.B. neue Rolle eingelegt"
                 )
-
             st.write("")
-            
             if not st.session_state.confirm_reset:
                 if st.button("Reset durchführen", use_container_width=True, key=f"btn_init_reset_{printer_key}", type="primary"):
                     st.session_state.confirm_reset = True
@@ -444,12 +424,7 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                 color_class="green"
             )
             st.write("")
-            st.markdown(
-                """<div style="font-size: 0.9rem; color: #64748B; margin-bottom: 16px;">
-                Erstellt ein PDF mit Verbrauchskurve, Statistiken und den letzten Fehlermeldungen.
-                </div>""", 
-                unsafe_allow_html=True
-            )
+            st.caption("Erstellt ein PDF mit Verbrauchskurve, Statistiken und den letzten Fehlermeldungen.")
 
             if st.button("PDF Bericht erstellen", use_container_width=True, key=f"btn_pdf_{printer_key}"):
                 df_rep = get_data_admin(st.session_state.sheet_id)
@@ -484,62 +459,85 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                 )
 
     # ------------------------------------------------------------------
-    # TAB 3: DEVICES CARDS
+    # TAB 3: DEVICES CARDS (SHELLY CLOUD INTEGRATION)
     # ------------------------------------------------------------------
     with tab_devices:
-        if not printer_has_aqara and not printer_has_dsr:
+        if not printer_has_shelly and not printer_has_dsr:
             st.info("Keine Geräte konfiguriert.")
         else:
-            col_aqara, col_dsr = st.columns(2)
-
-            # --- Aqara Card ---
-            with col_aqara:
+            # 1. SHELLY
+            if printer_has_shelly:
+                shelly_client = init_shelly()
+                
                 with st.container(border=True):
-                    status_text = "N/A"
-                    status_color = "slate"
-                    
-                    if printer_has_aqara and AQARA_ENABLED:
-                        if st.session_state.socket_state == "on":
-                            status_text = "AN"
-                            status_color = "green"
-                        elif st.session_state.socket_state == "off":
-                            status_text = "AUS"
-                            status_color = "slate"
-                        else:
-                            # Try fetch current state
-                            try:
-                                curr, _ = aqara_client.get_socket_state(AQARA_SOCKET_DEVICE_ID, AQARA_SOCKET_RESOURCE_ID)
-                                st.session_state.socket_state = curr
-                                if curr == "on": 
-                                    status_text = "AN"
-                                    status_color = "green"
-                                elif curr == "off": 
-                                    status_text = "AUS"
-                                    status_color = "slate"
-                            except: pass
-
                     render_card_header(
                         icon="⚡", 
-                        title="Strom", 
-                        subtitle=f"Status: {status_text}",
-                        color_class=status_color
+                        title="Stromversorgung", 
+                        subtitle="Shelly Cloud Control",
+                        color_class="green"
                     )
                     
-                    if printer_has_aqara and AQARA_ENABLED:
-                        ca, cb = st.columns(2)
-                        if ca.button("An", key=f"aq_on_{printer_key}", use_container_width=True):
-                            aqara_client.switch_socket(AQARA_SOCKET_DEVICE_ID, True, AQARA_SOCKET_RESOURCE_ID)
-                            st.session_state.socket_state = "on"
-                            st.rerun()
-                        if cb.button("Aus", key=f"aq_off_{printer_key}", use_container_width=True):
-                            aqara_client.switch_socket(AQARA_SOCKET_DEVICE_ID, False, AQARA_SOCKET_RESOURCE_ID)
-                            st.session_state.socket_state = "off"
-                            st.rerun()
+                    if not shelly_client:
+                        st.warning("Shelly Cloud nicht konfiguriert. Bitte 'shelly_auth_key' und 'shelly_device_id' in Google Sheets (Settings) eintragen.")
                     else:
-                        st.caption("Nicht verfügbar")
+                        # Status holen (Dauert via Cloud kurz)
+                        with st.spinner("Lade Status aus der Cloud..."):
+                            status_data = shelly_client.get_status()
+                        
+                        # Config laden
+                        try:
+                            config_json = get_setting("shelly_config", "{}")
+                            shelly_config = json.loads(config_json)
+                        except:
+                            shelly_config = {}
+                            st.error("Shelly Config JSON Fehler in Google Sheets.")
 
-            # --- DSR Card ---
-            with col_dsr:
+                        if not status_data:
+                            st.error("Keine Antwort von der Shelly Cloud API.")
+                        else:
+                            # Wir loopen durch die Config (definiert im Google Sheet)
+                            sorted_keys = sorted(shelly_config.keys())
+                            
+                            if not sorted_keys:
+                                st.info("Keine Steckdosen in 'shelly_config' definiert.")
+                            
+                            for switch_idx_str in sorted_keys:
+                                cfg = shelly_config[switch_idx_str]
+                                switch_id = int(switch_idx_str)
+                                name = cfg.get("name", f"Socket {switch_id}")
+                                icon = cfg.get("icon", "🔌")
+                                
+                                # Daten aus API Response extrahieren
+                                # Gen4 Structure via Cloud: switch:ID Key
+                                switch_key = f"switch:{switch_id}"
+                                switch_data = status_data.get(switch_key, {})
+                                is_on = switch_data.get("output", False)
+                                power = switch_data.get("apower", 0.0)
+                                
+                                # UI Zeile
+                                c_icon, c_name, c_power, c_btn = st.columns([1, 4, 2, 2])
+                                with c_icon: st.write(f"### {icon}")
+                                with c_name: 
+                                    st.write(f"**{name}**")
+                                    st.caption(f"Status: {'AN' if is_on else 'AUS'}")
+                                with c_power:
+                                    st.metric("Verbrauch", f"{power:.1f} W", label_visibility="collapsed")
+                                with c_btn:
+                                    # Unique Key für jeden Button!
+                                    btn_key = f"sh_btn_{printer_key}_{switch_id}"
+                                    if is_on:
+                                        if st.button("Abschalten", key=btn_key):
+                                            shelly_client.set_switch(switch_id, False)
+                                            st.rerun()
+                                    else:
+                                        if st.button("Einschalten", key=btn_key, type="primary"):
+                                            shelly_client.set_switch(switch_id, True)
+                                            st.rerun()
+                                st.divider()
+
+            # 2. DSR
+            if printer_has_dsr:
+                st.write("")
                 with st.container(border=True):
                     lock_state = st.session_state.get("lockscreen_state", "off")
                     l_color = "orange" if lock_state == "on" else "slate"
@@ -552,7 +550,7 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                         color_class=l_color
                     )
 
-                    if printer_has_dsr and DSR_ENABLED:
+                    if DSR_ENABLED:
                         la, lb = st.columns(2)
                         if la.button("Sperren", key=f"dsr_l_{printer_key}", use_container_width=True):
                             send_dsr_command("lock_on")
@@ -568,23 +566,19 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
             st.write("")
             with st.container(border=True):
                 is_maint = st.session_state.get("maintenance_mode", False)
-            
-                # Header rendern
                 render_card_header(
                     icon="🚚", 
                     title="Box im Lager", 
-                    subtitle="Transport & Lagerung",
-                    color_class="slate" if is_maint else "green" # Grau wenn aktiv, sonst grün (oder umgekehrt, wie du magst)
+                    subtitle="Unterdrückt Warnungen",
+                    color_class="slate" if is_maint else "green"
                 )
             
                 c_text, c_toggle = st.columns([3, 1])
                 with c_text:
-                    st.caption("Unterdrückt 'Keine Verbindung' Warnungen und Push-Nachrichten.")
+                    st.caption("Push-Nachrichten pausieren.")
             
                 with c_toggle:
-                    # Toggle
                     new_maint = st.toggle("Aktiv", value=is_maint, key=f"toggle_maint_{printer_key}")
-                
                     if new_maint != is_maint:
                         st.session_state.maintenance_mode = new_maint
                         set_setting("maintenance_mode", new_maint)
@@ -602,11 +596,8 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                 color_class="orange"
             )
             st.write("")
-            
-            # Topic Info
             st.caption("Konfiguriertes Topic")
             st.code(st.session_state.ntfy_topic or "Kein Topic", language="text")
-
             st.write("---")
             
             c_test, c_sim = st.columns(2)
@@ -633,63 +624,51 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                     maybe_play_sound(mode, st.session_state.sound_enabled)
                     st.toast(f"Simulation {mode} gesendet")
 
-
 # --------------------------------------------------------------------
 # Screensaver
 # --------------------------------------------------------------------
-
-
 @st.fragment(run_every=10)
 def run_screensaver_loop(media_factor: int):
     # Daten holen
     df = get_data(st.session_state.sheet_id, event_mode=True)
-    
     if df.empty:
         st.warning("Warte auf Daten...")
         return
 
     try:
         last = df.iloc[-1]
-        full_timestamp = str(last.get("Timestamp", "")) # Voller Zeitstempel für die Logik
-        display_timestamp = full_timestamp[-8:]         # Nur Uhrzeit für die Anzeige
+        full_timestamp = str(last.get("Timestamp", "")) 
+        display_timestamp = full_timestamp[-8:]         
         raw_status = str(last.get("Status", ""))
         
         try: media_remaining = int(last.get("MediaRemaining", 0)) * media_factor
         except: media_remaining = 0
         
-        # Hier full_timestamp übergeben!
         status_mode, display_text, display_color, _, _ = evaluate_status(
             raw_status, media_remaining, full_timestamp
         )
         
-        # HIER NUR NOCH CONTENT RENDERN, KEIN CSS MEHR
         render_screensaver_content(
             status_mode=status_mode,
             media_remaining=media_remaining,
             display_text=display_text,
             display_color=display_color,
-            timestamp=display_timestamp # Hier die gekürzte Version nutzen
+            timestamp=display_timestamp 
         )
         
-        # Der Button wird nun via CSS am unteren Rand fixiert
         if st.button("Beenden", key="btn_exit_saver"):
             st.session_state.screensaver_mode = False
             st.rerun()
 
     except Exception as e:
-        # Im Screensaver Fehler lieber dezent anzeigen oder ignorieren
         print(f"Screensaver Error: {e}")
-
 
 # --------------------------------------------------------------------
 # MAIN
 # --------------------------------------------------------------------
 def main():
     st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="centered")
-    
-    # 1. CSS laden
     inject_custom_css()
-    
     init_session_state()
     check_login()
 
@@ -705,8 +684,6 @@ def main():
         return
     # -------------------------
 
-    # --- DEFINITION DER PROFILE/LOGOUT SIDEBAR FUNKTION ---
-    # Damit können wir das Profil immer ganz am Ende rendern
     def render_sidebar_profile():
         with st.sidebar:
             st.write("---")
@@ -729,12 +706,8 @@ def main():
                     time.sleep(0.5) 
                     st.rerun()
     
-    # --- SIDEBAR TEIL 1: NAVIGATION ---
     with st.sidebar:
-        # HEADER
         st.markdown("### ⚙️ Control Panel")
-        
-        # 1. NAVIGATION & AUSWAHL (JETZT OBEN)
         with st.container(border=True):
             st.markdown("#### Navigation")
             view_mode = st.radio(
@@ -743,7 +716,6 @@ def main():
                 label_visibility="collapsed"
             )
 
-            # Dropdown nur zeigen, wenn nötig
             if view_mode != "Alle Boxen":
                 st.write("") 
                 st.markdown("#### Aktives Gerät")
@@ -756,21 +728,13 @@ def main():
                 printer_name = None
 
     # --- LOGIK WEICHE ---
-    
-    # FALL 1: FLEET OVERVIEW (Alle Boxen)
-    # Wenn wir hier rein gehen, beenden wir die Funktion danach mit 'return'.
-    # Das spart uns Einrückungs-Probleme für den Rest.
     if view_mode == "Alle Boxen":
-        # Sidebar Footer rendern
         render_sidebar_profile()
-        
         st.title(f"{PAGE_ICON} {PAGE_TITLE}")
         render_fleet_overview(PRINTERS)
         return 
 
     # --- FALL 2: EINZELANSICHT ---
-    # Ab hier läuft der Code für die Einzelansicht weiter.
-    
     printer_cfg = PRINTERS[printer_name]
     printer_key = printer_cfg["key"]
     media_factor = printer_cfg.get("media_factor", 2)
@@ -791,7 +755,6 @@ def main():
     st.session_state.sheet_id = sheet_id
     st.session_state.ntfy_topic = ntfy_topic
     
-    # Reset Logic bei Druckerwechsel
     if st.session_state.selected_printer != printer_name:
         st.session_state.selected_printer = printer_name
         st.session_state.confirm_reset = False
@@ -803,13 +766,9 @@ def main():
         try: st.session_state.maintenance_mode = (str(get_setting("maintenance_mode", "False")).lower() == "true")
         except: st.session_state.maintenance_mode = False
 
-    # --- SIDEBAR TEIL 2: SETTINGS ---
-    # Diese Boxen zeigen wir nur in der Einzelansicht an
     with st.sidebar:
         with st.container(border=True):
             st.markdown("#### Einstellungen")
-            
-            # Init Session Vars
             if "ntfy_active" not in st.session_state:
                 try: st.session_state.ntfy_active = str(get_setting("ntfy_active", str(NTFY_ACTIVE_DEFAULT))).lower() == "true"
                 except: st.session_state.ntfy_active = NTFY_ACTIVE_DEFAULT
@@ -818,7 +777,6 @@ def main():
                 except: st.session_state.event_mode = False
             if "sound_enabled" not in st.session_state: st.session_state.sound_enabled = False
 
-            # UI Layout (Schön ausgerichtet)
             c_txt, c_tog = st.columns([3, 1])
             with c_txt: st.markdown('<div class="settings-row">Event-Ansicht</div>', unsafe_allow_html=True)
             with c_tog: event_mode = st.toggle("Event", value=st.session_state.event_mode, label_visibility="collapsed")
@@ -831,7 +789,6 @@ def main():
             with c_txt: st.markdown('<div class="settings-row">Push Nachrichten</div>', unsafe_allow_html=True)
             with c_tog: ntfy_active_ui = st.toggle("Push", value=st.session_state.ntfy_active, label_visibility="collapsed")
 
-            # Logic Update & Save
             if event_mode != st.session_state.event_mode:
                 st.session_state.event_mode = event_mode
                 try: set_setting("default_view", "event" if event_mode else "admin")
@@ -842,7 +799,6 @@ def main():
                 except: pass
             st.session_state.sound_enabled = sound_enabled
 
-        # Zen Mode Button
         with st.container(border=True):
              c1, c2 = st.columns([1, 4])
              with c1: st.write("🖥️")
@@ -851,10 +807,8 @@ def main():
                     st.session_state.screensaver_mode = True
                     st.rerun()
 
-    # JETZT: Sidebar Footer rendern (für Einzelansicht)
     render_sidebar_profile()
 
-    # --- HAUPTBEREICH RENDERN ---
     st.title(f"{PAGE_ICON} {PAGE_TITLE}")
     
     view_event_mode = event_mode or not printer_has_admin
