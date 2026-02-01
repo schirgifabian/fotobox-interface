@@ -347,8 +347,6 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
         st.warning("Shelly Client nicht initialisiert.")
         return
 
-    # Daten frisch von der Cloud holen
-    # Wir nutzen hier keinen Spinner, da das alle 5 Sek passiert und nerven würde
     try:
         status_data = shelly_client.get_status()
     except Exception:
@@ -363,37 +361,40 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
         st.info("Keine Steckdosen konfiguriert.")
         return
 
-    # Grid Layout für die Karten (2 nebeneinander falls mehrere Dosen)
-    cols = st.columns(len(sorted_keys)) if len(sorted_keys) > 1 else [st.container()]
+    # --- ÄNDERUNG: 2x2 Grid Layout ---
+    # Wir erstellen fix 2 Spalten
+    grid_cols = st.columns(2)
 
     for i, switch_idx_str in enumerate(sorted_keys):
         cfg = shelly_config[switch_idx_str]
         switch_id = int(switch_idx_str)
         name = cfg.get("name", f"Socket {switch_id}")
-        
+        icon_type = cfg.get("icon", "bolt") 
+
         switch_key = f"switch:{switch_id}"
         switch_data = status_data.get(switch_key, {})
         is_on = switch_data.get("output", False)
         power = float(switch_data.get("apower", 0.0))
         
-        # Rendern in die entsprechende Spalte
-        with cols[i if len(sorted_keys) > 1 else 0]:
-            # Unsere neue schicke Card aufrufen
+        # Logik: 
+        # i % 2 == 0 -> Linke Spalte (Index 0)
+        # i % 2 == 1 -> Rechte Spalte (Index 1)
+        with grid_cols[i % 2]:
             toggle_clicked = render_power_card(
                 name=name,
                 is_on=is_on,
                 power=power,
                 switch_id=switch_id,
-                key_prefix=printer_key
+                key_prefix=printer_key,
+                icon_type=icon_type 
             )
 
             if toggle_clicked:
-                # Aktion ausführen
                 new_state = not is_on
                 st.toast(f"Schalte {name} {'AN' if new_state else 'AUS'}...", icon="🔌")
                 shelly_client.set_switch(switch_id, new_state)
-                time.sleep(1) # Kurz warten für Cloud Propagierung
-                st.rerun() # Fragment neu laden um Status zu aktualisieren
+                time.sleep(1)
+                st.rerun()
 
 
 
