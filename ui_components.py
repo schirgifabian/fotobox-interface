@@ -680,72 +680,66 @@ def render_power_card(name: str, is_on: bool, power: float, switch_id: int, key_
     return False
 
 
-def render_lock_card(lock_state: str, key_prefix: str):
+def render_lock_card_dual(lock_state: str, key_prefix: str):
     """
-    Rendert eine Kachel für den Screen-Lock im exakt gleichen Design wie die Power-Kachel.
-    lock_state: "on" (Gesperrt) oder "off" (Frei)
+    Rendert die Screen-Lock Karte mit ZWEI separaten Buttons (Sperren/Freigeben),
+    da der echte Status unbekannt ist.
     """
     
     # --- 1. SVG ICONS ---
-    # Schloss offen
     svg_unlock = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path d="M18 1.5c2.9 0 5.25 2.35 5.25 5.25v3.75a.75.75 0 01-1.5 0V6.75a3.75 3.75 0 10-7.5 0v3a3 3 0 013 3v6.75a3 3 0 01-3 3H3.75a3 3 0 01-3-3v-6.75a3 3 0 013-3h9v-3c0-2.9 2.35-5.25 5.25-5.25z" /></svg>"""
-    
-    # Schloss zu
     svg_lock = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path fill-rule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z" clip-rule="evenodd" /></svg>"""
 
-    # --- 2. LOGIK & FARBEN ---
+    # --- 2. OPTIK (Nur Anzeige, keine Logik-Abhängigkeit) ---
     is_locked = (lock_state == "on")
 
     if is_locked:
-        # Status: GESPERRT (Orange/Warnung)
         main_text = "GESPERRT"
         status_color = "#F59E0B" # Orange
         bg_color = "#FFFBEB"
         pulse_class = "status-pulse-orange"
         icon_svg = svg_lock
-        status_sub_text = "TOUCH INAKTIV"
-        
-        # Button Logik
-        btn_label = "Freigeben"
-        btn_type = "primary" # Hervorgehoben zum Entsperren
     else:
-        # Status: FREI (Grün/OK)
         main_text = "FREI"
         status_color = "#10B981" # Grün
         bg_color = "#ECFDF5"
         pulse_class = "status-pulse-green"
         icon_svg = svg_unlock
-        status_sub_text = "TOUCH AKTIV"
-        
-        # Button Logik
-        btn_label = "Sperren"
-        btn_type = "secondary" # Dezent
 
-    # --- 3. HTML RENDERING (Identisch zur Power Card) ---
+    # --- 3. HTML (Ohne Info-Text, Zentriert) ---
     html = f"""
-    <div class="dashboard-card" style="padding: 20px; margin-bottom: 12px; height: 100%;">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+    <div class="dashboard-card" style="padding: 20px; margin-bottom: 8px; height: 100%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; height: 100%;">
             <div>
-                <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                <div style="display: flex; align-items: center; margin-bottom: 6px;">
                     <span class="{pulse_class} status-dot"></span>
                     <span style="font-size: 0.75rem; font-weight: 700; color: #94A3B8; letter-spacing: 0.05em; text-transform: uppercase;">Screen Modus</span>
                 </div>
-                <div style="display: flex; align-items: baseline; gap: 4px;">
-                    <span style="font-size: 1.8rem; font-weight: 800; color: #1E293B; font-variant-numeric: tabular-nums;">{main_text}</span>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #1E293B; font-variant-numeric: tabular-nums; line-height: 1;">
+                    {main_text}
                 </div>
             </div>
             <div style="background: {bg_color}; color: {status_color}; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 2px 4px 0 rgba(0,0,0,0.05);">
                 {icon_svg}
             </div>
         </div>
-        <div style="margin-top: 12px; font-size: 0.8rem; color: #64748B; font-weight: 500; display: flex; justify-content: space-between; align-items: center;">
-            <span>Info: <span style="color: {status_color}; font-weight: 700;">{status_sub_text}</span></span>
-        </div>
     </div>
     """
     st.markdown(html, unsafe_allow_html=True)
     
-    # Button gibt True zurück, wenn geklickt
-    if st.button(btn_label, key=f"lock_btn_{key_prefix}", type=btn_type, use_container_width=True):
-        return True
-    return False
+    # --- 4. ZWEI BUTTONS ---
+    # Wir geben zurück, was geklickt wurde: "lock", "unlock" oder None
+    c1, c2 = st.columns(2)
+    action = None
+    
+    with c1:
+        # Button zum Sperren
+        if st.button("Sperren 🔒", key=f"btn_lock_{key_prefix}", use_container_width=True):
+            action = "lock"
+            
+    with c2:
+        # Button zum Freigeben
+        if st.button("Freigeben 🔓", key=f"btn_unlock_{key_prefix}", use_container_width=True):
+            action = "unlock"
+            
+    return action
