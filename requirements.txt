@@ -1,0 +1,11 @@
+streamlit
+gspread
+google-auth
+requests
+streamlit-lottie
+streamlit-autorefresh
+extra-streamlit-components
+fpdf2
+matplotlib
+numpy
+plotly
