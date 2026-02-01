@@ -39,7 +39,8 @@ from ui_components import (
     render_link_card,
     render_card_header,
     inject_screensaver_css,
-    render_screensaver_content
+    render_screensaver_content,
+    render_power_card
 )
 
 # --------------------------------------------------------------------
@@ -337,6 +338,66 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
 
 
 # --------------------------------------------------------------------
+# Fragment-Funktion für shelly Stekdose
+# --------------------------------------------------------------------
+
+@st.fragment(run_every=5)  # Aktualisiert sich alle 5 Sekunden selbstständig!
+def render_shelly_monitor(printer_key, shelly_client, shelly_config):
+    if not shelly_client:
+        st.warning("Shelly Client nicht initialisiert.")
+        return
+
+    # Daten frisch von der Cloud holen
+    # Wir nutzen hier keinen Spinner, da das alle 5 Sek passiert und nerven würde
+    try:
+        status_data = shelly_client.get_status()
+    except Exception:
+        status_data = {}
+
+    if not status_data:
+        st.caption("⚠️ Keine Verbindung zur Shelly Cloud / Offline.")
+        return
+
+    sorted_keys = sorted(shelly_config.keys())
+    if not sorted_keys:
+        st.info("Keine Steckdosen konfiguriert.")
+        return
+
+    # Grid Layout für die Karten (2 nebeneinander falls mehrere Dosen)
+    cols = st.columns(len(sorted_keys)) if len(sorted_keys) > 1 else [st.container()]
+
+    for i, switch_idx_str in enumerate(sorted_keys):
+        cfg = shelly_config[switch_idx_str]
+        switch_id = int(switch_idx_str)
+        name = cfg.get("name", f"Socket {switch_id}")
+        
+        switch_key = f"switch:{switch_id}"
+        switch_data = status_data.get(switch_key, {})
+        is_on = switch_data.get("output", False)
+        power = float(switch_data.get("apower", 0.0))
+        
+        # Rendern in die entsprechende Spalte
+        with cols[i if len(sorted_keys) > 1 else 0]:
+            # Unsere neue schicke Card aufrufen
+            toggle_clicked = render_power_card(
+                name=name,
+                is_on=is_on,
+                power=power,
+                switch_id=switch_id,
+                key_prefix=printer_key
+            )
+
+            if toggle_clicked:
+                # Aktion ausführen
+                new_state = not is_on
+                st.toast(f"Schalte {name} {'AN' if new_state else 'AUS'}...", icon="🔌")
+                shelly_client.set_switch(switch_id, new_state)
+                time.sleep(1) # Kurz warten für Cloud Propagierung
+                st.rerun() # Fragment neu laden um Status zu aktualisieren
+
+
+
+# --------------------------------------------------------------------
 # ADMIN PANEL (MIT SHELLY & DIAGNOSE)
 # --------------------------------------------------------------------
 def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, printer_key: str) -> None:
@@ -420,7 +481,7 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                 pdf_bytes = generate_event_pdf(df=df_rep, printer_name=st.session_state.selected_printer, stats=stats, prints_since_reset=prints_done, cost_info=cost_str, media_factor=media_factor)
                 st.download_button(label="⬇️ PDF jetzt herunterladen", data=pdf_bytes, file_name=f"report_{datetime.date.today()}.pdf", mime="application/pdf", use_container_width=True, key=f"dl_btn_{printer_key}")
 
-    # --- TAB 3: DEVICES (SHELLY) ---
+# --- TAB 3: DEVICES (SHELLY) ---
     with tab_devices:
         if not printer_has_shelly and not printer_has_dsr:
             st.info("Keine Geräte konfiguriert.")
@@ -430,14 +491,11 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                 shelly_client = init_shelly()
                 
                 with st.container(border=True):
-                    render_card_header("⚡", "Stromversorgung", "Shelly Cloud Control", "green")
+                    render_card_header("⚡", "Stromversorgung", "Live Monitoring", "green")
                     
                     if not shelly_client:
                         st.warning("Shelly Cloud nicht konfiguriert (Settings prüfen).")
                     else:
-                        with st.spinner("Lade Status aus der Cloud..."):
-                            status_data = shelly_client.get_status()
-                        
                         try:
                             config_json = get_setting("shelly_config", "{}")
                             shelly_config = json.loads(config_json)
@@ -445,45 +503,8 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                             shelly_config = {}
                             st.error("Shelly Config Fehler in Google Sheets.")
 
-                        if not status_data:
-                            st.error("Keine Antwort von der Shelly Cloud API.")
-                        else:
-                            sorted_keys = sorted(shelly_config.keys())
-                            if not sorted_keys:
-                                st.info("Keine Steckdosen in 'shelly_config' definiert.")
-                            
-                            for switch_idx_str in sorted_keys:
-                                cfg = shelly_config[switch_idx_str]
-                                switch_id = int(switch_idx_str)
-                                name = cfg.get("name", f"Socket {switch_id}")
-                                icon = cfg.get("icon", "🔌")
-                                
-                                # Gen4 via Cloud Structure
-                                switch_key = f"switch:{switch_id}"
-                                switch_data = status_data.get(switch_key, {})
-                                is_on = switch_data.get("output", False)
-                                power = switch_data.get("apower", 0.0)
-                                
-                                c_icon, c_name, c_power, c_btn = st.columns([1, 4, 2, 2])
-                                with c_icon: st.write(f"### {icon}")
-                                with c_name: 
-                                    st.write(f"**{name}**")
-                                    st.caption(f"Status: {'AN' if is_on else 'AUS'}")
-                                with c_power:
-                                    st.metric("Verbrauch", f"{power:.1f} W", label_visibility="collapsed")
-                                with c_btn:
-                                    btn_key = f"sh_btn_{printer_key}_{switch_id}"
-                                    if is_on:
-                                        if st.button("Abschalten", key=btn_key):
-                                            shelly_client.set_switch(switch_id, False)
-                                            time.sleep(3)  # <--- HIER EINFÜGEN: Warte 1 Sekunde auf die Cloud
-                                            st.rerun()
-                                    else:
-                                        if st.button("Einschalten", key=btn_key, type="primary"):
-                                            shelly_client.set_switch(switch_id, True)
-                                            time.sleep(3)  # <--- HIER EINFÜGEN: Warte 1 Sekunde auf die Cloud
-                                            st.rerun()
-                                st.divider()
+                        # HIER IST DER NEUE AUFRUF:
+                        render_shelly_monitor(printer_key, shelly_client, shelly_config)
 
             # DSR
             if printer_has_dsr:
