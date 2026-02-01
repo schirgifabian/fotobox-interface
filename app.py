@@ -480,10 +480,10 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                                             st.rerun()
                                     else:
                                         if st.button("Einschalten", key=btn_key, type="primary"):
-                                        shelly_client.set_switch(switch_id, True)
-                                        time.sleep(1)  # <--- HIER EINFÜGEN: Warte 1 Sekunde auf die Cloud
-                                        st.rerun()
-                            st.divider()
+                                            shelly_client.set_switch(switch_id, True)
+                                            time.sleep(1)  # <--- HIER EINFÜGEN: Warte 1 Sekunde auf die Cloud
+                                            st.rerun()
+                                st.divider()
 
             # DSR
             if printer_has_dsr:
