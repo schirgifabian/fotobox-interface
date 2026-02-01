@@ -575,3 +575,75 @@ def inject_screensaver_css():
     # (Unverändert lassen)
     css = """<style>.stApp {background-color: #000000 !important; color: #E2E8F0 !important;} section[data-testid="stSidebar"] {display: none !important;} header, footer {visibility: hidden !important;} .screensaver-container {display: flex; flex-direction: column; align-items: center; justify-content: center; height: 85vh; text-align: center; font-family: 'Inter', sans-serif;} .big-number {font-size: 15vw; font-weight: 800; line-height: 1; margin-bottom: 2vh; font-variant-numeric: tabular-nums;} .label-text {font-size: 2vh; text-transform: uppercase; letter-spacing: 0.3em; color: #64748B;} .status-pill {background-color: #111827; border: 1px solid #1F2937; padding: 1.5vh 4vw; border-radius: 99px; font-size: 3vh; font-weight: 600; display: flex; align-items: center; gap: 12px; margin-top: 4vh; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);} .status-dot {height: 2vh; width: 2vh; border-radius: 50%;} .meta-info {margin-top: 5vh; color: #374151; font-family: monospace; font-size: 1.5vh;} .stButton {position: fixed !important; bottom: 40px !important; left: 50% !important; transform: translateX(-50%) !important; width: auto !important; z-index: 99999;} .stButton > button {background-color: transparent !important; border: 1px solid rgba(255, 255, 255, 0.2) !important; color: rgba(255, 255, 255, 0.4) !important; border-radius: 50px !important; padding: 8px 30px !important; font-size: 0.75rem !important; text-transform: uppercase; letter-spacing: 0.15em; transition: all 0.3s ease !important;} .stButton > button:hover {border-color: #ffffff !important; color: #ffffff !important; background-color: rgba(255, 255, 255, 0.1) !important; box-shadow: 0 0 15px rgba(255, 255, 255, 0.2); transform: translateY(-2px);} .stButton > button:active, .stButton > button:focus {border-color: #ffffff !important; color: #ffffff !important; background-color: rgba(255, 255, 255, 0.2) !important;}</style>"""
     st.markdown(css, unsafe_allow_html=True)
+
+
+def render_power_card(name: str, is_on: bool, power: float, switch_id: int, key_prefix: str):
+    """
+    Rendert eine moderne Kachel für Stromverbrauch mit Status-Indikator.
+    Gibt True zurück, wenn der Button gedrückt wurde.
+    """
+    # Farben & Status definieren
+    if is_on:
+        # Unterscheidung: Hoher Verbrauch (Aktiv) vs Standby (nur Beispiel-Logic)
+        if power > 50:
+            status_color = "#3B82F6" # Blau (Aktiv)
+            bg_color = "#EFF6FF"
+            icon = "⚡"
+            status_text = "AKTIV"
+            pulse_class = "status-pulse-blue"
+        else:
+            status_color = "#10B981" # Grün (Standby/An)
+            bg_color = "#ECFDF5"
+            icon = "🔌"
+            status_text = "AN"
+            pulse_class = "status-pulse-green"
+        
+        btn_label = "Ausschalten"
+        btn_type = "secondary"
+    else:
+        status_color = "#64748B" # Grau (Aus)
+        bg_color = "#F1F5F9"
+        icon = "⭕"
+        status_text = "AUS"
+        pulse_class = "status-pulse-gray"
+        power = 0.0
+        btn_label = "Einschalten"
+        btn_type = "primary"
+
+    # HTML für die Karte
+    html = f"""
+    <div class="dashboard-card" style="padding: 20px; margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: start;">
+            <div>
+                <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                    <span class="{pulse_class} status-dot"></span>
+                    <span style="font-size: 0.75rem; font-weight: 700; color: #94A3B8; letter-spacing: 0.05em;">{name.upper()}</span>
+                </div>
+                <div style="display: flex; align-items: baseline; gap: 4px;">
+                    <span style="font-size: 2.2rem; font-weight: 800; color: #1E293B;">{power:.1f}</span>
+                    <span style="font-size: 1rem; font-weight: 600; color: #64748B;">W</span>
+                </div>
+            </div>
+            <div style="
+                background: {bg_color}; 
+                color: {status_color}; 
+                width: 48px; height: 48px; 
+                border-radius: 12px; 
+                display: flex; align-items: center; justify-content: center; 
+                font-size: 24px;
+            ">
+                {icon}
+            </div>
+        </div>
+        <div style="margin-top: 12px; font-size: 0.8rem; color: #64748B; font-weight: 500;">
+            Status: <span style="color: {status_color}; font-weight: 700;">{status_text}</span>
+        </div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+    
+    # Der Button muss native Streamlit sein, damit er funktioniert
+    # Wir platzieren ihn direkt unter der HTML Card
+    if st.button(btn_label, key=f"pwr_btn_{key_prefix}_{switch_id}", type=btn_type, use_container_width=True):
+        return True
+    return False
