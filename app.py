@@ -13,8 +13,9 @@ import extra_streamlit_components as stx
 import pandas as pd
 import plotly.express as px
 
-# --- NEU: Shelly Client Import ---
-from shelly_client import ShellyClient
+# --- NEU: Shelly Client statt Aqara ---
+from shelly_client import ShellyClient 
+
 from report_generator import generate_event_pdf
 from sheets_helpers import (
     get_data,
@@ -55,7 +56,9 @@ PRINTERS = {
         "default_max_prints": 400,
         "cost_per_roll_eur": 46.59,
         "has_admin": True,
-        "has_shelly": True,  # Shelly aktiviert
+        # --- ÄNDERUNG: Shelly aktiv, Aqara aus ---
+        "has_shelly": True, 
+        "has_aqara": False,
         "has_dsr": True,
         "media_factor": 1,
         "fotoshare_url": "https://fotoshare.co/account/login",
@@ -66,7 +69,8 @@ PRINTERS = {
         "default_max_prints": 200,
         "cost_per_roll_eur": 55,
         "has_admin": True,
-        "has_shelly": False, 
+        "has_shelly": False,
+        "has_aqara": False,
         "has_dsr": False,
         "media_factor": 0.5,
         "fotoshare_url": "https://weinkellerei.tirol/fame",
@@ -74,7 +78,7 @@ PRINTERS = {
 }
 
 # --------------------------------------------------------------------
-# LOGIN (Unverändert)
+# LOGIN
 # --------------------------------------------------------------------
 def get_cookie_manager():
     return stx.CookieManager(key="fotobox_auth")
@@ -91,7 +95,7 @@ def check_login():
     st.session_state["cookie_manager_ref"] = cookie_manager
 
     if st.session_state.get("manual_logout", False):
-        st.session_state["manual_logout"] = False # Reset für das nächste Mal
+        st.session_state["manual_logout"] = False 
         st.session_state["is_logged_in"] = False
     else:
         cookie_val = cookie_manager.get("auth_pin")
@@ -166,14 +170,14 @@ def send_dsr_command(cmd: str) -> None:
     except Exception: pass
 
 # --------------------------------------------------------------------
-# SHELLY INIT (CLOUD)
+# SHELLY INIT
 # --------------------------------------------------------------------
 def init_shelly():
     """
     Lädt Shelly Cloud Auth Key und Device ID aus Google Sheets.
     """
     try:
-        default_url = "https://shelly-api-eu.shelly.cloud:6022/jrpc"
+        default_url = "https://shelly-api-eu.shelly.cloud"
         
         # Einstellungen aus Google Sheet laden (oder Default nutzen)
         cloud_url = get_setting("shelly_cloud_url", default_url)
@@ -181,16 +185,11 @@ def init_shelly():
         device_id = get_setting("shelly_device_id")
         
         if auth_key and device_id:
-            # URL Sanitizing
-            if not cloud_url: cloud_url = default_url
-            if not cloud_url.startswith("http"): cloud_url = f"https://{cloud_url}"
-            
             return ShellyClient(cloud_url, auth_key, device_id)
             
     except Exception as e:
         print(f"Shelly Init Fehler: {e}")
     return None
-
 
 # --------------------------------------------------------------------
 # SESSION
@@ -203,6 +202,7 @@ def init_session_state():
         "last_sound_status": None,
         "max_prints": None,
         "selected_printer": None,
+        "socket_state": "unknown",
         "lockscreen_state": "off",
         "maintenance_mode": False,
     }
@@ -314,14 +314,12 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
     )
     
     fig.update_traces(line_color='#3B82F6', line_width=3)
-    
     fig.update_layout(
         hovermode="x unified",
         height=350,
         margin=dict(l=20, r=20, t=40, b=20),
-        yaxis=dict(rangemode="tozero") 
+        yaxis=dict(rangemode="tozero")
     )
-    
     st.plotly_chart(fig, use_container_width=True)
 
     stats = compute_print_stats(df, window_min=30, media_factor=media_factor)
@@ -339,7 +337,7 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
 
 
 # --------------------------------------------------------------------
-# ADMIN PANEL (DESIGN UPDATE & SHELLY)
+# ADMIN PANEL (MIT SHELLY & DIAGNOSE)
 # --------------------------------------------------------------------
 def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, printer_key: str) -> None:
     """
@@ -359,17 +357,10 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
         "🔔 System & Tests"
     ])
 
-    # ------------------------------------------------------------------
-    # TAB 1: PAPIERWECHSEL CARD
-    # ------------------------------------------------------------------
+    # --- TAB 1: PAPIER ---
     with tab_paper:
         with st.container(border=True):
-            render_card_header(
-                icon="🧻", 
-                title="Papierwechsel", 
-                subtitle="Zähler zurücksetzen und Log leeren",
-                color_class="blue"
-            )
+            render_card_header("🧻", "Papierwechsel", "Zähler zurücksetzen und Log leeren", "blue")
             st.write("")
             c1, c2 = st.columns([1, 2])
             with c1:
@@ -378,17 +369,11 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                 try: current_size = int(st.session_state.max_prints or printer_cfg["default_max_prints"])
                 except: current_size = printer_cfg["default_max_prints"]
                 idx = 1 if current_size == 400 else 0
-                
-                size = st.radio(
-                    "Paketgröße", size_options, horizontal=True, index=idx,
-                    label_visibility="collapsed", key=f"tab_paper_size_{printer_key}"
-                )
+                size = st.radio("Paketgröße", size_options, horizontal=True, index=idx, label_visibility="collapsed", key=f"tab_paper_size_{printer_key}")
             with c2:
                 st.caption("Notiz (optional)")
-                reset_note = st.text_input(
-                    "Notiz", key=f"reset_note_{printer_key}", label_visibility="collapsed",
-                    placeholder="z.B. neue Rolle eingelegt"
-                )
+                reset_note = st.text_input("Notiz", key=f"reset_note_{printer_key}", label_visibility="collapsed", placeholder="z.B. neue Rolle eingelegt")
+
             st.write("")
             if not st.session_state.confirm_reset:
                 if st.button("Reset durchführen", use_container_width=True, key=f"btn_init_reset_{printer_key}", type="primary"):
@@ -412,92 +397,58 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                     st.session_state.confirm_reset = False
                     st.rerun()
 
-    # ------------------------------------------------------------------
-    # TAB 2: REPORT CARD
-    # ------------------------------------------------------------------
+    # --- TAB 2: REPORT ---
     with tab_report:
         with st.container(border=True):
-            render_card_header(
-                icon="📄", 
-                title="Event Report", 
-                subtitle="PDF Zusammenfassung generieren",
-                color_class="green"
-            )
+            render_card_header("📄", "Event Report", "PDF Zusammenfassung generieren", "green")
             st.write("")
             st.caption("Erstellt ein PDF mit Verbrauchskurve, Statistiken und den letzten Fehlermeldungen.")
-
             if st.button("PDF Bericht erstellen", use_container_width=True, key=f"btn_pdf_{printer_key}"):
                 df_rep = get_data_admin(st.session_state.sheet_id)
                 media_factor = printer_cfg.get("media_factor", 1)
                 stats = compute_print_stats(df_rep, media_factor=media_factor)
-                
                 last_val = 0
                 if not df_rep.empty:
                     try: last_val = int(df_rep.iloc[-1].get("MediaRemaining", 0)) * media_factor
                     except: pass
                 prints_done = max(0, (st.session_state.max_prints or 0) - last_val)
-                
                 cost_str = "N/A"
                 cpr = printer_cfg.get("cost_per_roll_eur")
                 if cpr and st.session_state.max_prints:
                     c_used = prints_done * (cpr / st.session_state.max_prints)
                     cost_str = f"{c_used:.2f} EUR"
+                pdf_bytes = generate_event_pdf(df=df_rep, printer_name=st.session_state.selected_printer, stats=stats, prints_since_reset=prints_done, cost_info=cost_str, media_factor=media_factor)
+                st.download_button(label="⬇️ PDF jetzt herunterladen", data=pdf_bytes, file_name=f"report_{datetime.date.today()}.pdf", mime="application/pdf", use_container_width=True, key=f"dl_btn_{printer_key}")
 
-                pdf_bytes = generate_event_pdf(
-                    df=df_rep, printer_name=st.session_state.selected_printer,
-                    stats=stats, prints_since_reset=prints_done,
-                    cost_info=cost_str, media_factor=media_factor
-                )
-                
-                st.download_button(
-                    label="⬇️ PDF jetzt herunterladen",
-                    data=pdf_bytes,
-                    file_name=f"report_{datetime.date.today()}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                    key=f"dl_btn_{printer_key}"
-                )
-
-    # ------------------------------------------------------------------
-    # TAB 3: DEVICES CARDS (SHELLY CLOUD INTEGRATION)
-    # ------------------------------------------------------------------
+    # --- TAB 3: DEVICES (SHELLY) ---
     with tab_devices:
         if not printer_has_shelly and not printer_has_dsr:
             st.info("Keine Geräte konfiguriert.")
         else:
-            # 1. SHELLY
+            # SHELLY
             if printer_has_shelly:
                 shelly_client = init_shelly()
                 
                 with st.container(border=True):
-                    render_card_header(
-                        icon="⚡", 
-                        title="Stromversorgung", 
-                        subtitle="Shelly Cloud Control",
-                        color_class="green"
-                    )
+                    render_card_header("⚡", "Stromversorgung", "Shelly Cloud Control", "green")
                     
                     if not shelly_client:
-                        st.warning("Shelly Cloud nicht konfiguriert. Bitte 'shelly_auth_key' und 'shelly_device_id' in Google Sheets (Settings) eintragen.")
+                        st.warning("Shelly Cloud nicht konfiguriert (Settings prüfen).")
                     else:
-                        # Status holen (Dauert via Cloud kurz)
                         with st.spinner("Lade Status aus der Cloud..."):
                             status_data = shelly_client.get_status()
                         
-                        # Config laden
                         try:
                             config_json = get_setting("shelly_config", "{}")
                             shelly_config = json.loads(config_json)
                         except:
                             shelly_config = {}
-                            st.error("Shelly Config JSON Fehler in Google Sheets.")
+                            st.error("Shelly Config Fehler in Google Sheets.")
 
                         if not status_data:
                             st.error("Keine Antwort von der Shelly Cloud API.")
                         else:
-                            # Wir loopen durch die Config (definiert im Google Sheet)
                             sorted_keys = sorted(shelly_config.keys())
-                            
                             if not sorted_keys:
                                 st.info("Keine Steckdosen in 'shelly_config' definiert.")
                             
@@ -507,14 +458,12 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                                 name = cfg.get("name", f"Socket {switch_id}")
                                 icon = cfg.get("icon", "🔌")
                                 
-                                # Daten aus API Response extrahieren
-                                # Gen4 Structure via Cloud: switch:ID Key
+                                # Gen4 via Cloud Structure
                                 switch_key = f"switch:{switch_id}"
                                 switch_data = status_data.get(switch_key, {})
                                 is_on = switch_data.get("output", False)
                                 power = switch_data.get("apower", 0.0)
                                 
-                                # UI Zeile
                                 c_icon, c_name, c_power, c_btn = st.columns([1, 4, 2, 2])
                                 with c_icon: st.write(f"### {icon}")
                                 with c_name: 
@@ -523,7 +472,6 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                                 with c_power:
                                     st.metric("Verbrauch", f"{power:.1f} W", label_visibility="collapsed")
                                 with c_btn:
-                                    # Unique Key für jeden Button!
                                     btn_key = f"sh_btn_{printer_key}_{switch_id}"
                                     if is_on:
                                         if st.button("Abschalten", key=btn_key):
@@ -535,21 +483,14 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                                             st.rerun()
                                 st.divider()
 
-            # 2. DSR
+            # DSR
             if printer_has_dsr:
                 st.write("")
                 with st.container(border=True):
                     lock_state = st.session_state.get("lockscreen_state", "off")
                     l_color = "orange" if lock_state == "on" else "slate"
                     l_text = "GESPERRT" if lock_state == "on" else "FREI"
-
-                    render_card_header(
-                        icon="🔒", 
-                        title="Screen", 
-                        subtitle=f"Modus: {l_text}",
-                        color_class=l_color
-                    )
-
+                    render_card_header("🔒", "Screen", f"Modus: {l_text}", l_color)
                     if DSR_ENABLED:
                         la, lb = st.columns(2)
                         if la.button("Sperren", key=f"dsr_l_{printer_key}", use_container_width=True):
@@ -562,21 +503,13 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                             st.rerun()
                     else:
                         st.caption("Nicht verfügbar")
-                        
+            
             st.write("")
             with st.container(border=True):
                 is_maint = st.session_state.get("maintenance_mode", False)
-                render_card_header(
-                    icon="🚚", 
-                    title="Box im Lager", 
-                    subtitle="Unterdrückt Warnungen",
-                    color_class="slate" if is_maint else "green"
-                )
-            
+                render_card_header("🚚", "Box im Lager", "Unterdrückt Warnungen", "slate" if is_maint else "green")
                 c_text, c_toggle = st.columns([3, 1])
-                with c_text:
-                    st.caption("Push-Nachrichten pausieren.")
-            
+                with c_text: st.caption("Push-Nachrichten pausieren.")
                 with c_toggle:
                     new_maint = st.toggle("Aktiv", value=is_maint, key=f"toggle_maint_{printer_key}")
                     if new_maint != is_maint:
@@ -584,82 +517,105 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                         set_setting("maintenance_mode", new_maint)
                         st.rerun()
 
-    # ------------------------------------------------------------------
-    # TAB 4: NOTIFY CARD
-    # ------------------------------------------------------------------
+    # --- TAB 4: SYSTEM & DIAGNOSE ---
     with tab_notify:
         with st.container(border=True):
-            render_card_header(
-                icon="🔔", 
-                title="System Tests", 
-                subtitle="Push & Simulation",
-                color_class="orange"
-            )
+            render_card_header("🔔", "System Tests", "Push & Diagnose", "orange")
             st.write("")
             st.caption("Konfiguriertes Topic")
             st.code(st.session_state.ntfy_topic or "Kein Topic", language="text")
-            st.write("---")
             
             c_test, c_sim = st.columns(2)
             with c_test:
                 if st.button("🔔 Ping senden", use_container_width=True, key=f"btn_test_push_{printer_key}"):
                     send_ntfy_push("Test", "Test erfolgreich", tags="tada")
                     st.toast("Ping gesendet")
-            
             with c_sim:
-                sim_opt = st.selectbox(
-                    "Simulieren", 
-                    ["Fehler", "Low Paper", "Stale"], 
-                    key=f"sim_{printer_key}", 
-                    label_visibility="collapsed"
-                )
+                sim_opt = st.selectbox("Simulieren", ["Fehler", "Low Paper", "Stale"], key=f"sim_{printer_key}", label_visibility="collapsed")
                 if st.button("Auslösen", use_container_width=True, key=f"btn_sim_trig_{printer_key}"):
-                    map_sim = {
-                        "Fehler": ("error", "🔴 Fehler (Sim)", "rotating_light"),
-                        "Low Paper": ("low_paper", "⚠️ Papier (Sim)", "warning"),
-                        "Stale": ("stale", "⚠️ Stale (Sim)", "hourglass")
-                    }
+                    map_sim = {"Fehler": ("error", "🔴 Fehler (Sim)", "rotating_light"), "Low Paper": ("low_paper", "⚠️ Papier (Sim)", "warning"), "Stale": ("stale", "⚠️ Stale (Sim)", "hourglass")}
                     mode, title, tag = map_sim[sim_opt]
                     send_ntfy_push(title, "Simulation aktiv", tags=tag)
                     maybe_play_sound(mode, st.session_state.sound_enabled)
                     st.toast(f"Simulation {mode} gesendet")
 
+            st.write("---")
+            
+            # === HIER BEGINNT DER NEUE TIEFEN-DIAGNOSE CODE ===
+            if st.button("🔍 Tiefen-Diagnose starten", use_container_width=True, key=f"btn_deep_debug_{printer_key}"):
+                st.info("Startet Diagnose...")
+                
+                client = init_shelly()
+                if not client:
+                    st.error("❌ Client konnte nicht geladen werden. Prüfe Google Sheets!")
+                else:
+                    st.markdown(f"**Auth Key (Maskiert):** `{client.auth_key[:5]}...{client.auth_key[-5:]}`")
+                    st.markdown(f"**Device ID:** `{client.device_id}`")
+                    
+                    test_urls = [
+                        "https://shelly-api-eu.shelly.cloud/device/rpc",  # Haupt-Server
+                        "https://shelly-233-eu.shelly.cloud/device/rpc"   # Dein Server (Port 443!)
+                    ]
+
+                    success = False
+                    
+                    for url in test_urls:
+                        st.write(f"👉 **Versuche Verbindung zu:** `{url}`")
+                        
+                        payload = {
+                            "auth_key": client.auth_key,
+                            "id": client.device_id,
+                            "method": "Shelly.GetStatus",
+                            "params": "{}" 
+                        }
+                        
+                        try:
+                            r = requests.post(url, data=payload, timeout=10)
+                            st.write(f"Status Code: `{r.status_code}`")
+                            
+                            if r.status_code == 200:
+                                resp_json = r.json()
+                                st.success("✅ Server hat geantwortet!")
+                                st.json(resp_json) 
+                                
+                                if "isok" in resp_json and resp_json["isok"] == False:
+                                     st.error("⚠️ Server meldet Fehler (falscher Key/ID?)")
+                                elif "data" in resp_json and "online" in resp_json["data"] and resp_json["data"]["online"] == False:
+                                     st.warning("⚠️ Cloud Verbindung OK, aber Gerät ist OFFLINE!")
+                                else:
+                                     st.balloons()
+                                     success = True
+                                     break 
+                            else:
+                                st.error(f"❌ HTTP Fehler: {r.text}")
+                                
+                        except Exception as e:
+                            st.error(f"❌ Verbindungsfehler: {e}")
+                            
+                    if not success:
+                        st.error("Alle Verbindungsversuche fehlgeschlagen.")
+
 # --------------------------------------------------------------------
-# Screensaver
+# SCREENSAVER
 # --------------------------------------------------------------------
 @st.fragment(run_every=10)
 def run_screensaver_loop(media_factor: int):
-    # Daten holen
     df = get_data(st.session_state.sheet_id, event_mode=True)
     if df.empty:
         st.warning("Warte auf Daten...")
         return
-
     try:
         last = df.iloc[-1]
         full_timestamp = str(last.get("Timestamp", "")) 
         display_timestamp = full_timestamp[-8:]         
         raw_status = str(last.get("Status", ""))
-        
         try: media_remaining = int(last.get("MediaRemaining", 0)) * media_factor
         except: media_remaining = 0
-        
-        status_mode, display_text, display_color, _, _ = evaluate_status(
-            raw_status, media_remaining, full_timestamp
-        )
-        
-        render_screensaver_content(
-            status_mode=status_mode,
-            media_remaining=media_remaining,
-            display_text=display_text,
-            display_color=display_color,
-            timestamp=display_timestamp 
-        )
-        
+        status_mode, display_text, display_color, _, _ = evaluate_status(raw_status, media_remaining, full_timestamp)
+        render_screensaver_content(status_mode=status_mode, media_remaining=media_remaining, display_text=display_text, display_color=display_color, timestamp=display_timestamp)
         if st.button("Beenden", key="btn_exit_saver"):
             st.session_state.screensaver_mode = False
             st.rerun()
-
     except Exception as e:
         print(f"Screensaver Error: {e}")
 
@@ -672,36 +628,23 @@ def main():
     init_session_state()
     check_login()
 
-    # --- SCREENSAVER CHECK ---
     if st.session_state.screensaver_mode:
         inject_screensaver_css()
         printer_name = st.session_state.get("selected_printer")
-        if not printer_name: 
-            printer_name = list(PRINTERS.keys())[0]
+        if not printer_name: printer_name = list(PRINTERS.keys())[0]
         printer_cfg = PRINTERS.get(printer_name, {})
         media_factor = printer_cfg.get("media_factor", 1)
         run_screensaver_loop(media_factor)
         return
-    # -------------------------
 
     def render_sidebar_profile():
         with st.sidebar:
             st.write("---")
             with st.container(border=True):
-                st.markdown("""
-                    <div class="user-profile-card">
-                        <div class="user-avatar">A</div>
-                        <div class="user-info">
-                            <span class="user-name">Admin User</span>
-                            <span class="user-role">Administrator</span>
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
-                
+                st.markdown("""<div class="user-profile-card"><div class="user-avatar">A</div><div class="user-info"><span class="user-name">Admin User</span><span class="user-role">Administrator</span></div></div>""", unsafe_allow_html=True)
                 st.write("") 
                 if st.button("Ausloggen", key="sidebar_logout", use_container_width=True):
-                    if "cookie_manager_ref" in st.session_state:
-                        st.session_state["cookie_manager_ref"].delete("auth_pin")
+                    if "cookie_manager_ref" in st.session_state: st.session_state["cookie_manager_ref"].delete("auth_pin")
                     st.session_state["is_logged_in"] = False
                     time.sleep(0.5) 
                     st.rerun()
@@ -710,31 +653,20 @@ def main():
         st.markdown("### ⚙️ Control Panel")
         with st.container(border=True):
             st.markdown("#### Navigation")
-            view_mode = st.radio(
-                "Ansicht", 
-                ["Einzelne Fotobox", "Alle Boxen"],
-                label_visibility="collapsed"
-            )
-
+            view_mode = st.radio("Ansicht", ["Einzelne Fotobox", "Alle Boxen"], label_visibility="collapsed")
             if view_mode != "Alle Boxen":
                 st.write("") 
                 st.markdown("#### Aktives Gerät")
-                printer_name = st.selectbox(
-                    "Fotobox auswählen", 
-                    list(PRINTERS.keys()), 
-                    label_visibility="collapsed"
-                )
+                printer_name = st.selectbox("Fotobox auswählen", list(PRINTERS.keys()), label_visibility="collapsed")
             else:
                 printer_name = None
 
-    # --- LOGIK WEICHE ---
     if view_mode == "Alle Boxen":
         render_sidebar_profile()
         st.title(f"{PAGE_ICON} {PAGE_TITLE}")
         render_fleet_overview(PRINTERS)
         return 
 
-    # --- FALL 2: EINZELANSICHT ---
     printer_cfg = PRINTERS[printer_name]
     printer_key = printer_cfg["key"]
     media_factor = printer_cfg.get("media_factor", 2)
@@ -808,11 +740,8 @@ def main():
                     st.rerun()
 
     render_sidebar_profile()
-
     st.title(f"{PAGE_ICON} {PAGE_TITLE}")
-    
     view_event_mode = event_mode or not printer_has_admin
-
     if view_event_mode:
         show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=True, cloud_url=fotoshare_url)
     else:
@@ -821,7 +750,6 @@ def main():
             show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=False, cloud_url=fotoshare_url)
         with tab_hist:
             show_history(media_factor, cost_per_roll)
-        
         render_admin_panel(printer_cfg, warning_threshold, printer_key)
 
 if __name__ == "__main__":
