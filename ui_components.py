@@ -579,71 +579,93 @@ def inject_screensaver_css():
 
 def render_power_card(name: str, is_on: bool, power: float, switch_id: int, key_prefix: str):
     """
-    Rendert eine moderne Kachel für Stromverbrauch mit Status-Indikator.
-    Gibt True zurück, wenn der Button gedrückt wurde.
+    Rendert eine moderne Kachel für Stromverbrauch mit echten SVG Icons statt Emojis.
     """
-    # Farben & Status definieren
+    
+    # --- SVG DEFINITIONEN ---
+    # Blitz Icon (Aktiv/Hoher Verbrauch)
+    icon_bolt = """
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6" style="width: 24px; height: 24px;">
+      <path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 01.359.852L12.982 9.75h7.268a.75.75 0 01.548 1.262l-10.5 11.25a.75.75 0 01-1.272-.71l1.992-7.302H3.75a.75.75 0 01-.548-1.262l10.5-11.25a.75.75 0 01.913-.143z" clip-rule="evenodd" />
+    </svg>
+    """
+    
+    # Stecker Icon (An/Standby)
+    icon_plug = """
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;">
+      <path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zM12.75 6a.75.75 0 00-1.5 0v6c0 .414.336.75.75.75h4.5a.75.75 0 000-1.5h-3.75V6z" clip-rule="evenodd" />
+    </svg>
+    """
+    # Alternativ: Power Button Icon für "AUS"
+    icon_off = """
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 24px; height: 24px;">
+      <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+      <line x1="12" y1="2" x2="12" y2="12"></line>
+    </svg>
+    """
+
+    # --- LOGIK ---
     if is_on:
-        # Unterscheidung: Hoher Verbrauch (Aktiv) vs Standby (nur Beispiel-Logic)
         if power > 50:
             status_color = "#3B82F6" # Blau (Aktiv)
             bg_color = "#EFF6FF"
-            icon = "⚡"
+            icon_svg = icon_bolt
             status_text = "AKTIV"
             pulse_class = "status-pulse-blue"
         else:
             status_color = "#10B981" # Grün (Standby/An)
             bg_color = "#ECFDF5"
-            icon = "🔌"
+            icon_svg = icon_bolt # Oder icon_plug, wenn du unterscheiden willst
             status_text = "AN"
             pulse_class = "status-pulse-green"
         
         btn_label = "Ausschalten"
         btn_type = "secondary"
     else:
-        status_color = "#64748B" # Grau (Aus)
+        status_color = "#94A3B8" # Grau (Aus) - Farbe angepasst für bessere Lesbarkeit
         bg_color = "#F1F5F9"
-        icon = "⭕"
+        icon_svg = icon_off
         status_text = "AUS"
-        pulse_class = "status-pulse-gray"
+        pulse_class = "" # Kein Puls wenn aus
         power = 0.0
         btn_label = "Einschalten"
         btn_type = "primary"
 
-    # HTML für die Karte
+    # --- HTML RENDER ---
     html = f"""
-    <div class="dashboard-card" style="padding: 20px; margin-bottom: 16px;">
-        <div style="display: flex; justify-content: space-between; align-items: start;">
+    <div class="dashboard-card" style="padding: 20px; margin-bottom: 12px; height: 100%;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
             <div>
                 <div style="display: flex; align-items: center; margin-bottom: 8px;">
                     <span class="{pulse_class} status-dot"></span>
-                    <span style="font-size: 0.75rem; font-weight: 700; color: #94A3B8; letter-spacing: 0.05em;">{name.upper()}</span>
+                    <span style="font-size: 0.75rem; font-weight: 700; color: #94A3B8; letter-spacing: 0.05em; text-transform: uppercase;">{name}</span>
                 </div>
                 <div style="display: flex; align-items: baseline; gap: 4px;">
-                    <span style="font-size: 2.2rem; font-weight: 800; color: #1E293B;">{power:.1f}</span>
+                    <span style="font-size: 2.2rem; font-weight: 800; color: #1E293B; font-variant-numeric: tabular-nums;">{power:.1f}</span>
                     <span style="font-size: 1rem; font-weight: 600; color: #64748B;">W</span>
                 </div>
             </div>
+            
             <div style="
                 background: {bg_color}; 
                 color: {status_color}; 
                 width: 48px; height: 48px; 
                 border-radius: 12px; 
                 display: flex; align-items: center; justify-content: center; 
-                font-size: 24px;
+                box-shadow: inset 0 2px 4px 0 rgba(0,0,0,0.05);
             ">
-                {icon}
+                {icon_svg}
             </div>
         </div>
-        <div style="margin-top: 12px; font-size: 0.8rem; color: #64748B; font-weight: 500;">
-            Status: <span style="color: {status_color}; font-weight: 700;">{status_text}</span>
+        <div style="margin-top: 12px; font-size: 0.8rem; color: #64748B; font-weight: 500; display: flex; justify-content: space-between; align-items: center;">
+            <span>Status: <span style="color: {status_color}; font-weight: 700;">{status_text}</span></span>
         </div>
     </div>
     """
     st.markdown(html, unsafe_allow_html=True)
     
-    # Der Button muss native Streamlit sein, damit er funktioniert
-    # Wir platzieren ihn direkt unter der HTML Card
+    # Button Logik
     if st.button(btn_label, key=f"pwr_btn_{key_prefix}_{switch_id}", type=btn_type, use_container_width=True):
         return True
+    
     return False
