@@ -476,12 +476,12 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                                     if is_on:
                                         if st.button("Abschalten", key=btn_key):
                                             shelly_client.set_switch(switch_id, False)
-                                            time.sleep(1)  # <--- HIER EINFÜGEN: Warte 1 Sekunde auf die Cloud
+                                            time.sleep(3)  # <--- HIER EINFÜGEN: Warte 1 Sekunde auf die Cloud
                                             st.rerun()
                                     else:
                                         if st.button("Einschalten", key=btn_key, type="primary"):
                                             shelly_client.set_switch(switch_id, True)
-                                            time.sleep(1)  # <--- HIER EINFÜGEN: Warte 1 Sekunde auf die Cloud
+                                            time.sleep(3)  # <--- HIER EINFÜGEN: Warte 1 Sekunde auf die Cloud
                                             st.rerun()
                                 st.divider()
 
