@@ -582,21 +582,21 @@ def render_power_card(name: str, is_on: bool, power: float, switch_id: int, key_
     Rendert eine moderne Kachel für Stromverbrauch mit echten SVG Icons statt Emojis.
     """
     
-    # --- SVG DEFINITIONEN ---
-    # Blitz Icon (Aktiv/Hoher Verbrauch)
+    # --- SVG DEFINITIONEN (Vektorgrafiken) ---
+    # Blitz Icon (für Aktiv/Hoher Verbrauch)
     icon_bolt = """
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6" style="width: 24px; height: 24px;">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;">
       <path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 01.359.852L12.982 9.75h7.268a.75.75 0 01.548 1.262l-10.5 11.25a.75.75 0 01-1.272-.71l1.992-7.302H3.75a.75.75 0 01-.548-1.262l10.5-11.25a.75.75 0 01.913-.143z" clip-rule="evenodd" />
     </svg>
     """
     
-    # Stecker Icon (An/Standby)
+    # Stecker Icon (für An/Standby)
     icon_plug = """
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;">
       <path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zM12.75 6a.75.75 0 00-1.5 0v6c0 .414.336.75.75.75h4.5a.75.75 0 000-1.5h-3.75V6z" clip-rule="evenodd" />
     </svg>
     """
-    # Alternativ: Power Button Icon für "AUS"
+    # Power Button Icon (für AUS)
     icon_off = """
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 24px; height: 24px;">
       <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
@@ -615,18 +615,18 @@ def render_power_card(name: str, is_on: bool, power: float, switch_id: int, key_
         else:
             status_color = "#10B981" # Grün (Standby/An)
             bg_color = "#ECFDF5"
-            icon_svg = icon_bolt # Oder icon_plug, wenn du unterscheiden willst
+            icon_svg = icon_plug 
             status_text = "AN"
             pulse_class = "status-pulse-green"
         
         btn_label = "Ausschalten"
         btn_type = "secondary"
     else:
-        status_color = "#94A3B8" # Grau (Aus) - Farbe angepasst für bessere Lesbarkeit
+        status_color = "#94A3B8" # Grau (Aus)
         bg_color = "#F1F5F9"
         icon_svg = icon_off
         status_text = "AUS"
-        pulse_class = "" # Kein Puls wenn aus
+        pulse_class = ""
         power = 0.0
         btn_label = "Einschalten"
         btn_type = "primary"
