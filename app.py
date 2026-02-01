@@ -41,7 +41,7 @@ from ui_components import (
     inject_screensaver_css,
     render_screensaver_content,
     render_power_card,
-    render_lock_card
+    render_lock_card_dual
 )
 
 # --------------------------------------------------------------------
