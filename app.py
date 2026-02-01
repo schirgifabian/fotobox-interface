@@ -40,7 +40,8 @@ from ui_components import (
     render_card_header,
     inject_screensaver_css,
     render_screensaver_content,
-    render_power_card
+    render_power_card,
+    render_lock_card
 )
 
 # --------------------------------------------------------------------
@@ -444,26 +445,40 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                         # HIER IST DER NEUE AUFRUF:
                         render_shelly_monitor(printer_key, shelly_client, shelly_config)
 
-            # DSR
             if printer_has_dsr:
-                st.write("")
-                with st.container(border=True):
+                if not printer_has_shelly:
+                     render_card_header("🔒", "Screen Steuerung", "Touchscreen Sperre", "orange")
+                
+                st.write("") # Kleiner Abstand falls Shelly oben drüber war
+                
+                # Container für DSR
+                # Wir machen hier ein 2-Spalten Layout: Links die Karte, Rechts leer (oder für zukünftiges)
+                # damit die Karte nicht über die ganze Breite "stretched" wird wie ein Banner.
+                
+                dsr_cols = st.columns(2)
+                
+                with dsr_cols[0]: # Linke Spalte
                     lock_state = st.session_state.get("lockscreen_state", "off")
-                    l_color = "orange" if lock_state == "on" else "slate"
-                    l_text = "GESPERRT" if lock_state == "on" else "FREI"
-                    render_card_header("🔒", "Screen", f"Modus: {l_text}", l_color)
+                    
+                    # HIER IST DER NEUE AUFRUF:
                     if DSR_ENABLED:
-                        la, lb = st.columns(2)
-                        if la.button("Sperren", key=f"dsr_l_{printer_key}", use_container_width=True):
-                            send_dsr_command("lock_on")
-                            st.session_state.lockscreen_state = "on"
-                            st.rerun()
-                        if lb.button("Freigeben", key=f"dsr_u_{printer_key}", use_container_width=True):
-                            send_dsr_command("lock_off")
-                            st.session_state.lockscreen_state = "off"
+                        toggle_clicked = render_lock_card(lock_state, printer_key)
+                        
+                        if toggle_clicked:
+                            # Logik: Wenn Button geklickt, Status umkehren
+                            if lock_state == "off":
+                                send_dsr_command("lock_on")
+                                st.session_state.lockscreen_state = "on"
+                                st.toast("Screen wird GESPERRT...", icon="🔒")
+                            else:
+                                send_dsr_command("lock_off")
+                                st.session_state.lockscreen_state = "off"
+                                st.toast("Screen wird FREIGEGEBEN...", icon="🔓")
+                            
+                            time.sleep(0.5)
                             st.rerun()
                     else:
-                        st.caption("Nicht verfügbar")
+                        st.warning("DSR Topic nicht konfiguriert.")
             
             st.write("")
             with st.container(border=True):
