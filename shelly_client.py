@@ -5,22 +5,26 @@ from typing import Dict, Any, Optional
 
 class ShellyClient:
     def __init__(self, cloud_url: str, auth_key: str, device_id: str):
-        self.cloud_url = cloud_url
-        self.auth_key = auth_key
-        self.device_id = device_id
-        # Timeout etwas höher, da Cloud-Calls länger dauern können als lokale
+        self.raw_url = cloud_url.strip()
+        self.auth_key = auth_key.strip()
+        self.device_id = device_id.strip()
         self.timeout = 10 
+        
+        # URL Zusammenbauen: Sicherstellen, dass Port und Pfad stimmen
+        # Falls der User nur "https://shelly-233-eu.shelly.cloud" eingegeben hat:
+        if "6022" not in self.raw_url:
+            base = self.raw_url.rstrip("/")
+            self.endpoint = f"{base}:6022/jrpc"
+        else:
+            self.endpoint = self.raw_url
 
     def _send_cloud_command(self, device_method: str, device_params: Dict[str, Any] = None) -> Optional[Dict]:
         """
-        Sendet einen Befehl an die Shelly Cloud, die ihn an das Gerät weiterleitet.
-        Wir nutzen die 'Shelly.Call' Methode der Cloud API.
+        Sendet RPC via Cloud (Shelly.Call).
         """
         if device_params is None:
             device_params = {}
             
-        # Der Payload für die Cloud. 
-        # Wir rufen 'Shelly.Call' auf der Cloud auf, um eine Methode AUF dem Gerät auszuführen.
         payload = {
             "jsonrpc": "2.0",
             "id": int(time.time()),
@@ -34,42 +38,51 @@ class ShellyClient:
         }
         
         try:
-            # Wichtig: Headers setzen, sonst mag die API das manchmal nicht
             headers = {"Content-Type": "application/json"}
-            response = requests.post(self.cloud_url, json=payload, headers=headers, timeout=self.timeout)
-            response.raise_for_status()
+            # DEBUG: Print URL um sicherzugehen
+            # print(f"DEBUG: Sende an {self.endpoint}...")
             
-            data = response.json()
+            response = requests.post(self.endpoint, json=payload, headers=headers, timeout=self.timeout)
             
-            # Fehlerprüfung Cloud-Level
-            if "error" in data:
-                print(f"Shelly Cloud API Error: {data['error']}")
+            if response.status_code != 200:
+                print(f"Shelly Error HTTP {response.status_code}: {response.text}")
                 return None
                 
-            # Das eigentliche Ergebnis vom Gerät steckt in result -> data
-            # Struktur Cloud Antwort: { "result": { "data": { ...Geräteantwort... } } }
-            if "result" in data and "data" in data["result"]:
-                return data["result"]["data"]
+            data = response.json()
             
-            return data.get("result", {})
+            # Fehlerprüfung in der JSON Antwort
+            if "error" in data:
+                print(f"Shelly API Error: {data['error']}")
+                return None
+                
+            # Gen 4 Antwortstruktur: result -> data -> { ... }
+            if "result" in data:
+                res = data["result"]
+                # Manchmal ist 'data' direkt im result, manchmal verschachtelt
+                if "data" in res:
+                    return res["data"]
+                return res
+            
+            return {}
 
         except requests.exceptions.RequestException as e:
-            print(f"Shelly Cloud Connection Error: {e}")
+            print(f"Shelly Connection Error: {e}")
             return None
 
     def get_status(self) -> Dict[str, Any]:
         """
-        Holt den Status aller 4 Switches inklusive Power-Meter.
+        Holt den Status via Shelly.GetStatus
         """
-        # Wir rufen 'Shelly.GetStatus' auf dem Gerät auf
         return self._send_cloud_command("Shelly.GetStatus") or {}
 
     def set_switch(self, switch_id: int, turn_on: bool) -> bool:
-        """Schaltet eine einzelne Dose an oder aus."""
+        """
+        Schaltet Switch via Switch.Set
+        """
         params = {
             "id": switch_id,
             "on": turn_on
         }
-        # Wir rufen 'Switch.Set' auf dem Gerät auf
+        # Bei Switch.Set antwortet Shelly oft nur mit null (Erfolg), wenn kein Error kommt.
         resp = self._send_cloud_command("Switch.Set", params)
         return resp is not None
