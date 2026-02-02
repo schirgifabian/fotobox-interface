@@ -370,8 +370,10 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
         cfg = shelly_config[switch_idx_str]
         switch_id = int(switch_idx_str)
         name = cfg.get("name", f"Socket {switch_id}")
-        icon_type = cfg.get("icon", "bolt") 
+        icon_type = cfg.get("icon", "bolt")
 
+        standby_min = cfg.get("standby_min") # Gibt None zurück, wenn nicht im JSON
+        
         switch_key = f"switch:{switch_id}"
         switch_data = status_data.get(switch_key, {})
         is_on = switch_data.get("output", False)
@@ -387,7 +389,8 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
                 power=power,
                 switch_id=switch_id,
                 key_prefix=printer_key,
-                icon_type=icon_type 
+                icon_type=icon_type,
+                standby_min=standby_min
             )
 
             if toggle_clicked:
