@@ -132,7 +132,7 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str, maint
 
     
     # 1) Harte Fehler (haben Vorrang, auch im Wartungsmodus)
-    if any(k in raw_status_l for k in hard_errors):
+    elif any(k in raw_status_l for k in hard_errors):
         status_mode = "error"
         display_text = f"🔴 STÖRUNG: {raw_status}"
         display_color = "red"
