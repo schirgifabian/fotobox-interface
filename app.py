@@ -366,22 +366,46 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
     # Wir erstellen fix 2 Spalten
     grid_cols = st.columns(2)
 
+# Initialisiere Session State Cache für LED Farben, falls noch nicht da
+    if "shelly_led_cache" not in st.session_state:
+        st.session_state.shelly_led_cache = {}
+
     for i, switch_idx_str in enumerate(sorted_keys):
         cfg = shelly_config[switch_idx_str]
         switch_id = int(switch_idx_str)
         name = cfg.get("name", f"Socket {switch_id}")
         icon_type = cfg.get("icon", "bolt")
+        standby_min = cfg.get("standby_min")
 
-        standby_min = cfg.get("standby_min") # Gibt None zurück, wenn nicht im JSON
-        
         switch_key = f"switch:{switch_id}"
         switch_data = status_data.get(switch_key, {})
         is_on = switch_data.get("output", False)
         power = float(switch_data.get("apower", 0.0))
-        
-        # Logik: 
-        # i % 2 == 0 -> Linke Spalte (Index 0)
-        # i % 2 == 1 -> Rechte Spalte (Index 1)
+
+        # --- NEUE LED LOGIK ---
+        # Nur wenn das Gerät AN ist und ein standby_min konfiguriert ist
+        if is_on and standby_min is not None:
+            # Entscheidung: Welche Farbe?
+            if power > standby_min:
+                target_rgb = (0, 0, 100) # BLAU (R, G, B in %)
+                target_name = "blue"
+            else:
+                target_rgb = (0, 100, 0) # GRÜN (Standard)
+                target_name = "green"
+            
+            # Cache Key für diesen Socket
+            cache_key = f"{printer_key}_{switch_id}"
+            last_color = st.session_state.shelly_led_cache.get(cache_key)
+
+            # Nur senden, wenn sich die Farbe geändert hat! (Schont den Shelly Speicher)
+            if last_color != target_name:
+                # Sende Befehl an Shelly
+                success = shelly_client.set_led_color(switch_id, *target_rgb)
+                if success:
+                    print(f"LED Socket {switch_id} auf {target_name} gesetzt.")
+                    st.session_state.shelly_led_cache[cache_key] = target_name
+        # ----------------------
+
         with grid_cols[i % 2]:
             toggle_clicked = render_power_card(
                 name=name,
@@ -390,7 +414,7 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
                 switch_id=switch_id,
                 key_prefix=printer_key,
                 icon_type=icon_type,
-                standby_min=standby_min
+                standby_min=standby_min 
             )
 
             if toggle_clicked:
