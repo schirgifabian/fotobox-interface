@@ -342,7 +342,7 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
 # Fragment-Funktion für shelly Stekdose
 # --------------------------------------------------------------------
 
-@st.fragment(run_every=5)  # Aktualisiert sich alle 5 Sekunden selbstständig!
+@st.fragment(run_every=15)  # Aktualisiert sich alle 15 Sekunden selbstständig!
 def render_shelly_monitor(printer_key, shelly_client, shelly_config):
     if not shelly_client:
         st.warning("Shelly Client nicht initialisiert.")
