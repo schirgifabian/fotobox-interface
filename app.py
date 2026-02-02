@@ -430,7 +430,7 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                 shelly_client = init_shelly()
                 
                 with st.container(border=True):
-                    render_card_header("⚡", "Stromversorgung", "Live Monitoring", "green")
+                    render_card_header("⚡", "Stromversorgung - Oberteil", "Live Monitoring", "green")
                     
                     if not shelly_client:
                         st.warning("Shelly Cloud nicht konfiguriert (Settings prüfen).")
