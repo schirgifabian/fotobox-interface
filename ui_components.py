@@ -577,13 +577,14 @@ def inject_screensaver_css():
     st.markdown(css, unsafe_allow_html=True)
 
 
-def render_power_card(name: str, is_on: bool, power: float, switch_id: int, key_prefix: str, icon_type: str = "bolt"):
+def render_power_card(name: str, is_on: bool, power: float, switch_id: int, key_prefix: str, icon_type: str = "bolt", standby_min: float = None):
+    #                                                                                                                  ^^^^^^^ NEUER PARAMETER
     """
     Rendert eine Kachel mit dynamischen Icons basierend auf icon_type.
     Inklusive Sicherheitsabfrage beim Ausschalten.
     """
     
-    # --- 1. SVG BIBLIOTHEK (Unverändert) ---
+    # --- 1. SVG BIBLIOTHEK (Unverändert lassen) ---
     svg_bolt = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 01.359.852L12.982 9.75h7.268a.75.75 0 01.548 1.262l-10.5 11.25a.75.75 0 01-1.272-.71l1.992-7.302H3.75a.75.75 0 01-.548-1.262l10.5-11.25a.75.75 0 01.913-.143z" clip-rule="evenodd" /></svg>"""
     svg_surface = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path d="M10.5 18.75a.75.75 0 000 1.5h3a.75.75 0 000-1.5h-3z" /><path fill-rule="evenodd" d="M8.625.75A3.375 3.375 0 005.25 4.125v15.75a3.375 3.375 0 003.375 3.375h6.75a3.375 3.375 0 003.375-3.375V4.125A3.375 3.375 0 0015.375.75h-6.75zM7.5 4.125c0-.621.504-1.125 1.125-1.125h6.75c.621 0 1.125.504 1.125 1.125v15.75c0 .621-.504 1.125-1.125 1.125h-6.75A1.125 1.125 0 017.5 19.875V4.125z" clip-rule="evenodd" /></svg>"""
     svg_printer = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path fill-rule="evenodd" d="M7.875 1.5C6.839 1.5 6 2.34 6 3.375v2.99c-.426.053-.851.11-1.274.174-1.454.218-2.476 1.483-2.476 2.917v6.294a3 3 0 003 3h.27l-.155 1.705A1.875 1.875 0 007.232 22.5h9.536a1.875 1.875 0 001.867-2.045l-.155-1.705h.27a3 3 0 003-3V9.456c0-1.434-1.022-2.7-2.476-2.917A48.816 48.816 0 0018 6.366V3.375c0-1.036-.84-1.875-1.875-1.875h-8.25zM16.5 6.205v-2.83A.375.375 0 0016.125 3h-8.25a.375.375 0 00-.375.375v2.83a49.353 49.353 0 019 0zm-.217 8.295a.75.75 0 10-1.5 0c0 .414.336.75.75.75h4.5a.75.75 0 100-1.5h-3.75z" clip-rule="evenodd" /><path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75z" /></svg>"""
@@ -592,21 +593,23 @@ def render_power_card(name: str, is_on: bool, power: float, switch_id: int, key_
     svg_default = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm11.378-3.917c-.89-.777-2.366-.777-3.255 0a.75.75 0 01-.988-1.129c1.454-1.272 3.776-1.272 5.23 0 1.513 1.324 1.513 3.518 0 4.842a3.75 3.75 0 01-.837.552c-.676.328-1.028.774-1.028 1.152v.2a.75.75 0 01-1.5 0v-.2c0-1.201 1.134-2.215 2.185-2.741.478-.239.792-.705.792-1.226 0-.61-.433-1.123-1.099-1.45zM12 15.75a.75.75 0 01.75.75v.008a.75.75 0 01-1.5 0v-.008a.75.75 0 01.75-.75z" clip-rule="evenodd" /></svg>"""
     svg_off = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 24px; height: 24px;"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>"""
 
-    # --- 2. LOGIK & FARBEN (Leicht angepasst) ---
+    # --- 2. LOGIK & FARBEN (ANGEPASST) ---
     icons_map = {"bolt": svg_bolt, "surface": svg_surface, "router": svg_router, "printer": svg_printer, "fan": svg_fan, "default": svg_default}
     active_icon_svg = icons_map.get(icon_type, svg_bolt)
 
     if is_on:
-        if power > 10: 
-            status_color = "#3B82F6" # Blau (Aktiv)
+        # Standard: Grün (Standby/An)
+        status_color = "#10B981" 
+        bg_color = "#ECFDF5"
+        status_text = "AN"
+        pulse_class = "status-pulse-green"
+
+        # Check: Wenn standby_min konfiguriert ist UND Power höher ist -> Blau (Aktiv)
+        if standby_min is not None and power > standby_min:
+            status_color = "#3B82F6" # Blau
             bg_color = "#EFF6FF"
             status_text = "AKTIV"
             pulse_class = "status-pulse-blue"
-        else:
-            status_color = "#10B981" # Grün (Standby/An)
-            bg_color = "#ECFDF5"
-            status_text = "AN"
-            pulse_class = "status-pulse-green"
         
         icon_svg = active_icon_svg
     else:
