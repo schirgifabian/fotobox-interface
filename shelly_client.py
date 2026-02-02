@@ -118,3 +118,29 @@ class ShellyClient:
         # Sende Befehl
         res = self._post("/device/relay/control", params)
         return res is not None
+
+
+    def set_led_color(self, switch_id: int, r: int, g: int, b: int) -> bool:
+        """
+        Setzt die LED-Farbe für einen spezifischen Switch (Gen2/Gen4).
+        Erfordert Firmware >= 1.0.
+        Nutzt RPC: Switch.SetConfig
+        """
+        # Wir bauen den Parameter-Payload für Gen2 Devices
+        # Helligkeit 100%, Modus Custom
+        params = {
+            "id": switch_id,
+            "config": {
+                "led_indication_mode": "custom", 
+                "led_on_rgb": [r, g, b]
+            }
+        }
+        
+        # Sende als RPC Call (POST an /rpc/Switch.SetConfig)
+        # Wir nutzen _post, müssen aber den Endpoint anpassen, da _post bisher 
+        # für Gen1 (/device/...) optimiert war oder wir nutzen den generischen Weg.
+        
+        # Da deine _post Methode die URL zusammenbaut, rufen wir hier direkt den RPC Endpoint auf.
+        # Wir nutzen hier einen kleinen Trick, um deine bestehende _post Logik zu nutzen:
+        
+        return self._post("/rpc/Switch.SetConfig", params) is not None
