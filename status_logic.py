@@ -123,8 +123,16 @@ def evaluate_status(raw_status: str, media_remaining: int, timestamp: str, maint
     printing_kw = ["printing", "processing", "drucken"]
     idle_kw = ["idle", "standby mode"]
 
+    # 0) Spezialfall: Drucker offline / unbekannt (-1)
+    # WICHTIG: Das muss vor allen anderen Checks stehen!
+    if media_remaining < 0:
+        status_mode = "offline"
+        display_text = "🔌 Drucker offline (-1)"
+        display_color = "slate"  # "slate" macht es grau, "red" würde es rot machen
+
+    
     # 1) Harte Fehler (haben Vorrang, auch im Wartungsmodus)
-    if any(k in raw_status_l for k in hard_errors):
+    elif any(k in raw_status_l for k in hard_errors):
         status_mode = "error"
         display_text = f"🔴 STÖRUNG: {raw_status}"
         display_color = "red"

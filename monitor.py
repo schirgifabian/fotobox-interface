@@ -228,11 +228,20 @@ def main():
                 current_status = "ready"
                 msg = ""
                 tag = ""
+
                 
                 if any(x in raw_status for x in ["error", "jam", "end", "fehlt", "störung"]):
                     current_status = "error"
                     msg = f"Störung: {raw_status}"
                     tag = "rotating_light"
+                
+                # --- NEUER ABSCHNITT ---
+                elif media_val < 0:
+                    current_status = "offline"
+                    msg = f"Drucker nicht verbunden (Status: {media_val})"
+                    tag = "electric_plug"
+                # -----------------------
+
                 elif media_val <= threshold:
                     current_status = "low_paper"
                     msg = f"Wenig Papier: {media_val} (<{threshold})!"
