@@ -342,6 +342,15 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
 # Fragment-Funktion für shelly Stekdose
 # --------------------------------------------------------------------
 
+# NEU: Hilfsfunktion mit Cache (verhindert Freezes bei Interaktion)
+@st.cache_data(ttl=10, show_spinner=False) 
+def fetch_shelly_cached(_client):
+    """
+    Cached den Status für 10 Sekunden. 
+    Der Unterstrich bei _client sagt Streamlit: "Diesen Parameter nicht hashen".
+    """
+    return _client.get_status()
+
 @st.fragment(run_every=15)  # Aktualisiert sich alle 15 Sekunden selbstständig!
 def render_shelly_monitor(printer_key, shelly_client, shelly_config):
     if not shelly_client:
@@ -349,7 +358,8 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
         return
 
     try:
-        status_data = shelly_client.get_status()
+        # HIER DIE ÄNDERUNG: Wir nutzen die gecachte Funktion!
+        status_data = fetch_shelly_cached(shelly_client)
     except Exception:
         status_data = {}
 
@@ -363,7 +373,6 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
         return
 
     # --- ÄNDERUNG: 2x2 Grid Layout ---
-    # Wir erstellen fix 2 Spalten
     grid_cols = st.columns(2)
 
     for i, switch_idx_str in enumerate(sorted_keys):
@@ -371,17 +380,13 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
         switch_id = int(switch_idx_str)
         name = cfg.get("name", f"Socket {switch_id}")
         icon_type = cfg.get("icon", "bolt")
-
-        standby_min = cfg.get("standby_min") # Gibt None zurück, wenn nicht im JSON
+        standby_min = cfg.get("standby_min") 
         
         switch_key = f"switch:{switch_id}"
         switch_data = status_data.get(switch_key, {})
         is_on = switch_data.get("output", False)
         power = float(switch_data.get("apower", 0.0))
         
-        # Logik: 
-        # i % 2 == 0 -> Linke Spalte (Index 0)
-        # i % 2 == 1 -> Rechte Spalte (Index 1)
         with grid_cols[i % 2]:
             toggle_clicked = render_power_card(
                 name=name,
@@ -396,8 +401,11 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
             if toggle_clicked:
                 new_state = not is_on
                 st.toast(f"Schalte {name} {'AN' if new_state else 'AUS'}...", icon="🔌")
+                # Direkt schalten (ohne Cache), damit es sofort reagiert
                 shelly_client.set_switch(switch_id, new_state)
-                time.sleep(1)
+                # Cache invalidieren, damit der neue Status beim Rerun sofort sichtbar ist
+                fetch_shelly_cached.clear()
+                time.sleep(0.5)
                 st.rerun()
 
 
