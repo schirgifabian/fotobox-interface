@@ -3,6 +3,7 @@ import time
 import datetime
 import toml
 import requests
+import json
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -45,77 +46,132 @@ def send_ntfy(topic, title, message, tags="warning"):
     except Exception as e:
         print(f"Push Error: {e}")
 
-def get_printer_settings(gc, sheet_id):
+def get_printer_settings_full(gc, sheet_id):
     """
-    Liest Push-Status (ntfy_active) UND Wartungsmodus (maintenance_mode) aus.
+    Holt ALLE Settings (inkl Shelly Cloud Params)
     """
-    default_push = True
-    default_maint = False
-    
-    if not sheet_id: return default_push, default_maint
+    default_res = {
+        "ntfy_active": True, 
+        "maintenance_mode": False, 
+        "shelly_cloud_url": "https://shelly-api-eu.shelly.cloud:6022/jrpc",
+        "shelly_auth_key": None,
+        "shelly_device_id": None,
+        "shelly_config": {}
+    }
+    if not sheet_id: return default_res
     
     try:
         sh = gc.open_by_key(sheet_id)
-        try:
-            # Wir versuchen, das Settings Sheet zu holen
-            ws = sh.worksheet("Settings")
-        except:
-            # Falls es noch nicht existiert, Defaults nutzen
-            return default_push, default_maint
+        try: ws = sh.worksheet("Settings")
+        except: return default_res
             
         records = ws.get_all_records()
-        
-        push_active = default_push
-        maintenance_active = default_maint
+        res = default_res.copy()
         
         for row in records:
             k = row.get("Key")
-            # Sicherstellen, dass wir Strings vergleichen, egal was Gspread liefert
             v_raw = row.get("Value")
-            v = str(v_raw).lower().strip()
+            v = str(v_raw).strip()
             
             if k == "ntfy_active":
-                # Prüft auf "true", "1", "yes" oder echtes True
-                push_active = v in ["true", "1", "yes", "on"]
+                res["ntfy_active"] = v.lower() in ["true", "1", "yes", "on"]
             elif k == "maintenance_mode":
-                maintenance_active = v in ["true", "1", "yes", "on"]
+                res["maintenance_mode"] = v.lower() in ["true", "1", "yes", "on"]
+            elif k == "shelly_cloud_url":
+                res["shelly_cloud_url"] = v
+            elif k == "shelly_auth_key":
+                res["shelly_auth_key"] = v
+            elif k == "shelly_device_id":
+                res["shelly_device_id"] = v
+            elif k == "shelly_config":
+                try: res["shelly_config"] = json.loads(v)
+                except: pass
                 
-        return push_active, maintenance_active
-        
+        return res
     except Exception as e:
-        print(f"Warnung: Konnte Settings nicht lesen (Sheet ID {sheet_id}): {e}")
-        return default_push, default_maint
+        print(f"Warnung: Konnte Settings nicht lesen: {e}")
+        return default_res
+
+def check_shelly_health(cloud_url, auth_key, device_id, shelly_config, topic, printer_name, memory):
+    """
+    Prüft Stromverbrauch via CLOUD API.
+    """
+    if not auth_key or not device_id or not shelly_config: return memory
+
+    try:
+        # Status via Cloud holen
+        if not cloud_url or not cloud_url.startswith("http"): 
+            cloud_url = "https://shelly-api-eu.shelly.cloud:6022/jrpc"
+            
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "Shelly.Call",
+            "params": {
+                "auth": auth_key,
+                "id": device_id,
+                "method": "Shelly.GetStatus"
+            }
+        }
+        
+        resp = requests.post(cloud_url, json=payload, headers={"Content-Type": "application/json"}, timeout=10)
+        json_resp = resp.json()
+        
+        # Daten extrahieren: result -> data -> eigentliche Daten
+        data = {}
+        if "result" in json_resp and "data" in json_resp["result"]:
+            data = json_resp["result"]["data"]
+        else:
+            # Fallback, falls Struktur anders (passiert manchmal bei Direktcalls)
+            data = json_resp.get("result", {})
+            
+    except Exception as e:
+        print(f"Shelly Check Fail ({printer_name}): {e}")
+        return memory
+
+    # Durch Config iterieren
+    for idx_str, cfg in shelly_config.items():
+        if not cfg.get("check_power", False):
+            continue
+            
+        name = cfg.get("name", f"Socket {idx_str}")
+        min_w = cfg.get("standby_min")
+        
+        switch_key = f"switch:{idx_str}"
+        switch_data = data.get(switch_key, {})
+        is_on = switch_data.get("output", False)
+        power = switch_data.get("apower", 0.0)
+        
+        mem_key = f"shelly_alert_{printer_name}_{idx_str}"
+        
+        # Logik: Gerät ist AN, aber Verbrauch < Minimum (Defekt?)
+        if is_on and min_w is not None and power < min_w:
+            if not memory.get(mem_key, False):
+                msg = f"{name} verbraucht nur {power:.1f}W (Erwartet: >{min_w}W). Defekt?"
+                send_ntfy(topic, f"⚠️ Hardware Check: {name}", msg, "electric_plug")
+                memory[mem_key] = True
+        else:
+            if memory.get(mem_key, False):
+                memory[mem_key] = False
+                
+    return memory
 
 def fetch_last_row_optimized(ws):
-    """
-    Hole nur Header und die allerletzte Zeile, statt das ganze Sheet.
-    Das spart massiv Bandbreite und CPU.
-    """
-    # [cite_start]1. Nur Spalte A (Timestamp) holen, um die Anzahl der Zeilen zu kennen [cite: 1]
-    # Das ist viel schneller als get_all_values()
     timestamps = ws.col_values(1)
     num_rows = len(timestamps)
-    
-    if num_rows < 2:
-        return {}
-
-    # 2. Header holen (Zeile 1)
+    if num_rows < 2: return {}
     headers = ws.row_values(1)
-    
-    # 3. Letzte Zeile holen (Zeile num_rows)
     last_values = ws.row_values(num_rows)
-    
-    # Falls die letzte Zeile weniger Spalten hat als der Header (leere Zellen am Ende), auffüllen
     if len(last_values) < len(headers):
         last_values += [""] * (len(headers) - len(last_values))
-        
     return dict(zip(headers, last_values))
 
 def main():
-    print("Starte Fotobox Monitor Daemon (Optimiert)...")
+    print("Starte Fotobox Monitor Daemon (Shelly Cloud)...")
     secrets = load_secrets()
     gc = get_gspread_client(secrets)
     state_memory = {}
+    shelly_memory = {} # Speicher für Shelly Alarme
 
     while True:
         try:
@@ -129,49 +185,50 @@ def main():
                 threshold = cfg.get("warning_threshold", 20)
                 factor = cfg.get("media_factor", 1)
 
-                if not sheet_id or not topic: 
-                    continue
-
-                # Kurze Pause zwischen den Druckern, um API Rate Limits zu schonen
+                if not sheet_id or not topic: continue
+                
+                # Kurze Pause um API Limits zu respektieren
                 time.sleep(1)
 
-                # 1. Einstellungen prüfen
-                push_active, maintenance_active = get_printer_settings(gc, sheet_id)
+                # 1. Alle Settings holen
+                settings = get_printer_settings_full(gc, sheet_id)
+                push_active = settings["ntfy_active"]
+                maint_active = settings["maintenance_mode"]
+                
+                # Cloud Variablen
+                cloud_url = settings["shelly_cloud_url"]
+                auth_key = settings["shelly_auth_key"]
+                device_id = settings["shelly_device_id"]
+                shelly_cfg = settings["shelly_config"]
 
-                # Wenn Wartungsmodus aktiv -> überspringen
-                if maintenance_active:
-                    if key in state_memory: 
-                        del state_memory[key]
+                if maint_active:
+                    if key in state_memory: del state_memory[key]
                     continue 
 
-                # 2. Daten holen (OPTIMIERT)
+                # 2. SHELLY CHECK (CLOUD VERSION)
+                # Nur prüfen, wenn wir Keys haben und Push aktiv ist
+                if auth_key and device_id and push_active:
+                    shelly_memory = check_shelly_health(
+                        cloud_url, auth_key, device_id, shelly_cfg, 
+                        topic, name, shelly_memory
+                    )
+
+                # 3. DRUCKER STATUS (Wie gehabt)
                 try:
                     sh = gc.open_by_key(sheet_id)
-                    ws = sh.sheet1
-                    
-                    # Hier benutzen wir die neue Funktion
-                    data = fetch_last_row_optimized(ws)
-                    
-                    if not data:
-                        continue
-                        
-                except Exception as e:
-                    print(f"Fehler beim Datenabruf für '{name}': {e}")
-                    continue
+                    data = fetch_last_row_optimized(sh.sheet1)
+                    if not data: continue
+                except Exception: continue
 
-                # 3. Status prüfen
                 try:
                     raw_status = str(data.get("Status", "")).lower()
                     media_val = int(data.get("MediaRemaining", 0)) * factor
-                except Exception:
-                    # Falls Daten korrupt sind (z.B. Header da, aber leer)
-                    continue
+                except Exception: continue
 
                 current_status = "ready"
                 msg = ""
                 tag = ""
                 
-                # Logik: Fehler oder Wenig Papier
                 if any(x in raw_status for x in ["error", "jam", "end", "fehlt", "störung"]):
                     current_status = "error"
                     msg = f"Störung: {raw_status}"
@@ -181,34 +238,25 @@ def main():
                     msg = f"Wenig Papier: {media_val} (<{threshold})!"
                     tag = "warning"
                 
-                # 4. Push Senden
                 mem = state_memory.get(key, {"last_status": "init", "last_push_time": 0})
                 now = time.time()
                 
-                # Push senden, wenn Status kritisch (Error/Low Paper)
                 if current_status in ["error", "low_paper"]:
                     is_new = mem["last_status"] != current_status
-                    # Cooldown von 30 Minuten für wiederholte Warnungen
                     is_cd_over = (now - mem["last_push_time"]) > (30 * 60)
 
                     if is_new or is_cd_over:
                         if push_active:
                             send_ntfy(topic, f"{name}: {current_status.upper()}", msg, tag)
                             mem["last_push_time"] = now
-                            print(f"-> Warnung für {name} gesendet.")
-                        else:
-                            print(f"-> Push für '{name}' unterdrückt (Einstellung aus).")
                 
-                # Entwarnung senden, wenn Fehler behoben wurde
                 elif current_status == "ready" and mem["last_status"] == "error":
                      if push_active:
                         send_ntfy(topic, f"{name}: OK", "Störung behoben.", "white_check_mark")
-                        print(f"-> Entwarnung für {name} gesendet.")
 
                 mem["last_status"] = current_status
                 state_memory[key] = mem
                 
-            # Warten bis zum nächsten Zyklus
             time.sleep(CHECK_INTERVAL)
 
         except KeyboardInterrupt:

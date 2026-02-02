@@ -575,3 +575,169 @@ def inject_screensaver_css():
     # (Unverändert lassen)
     css = """<style>.stApp {background-color: #000000 !important; color: #E2E8F0 !important;} section[data-testid="stSidebar"] {display: none !important;} header, footer {visibility: hidden !important;} .screensaver-container {display: flex; flex-direction: column; align-items: center; justify-content: center; height: 85vh; text-align: center; font-family: 'Inter', sans-serif;} .big-number {font-size: 15vw; font-weight: 800; line-height: 1; margin-bottom: 2vh; font-variant-numeric: tabular-nums;} .label-text {font-size: 2vh; text-transform: uppercase; letter-spacing: 0.3em; color: #64748B;} .status-pill {background-color: #111827; border: 1px solid #1F2937; padding: 1.5vh 4vw; border-radius: 99px; font-size: 3vh; font-weight: 600; display: flex; align-items: center; gap: 12px; margin-top: 4vh; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);} .status-dot {height: 2vh; width: 2vh; border-radius: 50%;} .meta-info {margin-top: 5vh; color: #374151; font-family: monospace; font-size: 1.5vh;} .stButton {position: fixed !important; bottom: 40px !important; left: 50% !important; transform: translateX(-50%) !important; width: auto !important; z-index: 99999;} .stButton > button {background-color: transparent !important; border: 1px solid rgba(255, 255, 255, 0.2) !important; color: rgba(255, 255, 255, 0.4) !important; border-radius: 50px !important; padding: 8px 30px !important; font-size: 0.75rem !important; text-transform: uppercase; letter-spacing: 0.15em; transition: all 0.3s ease !important;} .stButton > button:hover {border-color: #ffffff !important; color: #ffffff !important; background-color: rgba(255, 255, 255, 0.1) !important; box-shadow: 0 0 15px rgba(255, 255, 255, 0.2); transform: translateY(-2px);} .stButton > button:active, .stButton > button:focus {border-color: #ffffff !important; color: #ffffff !important; background-color: rgba(255, 255, 255, 0.2) !important;}</style>"""
     st.markdown(css, unsafe_allow_html=True)
+
+
+# ui_components.py
+
+import streamlit as st
+
+def render_power_card(name: str, is_on: bool, power: float, switch_id: int, key_prefix: str, icon_type: str = "bolt"):
+    """
+    Rendert eine Kachel mit dynamischen Icons basierend auf icon_type.
+    """
+    
+    # --- 1. SVG BIBLIOTHEK ---
+    
+    # Blitz (Standard / Hoher Verbrauch / Studioblitz)
+    svg_bolt = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 01.359.852L12.982 9.75h7.268a.75.75 0 01.548 1.262l-10.5 11.25a.75.75 0 01-1.272-.71l1.992-7.302H3.75a.75.75 0 01-.548-1.262l10.5-11.25a.75.75 0 01.913-.143z" clip-rule="evenodd" /></svg>"""
+    
+    # Surface / Laptop / PC
+    svg_surface = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path d="M10.5 18.75a.75.75 0 000 1.5h3a.75.75 0 000-1.5h-3z" /><path fill-rule="evenodd" d="M8.625.75A3.375 3.375 0 005.25 4.125v15.75a3.375 3.375 0 003.375 3.375h6.75a3.375 3.375 0 003.375-3.375V4.125A3.375 3.375 0 0015.375.75h-6.75zM7.5 4.125c0-.621.504-1.125 1.125-1.125h6.75c.621 0 1.125.504 1.125 1.125v15.75c0 .621-.504 1.125-1.125 1.125h-6.75A1.125 1.125 0 017.5 19.875V4.125z" clip-rule="evenodd" /></svg>"""
+    
+    # Drucker / Printer
+    svg_printer = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path fill-rule="evenodd" d="M7.875 1.5C6.839 1.5 6 2.34 6 3.375v2.99c-.426.053-.851.11-1.274.174-1.454.218-2.476 1.483-2.476 2.917v6.294a3 3 0 003 3h.27l-.155 1.705A1.875 1.875 0 007.232 22.5h9.536a1.875 1.875 0 001.867-2.045l-.155-1.705h.27a3 3 0 003-3V9.456c0-1.434-1.022-2.7-2.476-2.917A48.816 48.816 0 0018 6.366V3.375c0-1.036-.84-1.875-1.875-1.875h-8.25zM16.5 6.205v-2.83A.375.375 0 0016.125 3h-8.25a.375.375 0 00-.375.375v2.83a49.353 49.353 0 019 0zm-.217 8.295a.75.75 0 10-1.5 0c0 .414.336.75.75.75h4.5a.75.75 0 100-1.5h-3.75z" clip-rule="evenodd" /><path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75z" /></svg>"""
+
+    # Lüfter / Fan / Wind
+    svg_fan = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path d="M11.996 6.342a1.875 1.875 0 013.212-1.327l1.365 1.365a1.875 1.875 0 01-2.651 2.651l-1.926-1.926v-.763zM10.121 7.669a1.875 1.875 0 01-2.651-2.651l1.365-1.365a1.875 1.875 0 013.212 1.327v.763l-1.926 1.926zM11.996 17.658a1.875 1.875 0 01-3.212 1.327l-1.365-1.365a1.875 1.875 0 012.651-2.651l1.926 1.926v.763zM13.871 16.331a1.875 1.875 0 012.651 2.651l-1.365 1.365a1.875 1.875 0 01-3.212-1.327v-.763l1.926-1.926z" /><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm0 8.25a1.5 1.5 0 100 3 1.5 1.5 0 000-3z" clip-rule="evenodd" /></svg>"""
+
+    # WLAN Router (Optional, falls benötigt)
+    svg_router = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path fill-rule="evenodd" d="M1.371 8.143c5.858-5.857 15.356-5.857 21.213 0a.75.75 0 010 1.061l-.53.53a.75.75 0 01-1.06 0c-4.98-4.979-13.053-4.979-18.032 0a.75.75 0 01-1.06 0l-.53-.53a.75.75 0 010-1.06zm3.182 3.182c4.1-4.1 10.749-4.1 14.85 0a.75.75 0 010 1.061l-.53.53a.75.75 0 01-1.062 0 8.25 8.25 0 00-11.667 0 .75.75 0 01-1.06 0l-.53-.53a.75.75 0 010-1.06zm3.204 3.182a6 6 0 018.486 0 .75.75 0 010 1.061l-.53.53a.75.75 0 01-1.061 0 3.75 3.75 0 00-5.304 0 .75.75 0 01-1.06 0l-.53-.53a.75.75 0 010-1.06zm3.182 3.182a1.5 1.5 0 012.122 0 .75.75 0 010 1.061l-.53.53a.75.75 0 01-1.061 0l-.53-.53a.75.75 0 010-1.06z" clip-rule="evenodd" /></svg>"""
+
+    # Individuell / Default
+    svg_default = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm11.378-3.917c-.89-.777-2.366-.777-3.255 0a.75.75 0 01-.988-1.129c1.454-1.272 3.776-1.272 5.23 0 1.513 1.324 1.513 3.518 0 4.842a3.75 3.75 0 01-.837.552c-.676.328-1.028.774-1.028 1.152v.2a.75.75 0 01-1.5 0v-.2c0-1.201 1.134-2.215 2.185-2.741.478-.239.792-.705.792-1.226 0-.61-.433-1.123-1.099-1.45zM12 15.75a.75.75 0 01.75.75v.008a.75.75 0 01-1.5 0v-.008a.75.75 0 01.75-.75z" clip-rule="evenodd" /></svg>"""
+
+    # Ausgeschaltet (Power Button)
+    svg_off = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 24px; height: 24px;"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>"""
+
+    # --- 2. LOGIK: WELCHES ICON? ---
+    
+    # Mapping JSON-Name -> SVG Variable
+    icons_map = {
+        "bolt": svg_bolt,
+        "surface": svg_surface,
+        "router": svg_router,
+        "printer": svg_printer,
+        "fan": svg_fan,
+        "default": svg_default
+    }
+    
+    # Welches Icon soll gezeigt werden wenn AN?
+    active_icon_svg = icons_map.get(icon_type, svg_bolt) # Fallback ist Blitz
+
+    if is_on:
+        # Farbe bestimmen
+        if power > 10: 
+            status_color = "#3B82F6" # Blau (Aktiv)
+            bg_color = "#EFF6FF"
+            status_text = "AKTIV"
+            pulse_class = "status-pulse-blue"
+        else:
+            status_color = "#10B981" # Grün (Standby/An)
+            bg_color = "#ECFDF5"
+            status_text = "AN"
+            pulse_class = "status-pulse-green"
+            
+        icon_svg = active_icon_svg
+        btn_label = "Ausschalten"
+        btn_type = "secondary"
+    else:
+        status_color = "#94A3B8"
+        bg_color = "#F1F5F9"
+        icon_svg = svg_off 
+        status_text = "AUS"
+        pulse_class = ""
+        power = 0.0
+        btn_label = "Einschalten"
+        btn_type = "primary"
+
+    # --- 3. HTML ---
+    html = f"""
+    <div class="dashboard-card" style="padding: 20px; margin-bottom: 12px; height: 100%;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+                <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                    <span class="{pulse_class} status-dot"></span>
+                    <span style="font-size: 0.75rem; font-weight: 700; color: #94A3B8; letter-spacing: 0.05em; text-transform: uppercase;">{name}</span>
+                </div>
+                <div style="display: flex; align-items: baseline; gap: 4px;">
+                    <span style="font-size: 2.2rem; font-weight: 800; color: #1E293B; font-variant-numeric: tabular-nums;">{power:.1f}</span>
+                    <span style="font-size: 1rem; font-weight: 600; color: #64748B;">W</span>
+                </div>
+            </div>
+            <div style="background: {bg_color}; color: {status_color}; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 2px 4px 0 rgba(0,0,0,0.05);">
+                {icon_svg}
+            </div>
+        </div>
+        <div style="margin-top: 12px; font-size: 0.8rem; color: #64748B; font-weight: 500; display: flex; justify-content: space-between; align-items: center;">
+            <span>Status: <span style="color: {status_color}; font-weight: 700;">{status_text}</span></span>
+        </div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+    
+    if st.button(btn_label, key=f"pwr_btn_{key_prefix}_{switch_id}", type=btn_type, use_container_width=True):
+        return True
+    return False
+
+
+def render_lock_card_dual(lock_state: str, key_prefix: str):
+    """
+    Rendert die Screen-Lock Karte mit ZWEI separaten Buttons über die volle Breite.
+    """
+    
+    # Icons
+    svg_unlock = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path d="M18 1.5c2.9 0 5.25 2.35 5.25 5.25v3.75a.75.75 0 01-1.5 0V6.75a3.75 3.75 0 10-7.5 0v3a3 3 0 013 3v6.75a3 3 0 01-3 3H3.75a3 3 0 01-3-3v-6.75a3 3 0 013-3h9v-3c0-2.9 2.35-5.25 5.25-5.25z" /></svg>"""
+    svg_lock = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path fill-rule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z" clip-rule="evenodd" /></svg>"""
+
+    # Farben & Text
+    is_locked = (lock_state == "on")
+    if is_locked:
+        main_text = "GESPERRT"
+        status_color = "#F59E0B" # Orange
+        bg_color = "#FFFBEB"
+        pulse_class = "status-pulse-orange"
+        icon_svg = svg_lock
+    else:
+        main_text = "FREI"
+        status_color = "#10B981" # Grün
+        bg_color = "#ECFDF5"
+        pulse_class = "status-pulse-green"
+        icon_svg = svg_unlock
+
+    # HTML: margin-bottom reduziert auf 0px, damit Buttons direkt anschließen
+    # border-bottom-left-radius/right auf 0, damit es mit Buttons wie eins aussieht (optional, hier dezent gelassen)
+    html = f"""
+    <div class="dashboard-card" style="padding: 20px; margin-bottom: 8px; height: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                    <span class="{pulse_class} status-dot"></span>
+                    <span style="font-size: 0.75rem; font-weight: 700; color: #94A3B8; letter-spacing: 0.05em; text-transform: uppercase;">Screen Modus</span>
+                </div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #1E293B; font-variant-numeric: tabular-nums; line-height: 1;">
+                    {main_text}
+                </div>
+            </div>
+            <div style="background: {bg_color}; color: {status_color}; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 2px 4px 0 rgba(0,0,0,0.05);">
+                {icon_svg}
+            </div>
+        </div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+    
+    # Action Buttons
+    c1, c2 = st.columns(2)
+    action = None
+    
+    with c1:
+        # Button: Sperren (Links)
+        if st.button("Sperren 🔒", key=f"btn_lock_{key_prefix}", use_container_width=True):
+            action = "lock"
+            
+    with c2:
+        # Button: Freigeben (Rechts)
+        if st.button("Freigeben 🔓", key=f"btn_unlock_{key_prefix}", use_container_width=True):
+            action = "unlock"
+            
+    return action

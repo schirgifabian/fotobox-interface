@@ -13,7 +13,9 @@ import extra_streamlit_components as stx
 import pandas as pd
 import plotly.express as px
 
-from aqara_client import AqaraClient
+# --- NEU: Shelly Client statt Aqara ---
+from shelly_client import ShellyClient 
+
 from report_generator import generate_event_pdf
 from sheets_helpers import (
     get_data,
@@ -37,7 +39,9 @@ from ui_components import (
     render_link_card,
     render_card_header,
     inject_screensaver_css,
-    render_screensaver_content
+    render_screensaver_content,
+    render_power_card,
+    render_lock_card_dual
 )
 
 # --------------------------------------------------------------------
@@ -54,6 +58,8 @@ PRINTERS = {
         "default_max_prints": 400,
         "cost_per_roll_eur": 46.59,
         "has_admin": True,
+        # --- ÄNDERUNG: Shelly aktiv, Aqara aus ---
+        "has_shelly": True, 
         "has_aqara": False,
         "has_dsr": True,
         "media_factor": 1,
@@ -65,6 +71,7 @@ PRINTERS = {
         "default_max_prints": 200,
         "cost_per_roll_eur": 55,
         "has_admin": True,
+        "has_shelly": False,
         "has_aqara": False,
         "has_dsr": False,
         "media_factor": 0.5,
@@ -73,7 +80,7 @@ PRINTERS = {
 }
 
 # --------------------------------------------------------------------
-# LOGIN (Unverändert)
+# LOGIN
 # --------------------------------------------------------------------
 def get_cookie_manager():
     return stx.CookieManager(key="fotobox_auth")
@@ -87,19 +94,12 @@ def check_login():
         return
 
     cookie_manager = get_cookie_manager()
-    
-    # Manager Referenz speichern
     st.session_state["cookie_manager_ref"] = cookie_manager
 
-    # --- FIX START: Manuellen Logout prüfen ---
-    # Wenn der Nutzer gerade "Ausloggen" geklickt hat, ignorieren wir das Cookie
-    # für diesen Durchlauf, damit der Browser Zeit hat, es zu löschen.
     if st.session_state.get("manual_logout", False):
-        st.session_state["manual_logout"] = False # Reset für das nächste Mal
+        st.session_state["manual_logout"] = False 
         st.session_state["is_logged_in"] = False
-        # Wir springen direkt zum Login-Formular weiter unten
     else:
-        # Normaler Check: Cookie lesen
         cookie_val = cookie_manager.get("auth_pin")
 
         if st.session_state.get("is_logged_in", False):
@@ -108,7 +108,6 @@ def check_login():
         if cookie_val is not None and str(cookie_val) == secret_pin:
             st.session_state["is_logged_in"] = True
             return True
-    # --- FIX END ---
 
     st.title("Dashboard dieFotobox.")
     msg_placeholder = st.empty()
@@ -173,20 +172,26 @@ def send_dsr_command(cmd: str) -> None:
     except Exception: pass
 
 # --------------------------------------------------------------------
-# AQARA
+# SHELLY INIT
 # --------------------------------------------------------------------
-def init_aqara() -> Tuple[bool, Optional[AqaraClient], Optional[str], str]:
+def init_shelly():
+    """
+    Lädt Shelly Cloud Auth Key und Device ID aus Google Sheets.
+    """
     try:
-        if "aqara" not in st.secrets: return False, None, None, "4.1.85"
-        aqara_cfg = st.secrets["aqara"]
-        client = AqaraClient()
-        return True, client, aqara_cfg["device_id"], aqara_cfg.get("resource_id", "4.1.85")
+        default_url = "https://shelly-api-eu.shelly.cloud"
+        
+        # Einstellungen aus Google Sheet laden (oder Default nutzen)
+        cloud_url = get_setting("shelly_cloud_url", default_url)
+        auth_key = get_setting("shelly_auth_key")
+        device_id = get_setting("shelly_device_id")
+        
+        if auth_key and device_id:
+            return ShellyClient(cloud_url, auth_key, device_id)
+            
     except Exception as e:
-        print(f"Aqara Init Fehler: {e}")
-        return False, None, None, "4.1.85"
-
-AQARA_ENABLED, aqara_client, AQARA_SOCKET_DEVICE_ID, AQARA_SOCKET_RESOURCE_ID = init_aqara()
-
+        print(f"Shelly Init Fehler: {e}")
+    return None
 
 # --------------------------------------------------------------------
 # SESSION
@@ -200,7 +205,6 @@ def init_session_state():
         "max_prints": None,
         "selected_printer": None,
         "socket_state": "unknown",
-        "socket_debug": None,
         "lockscreen_state": "off",
         "maintenance_mode": False,
     }
@@ -229,19 +233,9 @@ def show_live_status(media_factor: int, cost_per_roll: float, sound_enabled: boo
         
         status_mode, display_text, display_color, push, minutes_diff = evaluate_status(
             raw_status, media_remaining, timestamp, 
-            maintenance_active=maint_active # Wichtig: Maintenance Status übergeben!
+            maintenance_active=maint_active 
         )
 
-        # --- ÄNDERUNG HIER: ---
-        # Wir senden KEINEN Push mehr von der UI aus. 
-        # Das macht jetzt exklusiv die monitor.py!
-        # Der 'push'-Return-Wert wird nur noch für interne Logik (z.B. Toasts im Browser) genutzt, falls gewünscht.
-        
-        # if push is not None:
-        #    title, msg, tags = push
-        #    send_ntfy_push(title, msg, tags=tags)  <-- DIESE ZEILEN AUSKOMMENTIEREN ODER LÖSCHEN
-        
-        # Sound darf bleiben, da er nur im Browser des Betrachters abgespielt wird
         maybe_play_sound(status_mode, sound_enabled)
         heartbeat_info = f" (vor {minutes_diff} Min)" if minutes_diff is not None else ""
 
@@ -313,8 +307,6 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
     df_hist = df_hist.copy()
     df_hist["RemainingPrints"] = df_hist["MediaRemaining"] * media_factor
 
-    # --- NEU: PLOTLY CHART ---
-    # Wir erstellen ein interaktives Liniendiagramm
     fig = px.line(
         df_hist, 
         y="RemainingPrints", 
@@ -323,19 +315,14 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
         template="plotly_white"
     )
     
-    # Styling: Blaue Linie, etwas dicker
     fig.update_traces(line_color='#3B82F6', line_width=3)
-    
-    # Layout: Hover-Effekt, Achsen formatieren
     fig.update_layout(
         hovermode="x unified",
         height=350,
         margin=dict(l=20, r=20, t=40, b=20),
-        yaxis=dict(rangemode="tozero") # Y-Achse startet immer bei 0
+        yaxis=dict(rangemode="tozero")
     )
-    
     st.plotly_chart(fig, use_container_width=True)
-    # -------------------------
 
     stats = compute_print_stats(df, window_min=30, media_factor=media_factor)
     last_remaining = int(df_hist["RemainingPrints"].iloc[-1])
@@ -352,42 +339,164 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
 
 
 # --------------------------------------------------------------------
-# ADMIN PANEL (DESIGN UPDATE)
+# Fragment-Funktion für shelly Stekdose
+# --------------------------------------------------------------------
+
+@st.fragment(run_every=5)  # Aktualisiert sich alle 5 Sekunden selbstständig!
+def render_shelly_monitor(printer_key, shelly_client, shelly_config):
+    if not shelly_client:
+        st.warning("Shelly Client nicht initialisiert.")
+        return
+
+    try:
+        status_data = shelly_client.get_status()
+    except Exception:
+        status_data = {}
+
+    if not status_data:
+        st.caption("⚠️ Keine Verbindung zur Shelly Cloud / Offline.")
+        return
+
+    sorted_keys = sorted(shelly_config.keys())
+    if not sorted_keys:
+        st.info("Keine Steckdosen konfiguriert.")
+        return
+
+    # --- ÄNDERUNG: 2x2 Grid Layout ---
+    # Wir erstellen fix 2 Spalten
+    grid_cols = st.columns(2)
+
+    for i, switch_idx_str in enumerate(sorted_keys):
+        cfg = shelly_config[switch_idx_str]
+        switch_id = int(switch_idx_str)
+        name = cfg.get("name", f"Socket {switch_id}")
+        icon_type = cfg.get("icon", "bolt") 
+
+        switch_key = f"switch:{switch_id}"
+        switch_data = status_data.get(switch_key, {})
+        is_on = switch_data.get("output", False)
+        power = float(switch_data.get("apower", 0.0))
+        
+        # Logik: 
+        # i % 2 == 0 -> Linke Spalte (Index 0)
+        # i % 2 == 1 -> Rechte Spalte (Index 1)
+        with grid_cols[i % 2]:
+            toggle_clicked = render_power_card(
+                name=name,
+                is_on=is_on,
+                power=power,
+                switch_id=switch_id,
+                key_prefix=printer_key,
+                icon_type=icon_type 
+            )
+
+            if toggle_clicked:
+                new_state = not is_on
+                st.toast(f"Schalte {name} {'AN' if new_state else 'AUS'}...", icon="🔌")
+                shelly_client.set_switch(switch_id, new_state)
+                time.sleep(1)
+                st.rerun()
+
+
+
+# --------------------------------------------------------------------
+# ADMIN PANEL (MIT SHELLY & DIAGNOSE)
 # --------------------------------------------------------------------
 def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, printer_key: str) -> None:
     """
-    Admin-Bereich mit Dashboard-Look (Cards statt Tabs für Inhalt).
+    Admin-Bereich mit Dashboard-Look.
     """
-    printer_has_aqara = printer_cfg.get("has_aqara", False)
+    printer_has_shelly = printer_cfg.get("has_shelly", False)
     printer_has_dsr = printer_cfg.get("has_dsr", False)
 
     st.write("")
     st.markdown("### 🛠️ Administration") 
     st.write("")
 
-    # Tabs als Navigation oben behalten, aber Inhalte als "Cards" rendern
-    tab_paper, tab_report, tab_devices, tab_notify = st.tabs([
-        "🧻 Papier & Reset", 
-        "📊 Report", 
+    tab_devices, tab_paper, tab_report, tab_notify = st.tabs([
         "🔌 Steuerung",
+        "🧻 Papier & Reset", 
+        "📊 Report",
         "🔔 System & Tests"
     ])
 
-    # ------------------------------------------------------------------
-    # TAB 1: PAPIERWECHSEL CARD
-    # ------------------------------------------------------------------
-    with tab_paper:
-        # Nutzung von st.container(border=True), der via CSS gestylt ist
-        with st.container(border=True):
-            render_card_header(
-                icon="🧻", 
-                title="Papierwechsel", 
-                subtitle="Zähler zurücksetzen und Log leeren",
-                color_class="blue"
-            )
-            
-            st.write("") # Spacer
+# --- TAB 1: DEVICES (SHELLY) ---
+    with tab_devices:
+        if not printer_has_shelly and not printer_has_dsr:
+            st.info("Keine Geräte konfiguriert.")
+        else:
+            # SHELLY
+            if printer_has_shelly:
+                shelly_client = init_shelly()
+                
+                with st.container(border=True):
+                    render_card_header("⚡", "Stromversorgung - Oberteil", "Live Monitoring", "green")
+                    
+                    if not shelly_client:
+                        st.warning("Shelly Cloud nicht konfiguriert (Settings prüfen).")
+                    else:
+                        try:
+                            config_json = get_setting("shelly_config", "{}")
+                            shelly_config = json.loads(config_json)
+                        except:
+                            shelly_config = {}
+                            st.error("Shelly Config Fehler in Google Sheets.")
 
+                        # HIER IST DER NEUE AUFRUF:
+                        render_shelly_monitor(printer_key, shelly_client, shelly_config)
+
+
+# --- DSR SCREEN LOCK BEREICH ---
+            if printer_has_dsr:
+                if not printer_has_shelly:
+                     render_card_header("🔒", "Screen Steuerung", "Touchscreen Sperre", "orange")
+                
+                st.write("")
+                
+                # WICHTIG: Keine st.columns(2) mehr! 
+                # Wir rendern direkt in den Hauptfluss, damit es volle Breite hat.
+                
+                # Status holen
+                lock_state = st.session_state.get("lockscreen_state", "off")
+                
+                if DSR_ENABLED:
+                    # Karte + Buttons rendern (nimmt jetzt volle Breite)
+                    action = render_lock_card_dual(lock_state, printer_key)
+                    
+                    if action == "lock":
+                        send_dsr_command("lock_on")
+                        st.session_state.lockscreen_state = "on"
+                        st.toast("Sperr-Befehl gesendet", icon="🔒")
+                        time.sleep(0.5)
+                        st.rerun()
+                        
+                    elif action == "unlock":
+                        send_dsr_command("lock_off")
+                        st.session_state.lockscreen_state = "off"
+                        st.toast("Freigabe-Befehl gesendet", icon="🔓")
+                        time.sleep(0.5)
+                        st.rerun()
+                else:
+                    st.warning("DSR Topic nicht konfiguriert.")
+            
+            st.write("")
+            with st.container(border=True):
+                is_maint = st.session_state.get("maintenance_mode", False)
+                render_card_header("🚚", "Box im Lager", "Unterdrückt Warnungen", "slate" if is_maint else "green")
+                c_text, c_toggle = st.columns([3, 1])
+                with c_text: st.caption("Push-Nachrichten pausieren.")
+                with c_toggle:
+                    new_maint = st.toggle("Aktiv", value=is_maint, key=f"toggle_maint_{printer_key}")
+                    if new_maint != is_maint:
+                        st.session_state.maintenance_mode = new_maint
+                        set_setting("maintenance_mode", new_maint)
+                        st.rerun()
+
+    # --- TAB 2: PAPIER ---
+    with tab_paper:
+        with st.container(border=True):
+            render_card_header("🧻", "Papierwechsel", "Zähler zurücksetzen und Log leeren", "blue")
+            st.write("")
             c1, c2 = st.columns([1, 2])
             with c1:
                 st.caption("Paketgröße wählen")
@@ -395,21 +504,12 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                 try: current_size = int(st.session_state.max_prints or printer_cfg["default_max_prints"])
                 except: current_size = printer_cfg["default_max_prints"]
                 idx = 1 if current_size == 400 else 0
-                
-                size = st.radio(
-                    "Paketgröße", size_options, horizontal=True, index=idx,
-                    label_visibility="collapsed", key=f"tab_paper_size_{printer_key}"
-                )
-            
+                size = st.radio("Paketgröße", size_options, horizontal=True, index=idx, label_visibility="collapsed", key=f"tab_paper_size_{printer_key}")
             with c2:
                 st.caption("Notiz (optional)")
-                reset_note = st.text_input(
-                    "Notiz", key=f"reset_note_{printer_key}", label_visibility="collapsed",
-                    placeholder="z.B. neue Rolle eingelegt"
-                )
+                reset_note = st.text_input("Notiz", key=f"reset_note_{printer_key}", label_visibility="collapsed", placeholder="z.B. neue Rolle eingelegt")
 
             st.write("")
-            
             if not st.session_state.confirm_reset:
                 if st.button("Reset durchführen", use_container_width=True, key=f"btn_init_reset_{printer_key}", type="primary"):
                     st.session_state.confirm_reset = True
@@ -432,345 +532,181 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                     st.session_state.confirm_reset = False
                     st.rerun()
 
-    # ------------------------------------------------------------------
-    # TAB 2: REPORT CARD
-    # ------------------------------------------------------------------
+    # --- TAB 3: REPORT ---
     with tab_report:
         with st.container(border=True):
-            render_card_header(
-                icon="📄", 
-                title="Event Report", 
-                subtitle="PDF Zusammenfassung generieren",
-                color_class="green"
-            )
+            render_card_header("📄", "Event Report", "PDF Zusammenfassung generieren", "green")
             st.write("")
-            st.markdown(
-                """<div style="font-size: 0.9rem; color: #64748B; margin-bottom: 16px;">
-                Erstellt ein PDF mit Verbrauchskurve, Statistiken und den letzten Fehlermeldungen.
-                </div>""", 
-                unsafe_allow_html=True
-            )
-
+            st.caption("Erstellt ein PDF mit Verbrauchskurve, Statistiken und den letzten Fehlermeldungen.")
             if st.button("PDF Bericht erstellen", use_container_width=True, key=f"btn_pdf_{printer_key}"):
                 df_rep = get_data_admin(st.session_state.sheet_id)
                 media_factor = printer_cfg.get("media_factor", 1)
                 stats = compute_print_stats(df_rep, media_factor=media_factor)
-                
                 last_val = 0
                 if not df_rep.empty:
                     try: last_val = int(df_rep.iloc[-1].get("MediaRemaining", 0)) * media_factor
                     except: pass
                 prints_done = max(0, (st.session_state.max_prints or 0) - last_val)
-                
                 cost_str = "N/A"
                 cpr = printer_cfg.get("cost_per_roll_eur")
                 if cpr and st.session_state.max_prints:
                     c_used = prints_done * (cpr / st.session_state.max_prints)
                     cost_str = f"{c_used:.2f} EUR"
+                pdf_bytes = generate_event_pdf(df=df_rep, printer_name=st.session_state.selected_printer, stats=stats, prints_since_reset=prints_done, cost_info=cost_str, media_factor=media_factor)
+                st.download_button(label="⬇️ PDF jetzt herunterladen", data=pdf_bytes, file_name=f"report_{datetime.date.today()}.pdf", mime="application/pdf", use_container_width=True, key=f"dl_btn_{printer_key}")
 
-                pdf_bytes = generate_event_pdf(
-                    df=df_rep, printer_name=st.session_state.selected_printer,
-                    stats=stats, prints_since_reset=prints_done,
-                    cost_info=cost_str, media_factor=media_factor
-                )
-                
-                st.download_button(
-                    label="⬇️ PDF jetzt herunterladen",
-                    data=pdf_bytes,
-                    file_name=f"report_{datetime.date.today()}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                    key=f"dl_btn_{printer_key}"
-                )
 
-    # ------------------------------------------------------------------
-    # TAB 3: DEVICES CARDS
-    # ------------------------------------------------------------------
-    with tab_devices:
-        if not printer_has_aqara and not printer_has_dsr:
-            st.info("Keine Geräte konfiguriert.")
-        else:
-            col_aqara, col_dsr = st.columns(2)
 
-            # --- Aqara Card ---
-            with col_aqara:
-                with st.container(border=True):
-                    status_text = "N/A"
-                    status_color = "slate"
-                    
-                    if printer_has_aqara and AQARA_ENABLED:
-                        if st.session_state.socket_state == "on":
-                            status_text = "AN"
-                            status_color = "green"
-                        elif st.session_state.socket_state == "off":
-                            status_text = "AUS"
-                            status_color = "slate"
-                        else:
-                            # Try fetch current state
-                            try:
-                                curr, _ = aqara_client.get_socket_state(AQARA_SOCKET_DEVICE_ID, AQARA_SOCKET_RESOURCE_ID)
-                                st.session_state.socket_state = curr
-                                if curr == "on": 
-                                    status_text = "AN"
-                                    status_color = "green"
-                                elif curr == "off": 
-                                    status_text = "AUS"
-                                    status_color = "slate"
-                            except: pass
-
-                    render_card_header(
-                        icon="⚡", 
-                        title="Strom", 
-                        subtitle=f"Status: {status_text}",
-                        color_class=status_color
-                    )
-                    
-                    if printer_has_aqara and AQARA_ENABLED:
-                        ca, cb = st.columns(2)
-                        if ca.button("An", key=f"aq_on_{printer_key}", use_container_width=True):
-                            aqara_client.switch_socket(AQARA_SOCKET_DEVICE_ID, True, AQARA_SOCKET_RESOURCE_ID)
-                            st.session_state.socket_state = "on"
-                            st.rerun()
-                        if cb.button("Aus", key=f"aq_off_{printer_key}", use_container_width=True):
-                            aqara_client.switch_socket(AQARA_SOCKET_DEVICE_ID, False, AQARA_SOCKET_RESOURCE_ID)
-                            st.session_state.socket_state = "off"
-                            st.rerun()
-                    else:
-                        st.caption("Nicht verfügbar")
-
-            # --- DSR Card ---
-            with col_dsr:
-                with st.container(border=True):
-                    lock_state = st.session_state.get("lockscreen_state", "off")
-                    l_color = "orange" if lock_state == "on" else "slate"
-                    l_text = "GESPERRT" if lock_state == "on" else "FREI"
-
-                    render_card_header(
-                        icon="🔒", 
-                        title="Screen", 
-                        subtitle=f"Modus: {l_text}",
-                        color_class=l_color
-                    )
-
-                    if printer_has_dsr and DSR_ENABLED:
-                        la, lb = st.columns(2)
-                        if la.button("Sperren", key=f"dsr_l_{printer_key}", use_container_width=True):
-                            send_dsr_command("lock_on")
-                            st.session_state.lockscreen_state = "on"
-                            st.rerun()
-                        if lb.button("Freigeben", key=f"dsr_u_{printer_key}", use_container_width=True):
-                            send_dsr_command("lock_off")
-                            st.session_state.lockscreen_state = "off"
-                            st.rerun()
-                    else:
-                        st.caption("Nicht verfügbar")
-                        
-            st.write("")
-            with st.container(border=True):
-                is_maint = st.session_state.get("maintenance_mode", False)
-            
-                # Header rendern
-                render_card_header(
-                    icon="🚚", 
-                    title="Box im Lager", 
-                    subtitle="Transport & Lagerung",
-                    color_class="slate" if is_maint else "green" # Grau wenn aktiv, sonst grün (oder umgekehrt, wie du magst)
-                )
-            
-                c_text, c_toggle = st.columns([3, 1])
-                with c_text:
-                    st.caption("Unterdrückt 'Keine Verbindung' Warnungen und Push-Nachrichten.")
-            
-                with c_toggle:
-                    # Toggle
-                    new_maint = st.toggle("Aktiv", value=is_maint, key=f"toggle_maint_{printer_key}")
-                
-                    if new_maint != is_maint:
-                        st.session_state.maintenance_mode = new_maint
-                        set_setting("maintenance_mode", new_maint)
-                        st.rerun()
-
-    # ------------------------------------------------------------------
-    # TAB 4: NOTIFY CARD
-    # ------------------------------------------------------------------
+    # --- TAB 4: SYSTEM & DIAGNOSE ---
     with tab_notify:
         with st.container(border=True):
-            render_card_header(
-                icon="🔔", 
-                title="System Tests", 
-                subtitle="Push & Simulation",
-                color_class="orange"
-            )
+            render_card_header("🔔", "System Tests", "Push & Diagnose", "orange")
             st.write("")
-            
-            # Topic Info
             st.caption("Konfiguriertes Topic")
             st.code(st.session_state.ntfy_topic or "Kein Topic", language="text")
-
-            st.write("---")
             
             c_test, c_sim = st.columns(2)
             with c_test:
                 if st.button("🔔 Ping senden", use_container_width=True, key=f"btn_test_push_{printer_key}"):
                     send_ntfy_push("Test", "Test erfolgreich", tags="tada")
                     st.toast("Ping gesendet")
-            
             with c_sim:
-                sim_opt = st.selectbox(
-                    "Simulieren", 
-                    ["Fehler", "Low Paper", "Stale"], 
-                    key=f"sim_{printer_key}", 
-                    label_visibility="collapsed"
-                )
+                sim_opt = st.selectbox("Simulieren", ["Fehler", "Low Paper", "Stale"], key=f"sim_{printer_key}", label_visibility="collapsed")
                 if st.button("Auslösen", use_container_width=True, key=f"btn_sim_trig_{printer_key}"):
-                    map_sim = {
-                        "Fehler": ("error", "🔴 Fehler (Sim)", "rotating_light"),
-                        "Low Paper": ("low_paper", "⚠️ Papier (Sim)", "warning"),
-                        "Stale": ("stale", "⚠️ Stale (Sim)", "hourglass")
-                    }
+                    map_sim = {"Fehler": ("error", "🔴 Fehler (Sim)", "rotating_light"), "Low Paper": ("low_paper", "⚠️ Papier (Sim)", "warning"), "Stale": ("stale", "⚠️ Stale (Sim)", "hourglass")}
                     mode, title, tag = map_sim[sim_opt]
                     send_ntfy_push(title, "Simulation aktiv", tags=tag)
                     maybe_play_sound(mode, st.session_state.sound_enabled)
                     st.toast(f"Simulation {mode} gesendet")
 
+            st.write("---")
+            
+            # === HIER BEGINNT DER NEUE TIEFEN-DIAGNOSE CODE ===
+            if st.button("🔍 Tiefen-Diagnose starten", use_container_width=True, key=f"btn_deep_debug_{printer_key}"):
+                st.info("Startet Diagnose...")
+                
+                client = init_shelly()
+                if not client:
+                    st.error("❌ Client konnte nicht geladen werden. Prüfe Google Sheets!")
+                else:
+                    st.markdown(f"**Auth Key (Maskiert):** `{client.auth_key[:5]}...{client.auth_key[-5:]}`")
+                    st.markdown(f"**Device ID:** `{client.device_id}`")
+                    
+                    test_urls = [
+                        "https://shelly-api-eu.shelly.cloud/device/rpc",  # Haupt-Server
+                        "https://shelly-233-eu.shelly.cloud/device/rpc"   # Dein Server (Port 443!)
+                    ]
+
+                    success = False
+                    
+                    for url in test_urls:
+                        st.write(f"👉 **Versuche Verbindung zu:** `{url}`")
+                        
+                        payload = {
+                            "auth_key": client.auth_key,
+                            "id": client.device_id,
+                            "method": "Shelly.GetStatus",
+                            "params": "{}" 
+                        }
+                        
+                        try:
+                            r = requests.post(url, data=payload, timeout=10)
+                            st.write(f"Status Code: `{r.status_code}`")
+                            
+                            if r.status_code == 200:
+                                resp_json = r.json()
+                                st.success("✅ Server hat geantwortet!")
+                                st.json(resp_json) 
+                                
+                                if "isok" in resp_json and resp_json["isok"] == False:
+                                     st.error("⚠️ Server meldet Fehler (falscher Key/ID?)")
+                                elif "data" in resp_json and "online" in resp_json["data"] and resp_json["data"]["online"] == False:
+                                     st.warning("⚠️ Cloud Verbindung OK, aber Gerät ist OFFLINE!")
+                                else:
+                                     st.balloons()
+                                     success = True
+                                     break 
+                            else:
+                                st.error(f"❌ HTTP Fehler: {r.text}")
+                                
+                        except Exception as e:
+                            st.error(f"❌ Verbindungsfehler: {e}")
+                            
+                    if not success:
+                        st.error("Alle Verbindungsversuche fehlgeschlagen.")
 
 # --------------------------------------------------------------------
-# Screensaver
+# SCREENSAVER
 # --------------------------------------------------------------------
-
-
 @st.fragment(run_every=10)
 def run_screensaver_loop(media_factor: int):
-    # Daten holen
     df = get_data(st.session_state.sheet_id, event_mode=True)
-    
     if df.empty:
         st.warning("Warte auf Daten...")
         return
-
     try:
         last = df.iloc[-1]
-        full_timestamp = str(last.get("Timestamp", "")) # Voller Zeitstempel für die Logik
-        display_timestamp = full_timestamp[-8:]         # Nur Uhrzeit für die Anzeige
+        full_timestamp = str(last.get("Timestamp", "")) 
+        display_timestamp = full_timestamp[-8:]         
         raw_status = str(last.get("Status", ""))
-        
         try: media_remaining = int(last.get("MediaRemaining", 0)) * media_factor
         except: media_remaining = 0
-        
-        # Hier full_timestamp übergeben!
-        status_mode, display_text, display_color, _, _ = evaluate_status(
-            raw_status, media_remaining, full_timestamp
-        )
-        
-        # HIER NUR NOCH CONTENT RENDERN, KEIN CSS MEHR
-        render_screensaver_content(
-            status_mode=status_mode,
-            media_remaining=media_remaining,
-            display_text=display_text,
-            display_color=display_color,
-            timestamp=display_timestamp # Hier die gekürzte Version nutzen
-        )
-        
-        # Der Button wird nun via CSS am unteren Rand fixiert
+        status_mode, display_text, display_color, _, _ = evaluate_status(raw_status, media_remaining, full_timestamp)
+        render_screensaver_content(status_mode=status_mode, media_remaining=media_remaining, display_text=display_text, display_color=display_color, timestamp=display_timestamp)
         if st.button("Beenden", key="btn_exit_saver"):
             st.session_state.screensaver_mode = False
             st.rerun()
-
     except Exception as e:
-        # Im Screensaver Fehler lieber dezent anzeigen oder ignorieren
         print(f"Screensaver Error: {e}")
-
 
 # --------------------------------------------------------------------
 # MAIN
 # --------------------------------------------------------------------
 def main():
     st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="centered")
-    
-    # 1. CSS laden
     inject_custom_css()
-    
     init_session_state()
     check_login()
 
-    # --- SCREENSAVER CHECK ---
     if st.session_state.screensaver_mode:
         inject_screensaver_css()
         printer_name = st.session_state.get("selected_printer")
-        if not printer_name: 
-            printer_name = list(PRINTERS.keys())[0]
+        if not printer_name: printer_name = list(PRINTERS.keys())[0]
         printer_cfg = PRINTERS.get(printer_name, {})
         media_factor = printer_cfg.get("media_factor", 1)
         run_screensaver_loop(media_factor)
         return
-    # -------------------------
 
-    # --- DEFINITION DER PROFILE/LOGOUT SIDEBAR FUNKTION ---
-    # Damit können wir das Profil immer ganz am Ende rendern
     def render_sidebar_profile():
         with st.sidebar:
             st.write("---")
             with st.container(border=True):
-                st.markdown("""
-                    <div class="user-profile-card">
-                        <div class="user-avatar">A</div>
-                        <div class="user-info">
-                            <span class="user-name">Admin User</span>
-                            <span class="user-role">Administrator</span>
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
-                
+                st.markdown("""<div class="user-profile-card"><div class="user-avatar">A</div><div class="user-info"><span class="user-name">Admin User</span><span class="user-role">Administrator</span></div></div>""", unsafe_allow_html=True)
                 st.write("") 
                 if st.button("Ausloggen", key="sidebar_logout", use_container_width=True):
-                    if "cookie_manager_ref" in st.session_state:
-                        st.session_state["cookie_manager_ref"].delete("auth_pin")
+                    if "cookie_manager_ref" in st.session_state: st.session_state["cookie_manager_ref"].delete("auth_pin")
                     st.session_state["is_logged_in"] = False
                     time.sleep(0.5) 
                     st.rerun()
     
-    # --- SIDEBAR TEIL 1: NAVIGATION ---
     with st.sidebar:
-        # HEADER
         st.markdown("### ⚙️ Control Panel")
-        
-        # 1. NAVIGATION & AUSWAHL (JETZT OBEN)
         with st.container(border=True):
             st.markdown("#### Navigation")
-            view_mode = st.radio(
-                "Ansicht", 
-                ["Einzelne Fotobox", "Alle Boxen"],
-                label_visibility="collapsed"
-            )
-
-            # Dropdown nur zeigen, wenn nötig
+            view_mode = st.radio("Ansicht", ["Einzelne Fotobox", "Alle Boxen"], label_visibility="collapsed")
             if view_mode != "Alle Boxen":
                 st.write("") 
                 st.markdown("#### Aktives Gerät")
-                printer_name = st.selectbox(
-                    "Fotobox auswählen", 
-                    list(PRINTERS.keys()), 
-                    label_visibility="collapsed"
-                )
+                printer_name = st.selectbox("Fotobox auswählen", list(PRINTERS.keys()), label_visibility="collapsed")
             else:
                 printer_name = None
 
-    # --- LOGIK WEICHE ---
-    
-    # FALL 1: FLEET OVERVIEW (Alle Boxen)
-    # Wenn wir hier rein gehen, beenden wir die Funktion danach mit 'return'.
-    # Das spart uns Einrückungs-Probleme für den Rest.
     if view_mode == "Alle Boxen":
-        # Sidebar Footer rendern
         render_sidebar_profile()
-        
         st.title(f"{PAGE_ICON} {PAGE_TITLE}")
         render_fleet_overview(PRINTERS)
         return 
 
-    # --- FALL 2: EINZELANSICHT ---
-    # Ab hier läuft der Code für die Einzelansicht weiter.
-    
     printer_cfg = PRINTERS[printer_name]
     printer_key = printer_cfg["key"]
     media_factor = printer_cfg.get("media_factor", 2)
@@ -791,7 +727,6 @@ def main():
     st.session_state.sheet_id = sheet_id
     st.session_state.ntfy_topic = ntfy_topic
     
-    # Reset Logic bei Druckerwechsel
     if st.session_state.selected_printer != printer_name:
         st.session_state.selected_printer = printer_name
         st.session_state.confirm_reset = False
@@ -803,13 +738,9 @@ def main():
         try: st.session_state.maintenance_mode = (str(get_setting("maintenance_mode", "False")).lower() == "true")
         except: st.session_state.maintenance_mode = False
 
-    # --- SIDEBAR TEIL 2: SETTINGS ---
-    # Diese Boxen zeigen wir nur in der Einzelansicht an
     with st.sidebar:
         with st.container(border=True):
             st.markdown("#### Einstellungen")
-            
-            # Init Session Vars
             if "ntfy_active" not in st.session_state:
                 try: st.session_state.ntfy_active = str(get_setting("ntfy_active", str(NTFY_ACTIVE_DEFAULT))).lower() == "true"
                 except: st.session_state.ntfy_active = NTFY_ACTIVE_DEFAULT
@@ -818,7 +749,6 @@ def main():
                 except: st.session_state.event_mode = False
             if "sound_enabled" not in st.session_state: st.session_state.sound_enabled = False
 
-            # UI Layout (Schön ausgerichtet)
             c_txt, c_tog = st.columns([3, 1])
             with c_txt: st.markdown('<div class="settings-row">Event-Ansicht</div>', unsafe_allow_html=True)
             with c_tog: event_mode = st.toggle("Event", value=st.session_state.event_mode, label_visibility="collapsed")
@@ -831,7 +761,6 @@ def main():
             with c_txt: st.markdown('<div class="settings-row">Push Nachrichten</div>', unsafe_allow_html=True)
             with c_tog: ntfy_active_ui = st.toggle("Push", value=st.session_state.ntfy_active, label_visibility="collapsed")
 
-            # Logic Update & Save
             if event_mode != st.session_state.event_mode:
                 st.session_state.event_mode = event_mode
                 try: set_setting("default_view", "event" if event_mode else "admin")
@@ -842,7 +771,6 @@ def main():
                 except: pass
             st.session_state.sound_enabled = sound_enabled
 
-        # Zen Mode Button
         with st.container(border=True):
              c1, c2 = st.columns([1, 4])
              with c1: st.write("🖥️")
@@ -851,14 +779,9 @@ def main():
                     st.session_state.screensaver_mode = True
                     st.rerun()
 
-    # JETZT: Sidebar Footer rendern (für Einzelansicht)
     render_sidebar_profile()
-
-    # --- HAUPTBEREICH RENDERN ---
     st.title(f"{PAGE_ICON} {PAGE_TITLE}")
-    
     view_event_mode = event_mode or not printer_has_admin
-
     if view_event_mode:
         show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=True, cloud_url=fotoshare_url)
     else:
@@ -867,7 +790,6 @@ def main():
             show_live_status(media_factor, cost_per_roll, sound_enabled, event_mode=False, cloud_url=fotoshare_url)
         with tab_hist:
             show_history(media_factor, cost_per_roll)
-        
         render_admin_panel(printer_cfg, warning_threshold, printer_key)
 
 if __name__ == "__main__":
