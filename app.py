@@ -366,6 +366,9 @@ def fetch_shelly_cached(_client, shelly_config):
 
 @st.fragment(run_every=15)
 def render_shelly_monitor(printer_key, shelly_client, shelly_config):
+    """
+    Rendert die Shelly-Kacheln und steuert die Hardware-LEDs.
+    """
     if not shelly_client:
         st.warning("Shelly Client nicht initialisiert.")
         return
@@ -413,7 +416,7 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
             target_dev_id = cfg.get("device_id", shelly_client.default_device_id)
             target_channel = cfg.get("channel", int(switch_idx_str))
             
-            # Daten holen
+            # Daten aus dem Cache extrahieren
             device_data = all_devices_status.get(target_dev_id, {})
             is_online = device_data.get("_is_online", False)
             
@@ -423,27 +426,30 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
             is_on = switch_data.get("output", False)
             power = float(switch_data.get("apower", 0.0))
 
-            # --- OPTIMIERTE RGB LOGIK MIT STATE-CHECK ---
+            # --- SYNCHRONISIERTE RGB STEUERUNG (Hardware-LEDs) ---
             if is_online:
-                # Farblogik bestimmen
+                # Farbwahl basierend auf deinen Regeln
                 if not is_on:
-                    new_rgb = (255, 0, 0) # Rot
+                    target_rgb = (255, 0, 0) # AUS = ROT
                 elif standby_min is not None and power <= standby_min:
-                    new_rgb = (0, 0, 255) # Blau
+                    target_rgb = (0, 0, 255) # STANDBY = BLAU
                 else:
-                    new_rgb = (0, 255, 0) # Grün
+                    target_rgb = (0, 255, 0) # AKTIV = GRÜN
                 
-                # Prüfen, ob die Farbe für dieses Gerät bereits gesetzt wurde
-                state_key = f"last_rgb_{target_dev_id}_{target_channel}"
-                if st.session_state.get(state_key) != new_rgb:
-                    # Nur senden, wenn die Farbe neu ist
-                    success = shelly_client.set_rgb_color(new_rgb[0], new_rgb[1], new_rgb[2], specific_device_id=target_dev_id)
+                # State-Check: Nur senden, wenn sich die Farbe tatsächlich geändert hat
+                state_key = f"led_rgb_{target_dev_id}_{target_channel}"
+                if st.session_state.get(state_key) != target_rgb:
+                    # Befehl an Hardware senden via shelly_client
+                    success = shelly_client.set_rgb_color(
+                        target_rgb[0], target_rgb[1], target_rgb[2], 
+                        specific_device_id=target_dev_id
+                    )
                     if success:
-                        st.session_state[state_key] = new_rgb
-            # --------------------------------------------
-            # ----------------------
-            
+                        st.session_state[state_key] = target_rgb
+            # ---------------------------------------------------
+
             with col:
+                # [cite_start]UI-Kachel rendern (Farben in ui_components.py synchronisiert) [cite: 1]
                 toggle_clicked = render_power_card(
                     name=name,
                     is_on=is_on,
@@ -458,8 +464,9 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
                 if toggle_clicked:
                     new_state = not is_on
                     st.toast(f"Schalte {name} {'AN' if new_state else 'AUS'}...", icon="🔌")
+                    # Direkter API-Befehl zum Schalten
                     shelly_client.set_switch(target_channel, new_state, specific_device_id=target_dev_id)
-                    fetch_shelly_cached.clear()
+                    fetch_shelly_cached.clear() # Cache sofort leeren für schnelles Feedback
                     time.sleep(0.5)
                     st.rerun()
             
