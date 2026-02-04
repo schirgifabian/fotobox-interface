@@ -596,39 +596,53 @@ def render_power_card(name: str, is_on: bool, power: float, switch_id: int, key_
     svg_camera = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h15a3 3 0 003-3v-9a3 3 0 00-3-3h-15zM9 9a3 3 0 100 6 3 3 0 000-6z" /><path d="M13.5 9a3 3 0 11-6 0 3 3 0 016 0z" /></svg>"""
     svg_offline = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path fill-rule="evenodd" d="M11.42 2.543a.75.75 0 01.66.04 6.002 6.002 0 013.61 4.32c.43.04.85.112 1.257.213a4.5 4.5 0 013.428 3.428c.313 1.21.216 2.437-.191 3.543l1.31 1.31a.75.75 0 01-1.06 1.06l-18-18a.75.75 0 111.06-1.06l1.576 1.576a6.003 6.003 0 014.74-1.486c.517-.094 1.048-.152 1.59-.152zM3.846 7.028l16.827 16.827a4.5 4.5 0 01-2.547.395H7.5a4.5 4.5 0 01-3.654-6.972zM7.5 19.5h10.626a3 3 0 002.239-4.404l-8.839-8.838a3.002 3.002 0 00-2.08 2.469c-.314 1.875-.98 3.62-1.946 5.173v.001H7.5A3 3 0 007.5 19.5z" clip-rule="evenodd" /></svg>"""
 
-# --- LOGIK & FARBEN (Synchronisiert mit Hardware-Wunsch) ---
+    # --- 2. LOGIK & FARBEN ---
+    icons_map = {
+        "bolt": svg_bolt, 
+        "surface": svg_surface, 
+        "router": svg_router, 
+        "printer": svg_printer, 
+        "fan": svg_fan, 
+        "camera": svg_camera, 
+        "default": svg_default
+    }
+    active_icon_svg = icons_map.get(icon_type, svg_bolt)
+
+    # 1. Priorität: Offline Status
     if is_offline:
-        status_color = "#64748B"
-        bg_color = "#F1F5F9"
+        status_color = "#64748B" # Slate 500
+        bg_color = "#F1F5F9"     # Slate 100
         status_text = "OFFLINE"
         pulse_class = ""
         icon_svg = svg_offline
-        opacity = "0.6"
+        power = 0.0
+        opacity = "0.6" # Ausgegraut
         
+    # 2. Priorität: Eingeschaltet
     elif is_on:
         opacity = "1"
-        icon_svg = icons_map.get(icon_type, svg_bolt)
-        
-        # Check ob Standby erreicht (BLAU) oder Aktiv (GRÜN)
-        if standby_min is not None and power <= standby_min:
-            status_color = "#3B82F6" # Blau
-            bg_color = "#EFF6FF"
-            status_text = "STANDBY"
-            pulse_class = "status-pulse-blue"
-        else:
-            status_color = "#10B981" # Grün
-            bg_color = "#ECFDF5"
-            status_text = "AKTIV"
-            pulse_class = "status-pulse-green"
+        status_color = "#10B981" # Grün
+        bg_color = "#ECFDF5"
+        status_text = "AN"
+        pulse_class = "status-pulse-green"
 
+        # Aktiv-Status (Blau) wenn Verbrauch > Standby
+        if standby_min is not None and power > standby_min:
+            status_color = "#3B82F6" 
+            bg_color = "#EFF6FF"
+            status_text = "AKTIV"
+            pulse_class = "status-pulse-blue"
+        
+        icon_svg = active_icon_svg
+
+    # 3. Priorität: Ausgeschaltet
     else:
-        # AUS (ROT)
         opacity = "1"
-        status_color = "#EF4444" # Rot
-        bg_color = "#FEF2F2"
+        status_color = "#94A3B8" 
+        bg_color = "#F1F5F9"
         icon_svg = svg_off 
         status_text = "AUS"
-        pulse_class = "status-pulse-red"
+        pulse_class = ""
         power = 0.0
 
     # --- 3. HTML KACHEL ---
