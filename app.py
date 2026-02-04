@@ -423,20 +423,24 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
             is_on = switch_data.get("output", False)
             power = float(switch_data.get("apower", 0.0))
 
-            # --- NEU: RGB LOGIK ---
+            # --- OPTIMIERTE RGB LOGIK MIT STATE-CHECK ---
             if is_online:
-                # 1. Fall: Steckdose ist AUS -> Rot
+                # Farblogik bestimmen
                 if not is_on:
-                    rgb = (255, 0, 0) 
-                # 2. Fall: AN aber unter Standby-Schwelle -> Blau
+                    new_rgb = (255, 0, 0) # Rot
                 elif standby_min is not None and power <= standby_min:
-                    rgb = (0, 0, 255)
-                # 3. Fall: Normalbetrieb -> Grün
+                    new_rgb = (0, 0, 255) # Blau
                 else:
-                    rgb = (0, 255, 0)
+                    new_rgb = (0, 255, 0) # Grün
                 
-                # Farbe setzen (Methode muss im ShellyClient vorhanden sein)
-                shelly_client.set_rgb_color(rgb[0], rgb[1], rgb[2], specific_device_id=target_dev_id)
+                # Prüfen, ob die Farbe für dieses Gerät bereits gesetzt wurde
+                state_key = f"last_rgb_{target_dev_id}_{target_channel}"
+                if st.session_state.get(state_key) != new_rgb:
+                    # Nur senden, wenn die Farbe neu ist
+                    success = shelly_client.set_rgb_color(new_rgb[0], new_rgb[1], new_rgb[2], specific_device_id=target_dev_id)
+                    if success:
+                        st.session_state[state_key] = new_rgb
+            # --------------------------------------------
             # ----------------------
             
             with col:
