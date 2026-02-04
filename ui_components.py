@@ -577,14 +577,13 @@ def inject_screensaver_css():
     st.markdown(css, unsafe_allow_html=True)
 
 
-def render_power_card(name: str, is_on: bool, power: float, switch_id: int, key_prefix: str, icon_type: str = "bolt", standby_min: float = None):
-    #                                                                                                                  ^^^^^^^ NEUER PARAMETER
+def render_power_card(name: str, is_on: bool, power: float, switch_id: int, key_prefix: str, icon_type: str = "bolt", standby_min: float = None, is_offline: bool = False):
     """
-    Rendert eine Kachel mit dynamischen Icons basierend auf icon_type.
-    Inklusive Sicherheitsabfrage beim Ausschalten.
+    Rendert eine moderne Karte für einen Stromverbraucher.
+    Inklusive Kamera-Icon und Offline-Status.
     """
     
-    # --- 1. SVG BIBLIOTHEK (Unverändert lassen) ---
+    # --- 1. SVG BIBLIOTHEK ---
     svg_bolt = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 01.359.852L12.982 9.75h7.268a.75.75 0 01.548 1.262l-10.5 11.25a.75.75 0 01-1.272-.71l1.992-7.302H3.75a.75.75 0 01-.548-1.262l10.5-11.25a.75.75 0 01.913-.143z" clip-rule="evenodd" /></svg>"""
     svg_surface = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path d="M10.5 18.75a.75.75 0 000 1.5h3a.75.75 0 000-1.5h-3z" /><path fill-rule="evenodd" d="M8.625.75A3.375 3.375 0 005.25 4.125v15.75a3.375 3.375 0 003.375 3.375h6.75a3.375 3.375 0 003.375-3.375V4.125A3.375 3.375 0 0015.375.75h-6.75zM7.5 4.125c0-.621.504-1.125 1.125-1.125h6.75c.621 0 1.125.504 1.125 1.125v15.75c0 .621-.504 1.125-1.125 1.125h-6.75A1.125 1.125 0 017.5 19.875V4.125z" clip-rule="evenodd" /></svg>"""
     svg_printer = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path fill-rule="evenodd" d="M7.875 1.5C6.839 1.5 6 2.34 6 3.375v2.99c-.426.053-.851.11-1.274.174-1.454.218-2.476 1.483-2.476 2.917v6.294a3 3 0 003 3h.27l-.155 1.705A1.875 1.875 0 007.232 22.5h9.536a1.875 1.875 0 001.867-2.045l-.155-1.705h.27a3 3 0 003-3V9.456c0-1.434-1.022-2.7-2.476-2.917A48.816 48.816 0 0018 6.366V3.375c0-1.036-.84-1.875-1.875-1.875h-8.25zM16.5 6.205v-2.83A.375.375 0 0016.125 3h-8.25a.375.375 0 00-.375.375v2.83a49.353 49.353 0 019 0zm-.217 8.295a.75.75 0 10-1.5 0c0 .414.336.75.75.75h4.5a.75.75 0 100-1.5h-3.75z" clip-rule="evenodd" /><path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75z" /></svg>"""
@@ -593,27 +592,53 @@ def render_power_card(name: str, is_on: bool, power: float, switch_id: int, key_
     svg_default = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm11.378-3.917c-.89-.777-2.366-.777-3.255 0a.75.75 0 01-.988-1.129c1.454-1.272 3.776-1.272 5.23 0 1.513 1.324 1.513 3.518 0 4.842a3.75 3.75 0 01-.837.552c-.676.328-1.028.774-1.028 1.152v.2a.75.75 0 01-1.5 0v-.2c0-1.201 1.134-2.215 2.185-2.741.478-.239.792-.705.792-1.226 0-.61-.433-1.123-1.099-1.45zM12 15.75a.75.75 0 01.75.75v.008a.75.75 0 01-1.5 0v-.008a.75.75 0 01.75-.75z" clip-rule="evenodd" /></svg>"""
     svg_off = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 24px; height: 24px;"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>"""
 
-    # --- 2. LOGIK & FARBEN (ANGEPASST) ---
-    icons_map = {"bolt": svg_bolt, "surface": svg_surface, "router": svg_router, "printer": svg_printer, "fan": svg_fan, "default": svg_default}
+    # --- NEU: ICONS HINZUGEFÜGT ---
+    svg_camera = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h15a3 3 0 003-3v-9a3 3 0 00-3-3h-15zM9 9a3 3 0 100 6 3 3 0 000-6z" /><path d="M13.5 9a3 3 0 11-6 0 3 3 0 016 0z" /></svg>"""
+    svg_offline = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;"><path fill-rule="evenodd" d="M11.42 2.543a.75.75 0 01.66.04 6.002 6.002 0 013.61 4.32c.43.04.85.112 1.257.213a4.5 4.5 0 013.428 3.428c.313 1.21.216 2.437-.191 3.543l1.31 1.31a.75.75 0 01-1.06 1.06l-18-18a.75.75 0 111.06-1.06l1.576 1.576a6.003 6.003 0 014.74-1.486c.517-.094 1.048-.152 1.59-.152zM3.846 7.028l16.827 16.827a4.5 4.5 0 01-2.547.395H7.5a4.5 4.5 0 01-3.654-6.972zM7.5 19.5h10.626a3 3 0 002.239-4.404l-8.839-8.838a3.002 3.002 0 00-2.08 2.469c-.314 1.875-.98 3.62-1.946 5.173v.001H7.5A3 3 0 007.5 19.5z" clip-rule="evenodd" /></svg>"""
+
+    # --- 2. LOGIK & FARBEN ---
+    icons_map = {
+        "bolt": svg_bolt, 
+        "surface": svg_surface, 
+        "router": svg_router, 
+        "printer": svg_printer, 
+        "fan": svg_fan, 
+        "camera": svg_camera, 
+        "default": svg_default
+    }
     active_icon_svg = icons_map.get(icon_type, svg_bolt)
 
-    if is_on:
-        # Standard: Grün (Standby/An)
-        status_color = "#10B981" 
+    # 1. Priorität: Offline Status
+    if is_offline:
+        status_color = "#64748B" # Slate 500
+        bg_color = "#F1F5F9"     # Slate 100
+        status_text = "OFFLINE"
+        pulse_class = ""
+        icon_svg = svg_offline
+        power = 0.0
+        opacity = "0.6" # Ausgegraut
+        
+    # 2. Priorität: Eingeschaltet
+    elif is_on:
+        opacity = "1"
+        status_color = "#10B981" # Grün
         bg_color = "#ECFDF5"
         status_text = "AN"
         pulse_class = "status-pulse-green"
 
-        # Check: Wenn standby_min konfiguriert ist UND Power höher ist -> Blau (Aktiv)
+        # Aktiv-Status (Blau) wenn Verbrauch > Standby
         if standby_min is not None and power > standby_min:
-            status_color = "#3B82F6" # Blau
+            status_color = "#3B82F6" 
             bg_color = "#EFF6FF"
             status_text = "AKTIV"
             pulse_class = "status-pulse-blue"
         
         icon_svg = active_icon_svg
+
+    # 3. Priorität: Ausgeschaltet
     else:
-        status_color = "#94A3B8"
+        opacity = "1"
+        status_color = "#94A3B8" 
         bg_color = "#F1F5F9"
         icon_svg = svg_off 
         status_text = "AUS"
@@ -622,11 +647,11 @@ def render_power_card(name: str, is_on: bool, power: float, switch_id: int, key_
 
     # --- 3. HTML KACHEL ---
     html = f"""
-    <div class="dashboard-card" style="padding: 20px; margin-bottom: 12px; height: 100%;">
+    <div class="dashboard-card" style="padding: 20px; margin-bottom: 12px; height: 100%; opacity: {opacity}; transition: opacity 0.3s ease;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
             <div>
                 <div style="display: flex; align-items: center; margin-bottom: 8px;">
-                    <span class="{pulse_class} status-dot"></span>
+                    <span class="{pulse_class} status-dot" style="{'background-color: ' + status_color if not pulse_class else ''}"></span>
                     <span style="font-size: 0.75rem; font-weight: 700; color: #94A3B8; letter-spacing: 0.05em; text-transform: uppercase;">{name}</span>
                 </div>
                 <div style="display: flex; align-items: baseline; gap: 4px;">
@@ -634,7 +659,7 @@ def render_power_card(name: str, is_on: bool, power: float, switch_id: int, key_
                     <span style="font-size: 1rem; font-weight: 600; color: #64748B;">W</span>
                 </div>
             </div>
-            <div style="background: {bg_color}; color: {status_color}; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 2px 4px 0 rgba(0,0,0,0.05);">
+            <div style="background: {bg_color}; color: {status_color}; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 2px 4px 0 rgba(0,0,0,0.05); transition: all 0.3s ease;">
                 {icon_svg}
             </div>
         </div>
@@ -646,35 +671,31 @@ def render_power_card(name: str, is_on: bool, power: float, switch_id: int, key_
     st.markdown(html, unsafe_allow_html=True)
     
     # --- 4. BUTTONS MIT BESTÄTIGUNGS-LOGIK ---
-    
-    # Unique Key für den Bestätigungs-Status dieses Buttons
     confirm_key = f"confirm_shelly_off_{key_prefix}_{switch_id}"
     
+    # Button rendern (Deaktiviert wenn Offline)
+    if is_offline:
+        st.button("Verbindung prüfen", key=f"btn_offline_{key_prefix}_{switch_id}", disabled=True, use_container_width=True)
+        return False
+
     if not is_on:
-        # Fall A: Einschalten (Keine Bestätigung nötig)
+        # A: Einschalten
         if st.button("Einschalten", key=f"pwr_btn_on_{key_prefix}_{switch_id}", type="primary", use_container_width=True):
             return True
     else:
-        # Fall B: Ausschalten (Bestätigung nötig)
+        # B: Ausschalten (mit Bestätigung)
         if st.session_state.get(confirm_key, False):
-            # Bestätigungs-Modus ist aktiv
             st.markdown(f"<div style='text-align: center; color: #EF4444; font-weight: bold; margin-bottom: 5px; font-size: 0.85rem;'>{name} wirklich ausschalten?</div>", unsafe_allow_html=True)
-            
             c1, c2 = st.columns(2)
-            # JA Button (Schaltet aus)
             if c1.button("Ja, Aus", key=f"yes_off_{key_prefix}_{switch_id}", type="primary", use_container_width=True):
-                st.session_state[confirm_key] = False # Reset State
-                return True # Führt Aktion in app.py aus
-            
-            # NEIN Button (Abbruch)
+                st.session_state[confirm_key] = False 
+                return True 
             if c2.button("Abbrechen", key=f"no_off_{key_prefix}_{switch_id}", use_container_width=True):
-                st.session_state[confirm_key] = False # Reset State
+                st.session_state[confirm_key] = False 
                 st.rerun()
-                
         else:
-            # Normaler Ausschalt-Knopf
             if st.button("Ausschalten", key=f"pwr_btn_off_{key_prefix}_{switch_id}", type="secondary", use_container_width=True):
-                st.session_state[confirm_key] = True # Aktiviere Bestätigungs-Modus
+                st.session_state[confirm_key] = True 
                 st.rerun()
 
     return False
