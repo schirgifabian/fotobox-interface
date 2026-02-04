@@ -78,3 +78,26 @@ class ShellyClient:
         }
         res = self._post("/device/relay/control", params, override_device_id=specific_device_id)
         return res is not None
+
+
+    def set_rgb_color(self, red: int, green: int, blue: int, brightness: int = 100, specific_device_id: str = None) -> bool:
+        """
+        Setzt die Farbe des LED-Rings (für Shelly Plugs mit RGB-Unterstützung).
+        """
+        params = {
+            "config": {
+                "leds": {
+                    "mode": "switch", # Farbmodus auf manuell/switch stellen
+                    "colors": {
+                        "switch:0": {
+                            "on": {"rgb": [red, green, blue], "brightness": brightness},
+                            "off": {"rgb": [red, green, blue], "brightness": brightness}
+                        }
+                    }
+                }
+            }
+        }
+        # Hinweis: Bei Gen2 Geräten wird oft 'PLUG_UI.SetConfig' oder 'RGB.Set' genutzt.
+        # Für den Plus Plug S ist meist die Komponente 'sys' oder 'PLUG_UI' zuständig:
+        res = self._post("/rpc/PLUG_UI.SetConfig", params, override_device_id=specific_device_id)
+        return res is not None
