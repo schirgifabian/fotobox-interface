@@ -339,74 +339,132 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
 
 
 # --------------------------------------------------------------------
-# Fragment-Funktion für shelly Stekdose
+# Fragment-Funktion für shelly Stekdose (Multi-Device Update)
 # --------------------------------------------------------------------
 
-# NEU: Hilfsfunktion mit Cache (verhindert Freezes bei Interaktion)
 @st.cache_data(ttl=10, show_spinner=False) 
-def fetch_shelly_cached(_client):
+def fetch_shelly_cached(_client, shelly_config):
     """
-    Cached den Status für 10 Sekunden. 
-    Der Unterstrich bei _client sagt Streamlit: "Diesen Parameter nicht hashen".
+    Holt den Status für ALLE konfigurierten Geräte (Strip + Plug S).
+    Gibt ein Dictionary zurück: { "device_id": {status_data} }
     """
-    return _client.get_status()
+    combined_status = {}
+    
+    # 1. Sammle alle einzigartigen Device IDs
+    # Default ID ist immer dabei
+    unique_ids = {_client.default_device_id}
+    
+    # Prüfe Config auf weitere IDs (wie den Plug S)
+    for cfg in shelly_config.values():
+        if "device_id" in cfg:
+            unique_ids.add(cfg["device_id"])
+            
+    # 2. Hole Status für jede ID
+    for dev_id in unique_ids:
+        try:
+            # Ruft Status für spezifische ID ab
+            status = _client.get_status(specific_device_id=dev_id)
+            combined_status[dev_id] = status
+        except Exception:
+            combined_status[dev_id] = {}
+            
+    return combined_status
 
-@st.fragment(run_every=15)  # Aktualisiert sich alle 15 Sekunden selbstständig!
+@st.fragment(run_every=15)
 def render_shelly_monitor(printer_key, shelly_client, shelly_config):
     if not shelly_client:
         st.warning("Shelly Client nicht initialisiert.")
         return
 
     try:
-        # HIER DIE ÄNDERUNG: Wir nutzen die gecachte Funktion!
-        status_data = fetch_shelly_cached(shelly_client)
+        # Status für ALLE Geräte holen
+        all_devices_status = fetch_shelly_cached(shelly_client, shelly_config)
     except Exception:
-        status_data = {}
+        all_devices_status = {}
 
-    if not status_data:
+    if not all_devices_status:
         st.caption("⚠️ Keine Verbindung zur Shelly Cloud / Offline.")
         return
 
     sorted_keys = sorted(shelly_config.keys())
-    if not sorted_keys:
+    total_items = len(sorted_keys)
+    
+    if total_items == 0:
         st.info("Keine Steckdosen konfiguriert.")
         return
 
-    # --- ÄNDERUNG: 2x2 Grid Layout ---
-    grid_cols = st.columns(2)
-
-    for i, switch_idx_str in enumerate(sorted_keys):
-        cfg = shelly_config[switch_idx_str]
-        switch_id = int(switch_idx_str)
-        name = cfg.get("name", f"Socket {switch_id}")
-        icon_type = cfg.get("icon", "bolt")
-        standby_min = cfg.get("standby_min") 
+    # --- LAYOUT LOGIK FÜR 5 ITEMS (2-2-1) ---
+    # Wir iterieren manuell durch die Items, um volle Kontrolle über das Grid zu haben
+    
+    # Container für die Zeilen erstellen
+    # Berechnung: Wie viele volle 2er Reihen?
+    rows_needed = (total_items + 1) // 2 
+    
+    current_idx = 0
+    
+    for row in range(rows_needed):
+        # Prüfen ob dies die letzte Zeile ist UND ob wir eine ungerade Anzahl haben (z.B. das 5. Item)
+        is_last_row = (row == rows_needed - 1)
+        is_odd_orphan = (total_items % 2 != 0)
         
-        switch_key = f"switch:{switch_id}"
-        switch_data = status_data.get(switch_key, {})
-        is_on = switch_data.get("output", False)
-        power = float(switch_data.get("apower", 0.0))
-        
-        with grid_cols[i % 2]:
-            toggle_clicked = render_power_card(
-                name=name,
-                is_on=is_on,
-                power=power,
-                switch_id=switch_id,
-                key_prefix=printer_key,
-                icon_type=icon_type,
-                standby_min=standby_min
-            )
+        if is_last_row and is_odd_orphan:
+            # DAS 5. ELEMENT: Volle Breite (oder zentriert)
+            cols = [st.container()] # Container verhält sich wie 1 Spalte voller Breite
+        else:
+            # STANDARD: 2 Spalten
+            cols = st.columns(2)
+            
+        # Spalten füllen
+        for col in cols:
+            if current_idx >= total_items:
+                break
+                
+            switch_idx_str = sorted_keys[current_idx]
+            cfg = shelly_config[switch_idx_str]
+            
+            # Konfig Werte
+            name = cfg.get("name", f"Switch {switch_idx_str}")
+            icon_type = cfg.get("icon", "bolt")
+            standby_min = cfg.get("standby_min")
+            
+            # WICHTIG: Welches physische Gerät ist das?
+            # Wenn 'device_id' in Config steht -> Nimm das (Plug S)
+            # Sonst -> Nimm Default (Power Strip)
+            target_dev_id = cfg.get("device_id", shelly_client.default_device_id)
+            target_channel = cfg.get("channel", int(switch_idx_str)) # Wenn Channel explizit (für Plug S meist 0)
+            
+            # Status aus dem großen Cache-Topf holen
+            device_data = all_devices_status.get(target_dev_id, {})
+            switch_key = f"switch:{target_channel}"
+            switch_data = device_data.get(switch_key, {})
+            
+            is_on = switch_data.get("output", False)
+            power = float(switch_data.get("apower", 0.0))
+            
+            with col:
+                # Unique Key muss ID beinhalten, damit Streamlit Status nicht verwechselt
+                toggle_clicked = render_power_card(
+                    name=name,
+                    is_on=is_on,
+                    power=power,
+                    switch_id=target_channel, # Channel (0-3)
+                    key_prefix=f"{printer_key}_{target_dev_id}", # Prefix mit Device ID
+                    icon_type=icon_type,
+                    standby_min=standby_min
+                )
 
-            if toggle_clicked:
-                new_state = not is_on
-                st.toast(f"Schalte {name} {'AN' if new_state else 'AUS'}...", icon="🔌")
-                # Direkt schalten (ohne Cache), damit es sofort reagiert
-                shelly_client.set_switch(switch_id, new_state)
-                # Cache invalidieren, damit der neue Status beim Rerun sofort sichtbar ist
-                fetch_shelly_cached.clear()
-                time.sleep(0.5)
-                st.rerun()
+                if toggle_clicked:
+                    new_state = not is_on
+                    st.toast(f"Schalte {name} {'AN' if new_state else 'AUS'}...", icon="🔌")
+                    
+                    # Explizit das richtige Gerät schalten
+                    shelly_client.set_switch(target_channel, new_state, specific_device_id=target_dev_id)
+                    
+                    fetch_shelly_cached.clear()
+                    time.sleep(0.5)
+                    st.rerun()
+            
+            current_idx += 1
 
 
 
