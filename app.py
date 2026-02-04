@@ -342,112 +342,61 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
 # Fragment-Funktion für Shelly Steckdosen (Multi-Device & Offline-Status)
 # --------------------------------------------------------------------
 
+# app.py - Im Bereich Shelly Logik ersetzen
+
 @st.cache_data(ttl=10, show_spinner=False) 
-def fetch_shelly_cached(_client, shelly_config):
+def fetch_shelly_cached(_client, shelly_config_json):
     """
-    Holt den Status für ALLE konfigurierten Geräte.
+    Performance-Boost: Holt Status aller Geräte in einem Rutsch (gecached).
+    Wir übergeben das JSON der Config als String für die Cache-Validierung.
     """
     combined_status = {}
-    unique_ids = {_client.default_device_id}
+    config = json.loads(shelly_config_json)
     
-    for cfg in shelly_config.values():
-        if "device_id" in cfg:
-            unique_ids.add(cfg["device_id"])
+    # Eindeutige Device-IDs sammeln
+    unique_ids = {_client.default_device_id}
+    for cfg in config.values():
+        if "device_id" in cfg: unique_ids.add(cfg["device_id"])
             
     for dev_id in unique_ids:
-        try:
-            # Holt Status + Online-Info (_is_online)
-            status = _client.get_status(specific_device_id=dev_id)
-            combined_status[dev_id] = status
-        except Exception:
-            combined_status[dev_id] = {"_is_online": False}
+        status = _client.get_status(specific_device_id=dev_id)
+        combined_status[dev_id] = status
             
     return combined_status
 
 @st.fragment(run_every=15)
 def render_shelly_monitor(printer_key, shelly_client, shelly_config):
     if not shelly_client:
-        st.warning("Shelly Client nicht initialisiert.")
+        st.error("Shelly nicht verbunden")
         return
 
-    try:
-        all_devices_status = fetch_shelly_cached(shelly_client, shelly_config)
-    except Exception:
-        all_devices_status = {}
-
-    if not all_devices_status:
-        st.caption("⚠️ Keine Verbindung zur Shelly Cloud / Offline.")
-        return
-
-    sorted_keys = sorted(shelly_config.keys())
-    total_items = len(sorted_keys)
+    # Cache nutzen (Config als String übergeben)
+    all_status = fetch_shelly_cached(shelly_client, json.dumps(shelly_config))
     
-    if total_items == 0:
-        st.info("Keine Steckdosen konfiguriert.")
-        return
-
-    # Layout Logik (2-2-1 Grid)
-    rows_needed = (total_items + 1) // 2 
-    current_idx = 0
-    
-    for row in range(rows_needed):
-        is_last_row = (row == rows_needed - 1)
-        is_odd_orphan = (total_items % 2 != 0)
+    cols = st.columns(2)
+    for idx, (switch_idx, cfg) in enumerate(shelly_config.items()):
+        target_dev_id = cfg.get("device_id", shelly_client.default_device_id)
+        dev_data = all_status.get(target_dev_id, {"_is_online": False})
         
-        if is_last_row and is_odd_orphan:
-            cols = [st.container()]
-        else:
-            cols = st.columns(2)
+        # Daten für diesen speziellen Channel
+        chan_data = dev_data.get(f"switch:{cfg.get('channel', switch_idx)}", {})
+        
+        with cols[idx % 2]:
+            clicked = render_power_card(
+                name=cfg.get("name", f"Port {switch_idx}"),
+                is_on=chan_data.get("output", False),
+                power=float(chan_data.get("apower", 0.0)),
+                switch_id=cfg.get("channel", switch_idx),
+                key_prefix=f"{printer_key}_{target_dev_id}",
+                standby_min=cfg.get("standby_min"),
+                is_offline=not dev_data.get("_is_online", False)
+            )
             
-        for col in cols:
-            if current_idx >= total_items:
-                break
-                
-            switch_idx_str = sorted_keys[current_idx]
-            cfg = shelly_config[switch_idx_str]
-            
-            name = cfg.get("name", f"Switch {switch_idx_str}")
-            icon_type = cfg.get("icon", "bolt")
-            standby_min = cfg.get("standby_min")
-            
-            target_dev_id = cfg.get("device_id", shelly_client.default_device_id)
-            target_channel = cfg.get("channel", int(switch_idx_str))
-            
-            # Daten holen
-            device_data = all_devices_status.get(target_dev_id, {})
-            
-            # 1. NEU: Online Status prüfen!
-            # Wenn der Key fehlt, nehmen wir False an (Offline)
-            is_online = device_data.get("_is_online", False)
-            
-            switch_key = f"switch:{target_channel}"
-            switch_data = device_data.get(switch_key, {})
-            
-            is_on = switch_data.get("output", False)
-            power = float(switch_data.get("apower", 0.0))
-            
-            with col:
-                # 2. NEU: Parameter is_offline übergeben
-                toggle_clicked = render_power_card(
-                    name=name,
-                    is_on=is_on,
-                    power=power,
-                    switch_id=target_channel,
-                    key_prefix=f"{printer_key}_{target_dev_id}", 
-                    icon_type=icon_type,
-                    standby_min=standby_min,
-                    is_offline=(not is_online)  # <--- Das sorgt für das Wolken-Icon!
-                )
-
-                if toggle_clicked:
-                    new_state = not is_on
-                    st.toast(f"Schalte {name} {'AN' if new_state else 'AUS'}...", icon="🔌")
-                    shelly_client.set_switch(target_channel, new_state, specific_device_id=target_dev_id)
-                    fetch_shelly_cached.clear()
-                    time.sleep(0.5)
-                    st.rerun()
-            
-            current_idx += 1
+            if clicked:
+                new_state = not chan_data.get("output", False)
+                shelly_client.set_switch(cfg.get("channel", switch_idx), new_state, specific_device_id=target_dev_id)
+                fetch_shelly_cached.clear() # Cache sofort leeren für direktes Feedback
+                st.rerun()
 
 
 # --------------------------------------------------------------------
