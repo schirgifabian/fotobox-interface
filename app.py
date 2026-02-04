@@ -643,7 +643,7 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                     st.error("❌ Client konnte nicht geladen werden. Prüfe Google Sheets!")
                 else:
                     st.markdown(f"**Auth Key (Maskiert):** `{client.auth_key[:5]}...{client.auth_key[-5:]}`")
-                    st.markdown(f"**Device ID:** `{client.device_id}`")
+                    st.markdown(f"**Device ID:** `{client.default_device_id}`")
                     
                     test_urls = [
                         "https://shelly-api-eu.shelly.cloud/device/rpc",  # Haupt-Server
