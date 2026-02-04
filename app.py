@@ -415,9 +415,6 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
             
             # Daten holen
             device_data = all_devices_status.get(target_dev_id, {})
-            
-            # 1. NEU: Online Status prüfen!
-            # Wenn der Key fehlt, nehmen wir False an (Offline)
             is_online = device_data.get("_is_online", False)
             
             switch_key = f"switch:{target_channel}"
@@ -425,9 +422,24 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
             
             is_on = switch_data.get("output", False)
             power = float(switch_data.get("apower", 0.0))
+
+            # --- NEU: RGB LOGIK ---
+            if is_online:
+                # 1. Fall: Steckdose ist AUS -> Rot
+                if not is_on:
+                    rgb = (255, 0, 0) 
+                # 2. Fall: AN aber unter Standby-Schwelle -> Blau
+                elif standby_min is not None and power <= standby_min:
+                    rgb = (0, 0, 255)
+                # 3. Fall: Normalbetrieb -> Grün
+                else:
+                    rgb = (0, 255, 0)
+                
+                # Farbe setzen (Methode muss im ShellyClient vorhanden sein)
+                shelly_client.set_rgb_color(rgb[0], rgb[1], rgb[2], specific_device_id=target_dev_id)
+            # ----------------------
             
             with col:
-                # 2. NEU: Parameter is_offline übergeben
                 toggle_clicked = render_power_card(
                     name=name,
                     is_on=is_on,
@@ -436,7 +448,7 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
                     key_prefix=f"{printer_key}_{target_dev_id}", 
                     icon_type=icon_type,
                     standby_min=standby_min,
-                    is_offline=(not is_online)  # <--- Das sorgt für das Wolken-Icon!
+                    is_offline=(not is_online)
                 )
 
                 if toggle_clicked:
