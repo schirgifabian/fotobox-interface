@@ -339,34 +339,28 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
 
 
 # --------------------------------------------------------------------
-# Fragment-Funktion für shelly Stekdose (Multi-Device Update)
+# Fragment-Funktion für Shelly Steckdosen (Multi-Device & Offline-Status)
 # --------------------------------------------------------------------
 
 @st.cache_data(ttl=10, show_spinner=False) 
 def fetch_shelly_cached(_client, shelly_config):
     """
-    Holt den Status für ALLE konfigurierten Geräte (Strip + Plug S).
-    Gibt ein Dictionary zurück: { "device_id": {status_data} }
+    Holt den Status für ALLE konfigurierten Geräte.
     """
     combined_status = {}
-    
-    # 1. Sammle alle einzigartigen Device IDs
-    # Default ID ist immer dabei
     unique_ids = {_client.default_device_id}
     
-    # Prüfe Config auf weitere IDs (wie den Plug S)
     for cfg in shelly_config.values():
         if "device_id" in cfg:
             unique_ids.add(cfg["device_id"])
             
-    # 2. Hole Status für jede ID
     for dev_id in unique_ids:
         try:
-            # Ruft Status für spezifische ID ab
+            # Holt Status + Online-Info (_is_online)
             status = _client.get_status(specific_device_id=dev_id)
             combined_status[dev_id] = status
         except Exception:
-            combined_status[dev_id] = {}
+            combined_status[dev_id] = {"_is_online": False}
             
     return combined_status
 
@@ -377,7 +371,6 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
         return
 
     try:
-        # Status für ALLE Geräte holen
         all_devices_status = fetch_shelly_cached(shelly_client, shelly_config)
     except Exception:
         all_devices_status = {}
@@ -393,28 +386,19 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
         st.info("Keine Steckdosen konfiguriert.")
         return
 
-    # --- LAYOUT LOGIK FÜR 5 ITEMS (2-2-1) ---
-    # Wir iterieren manuell durch die Items, um volle Kontrolle über das Grid zu haben
-    
-    # Container für die Zeilen erstellen
-    # Berechnung: Wie viele volle 2er Reihen?
+    # Layout Logik (2-2-1 Grid)
     rows_needed = (total_items + 1) // 2 
-    
     current_idx = 0
     
     for row in range(rows_needed):
-        # Prüfen ob dies die letzte Zeile ist UND ob wir eine ungerade Anzahl haben (z.B. das 5. Item)
         is_last_row = (row == rows_needed - 1)
         is_odd_orphan = (total_items % 2 != 0)
         
         if is_last_row and is_odd_orphan:
-            # DAS 5. ELEMENT: Volle Breite (oder zentriert)
-            cols = [st.container()] # Container verhält sich wie 1 Spalte voller Breite
+            cols = [st.container()]
         else:
-            # STANDARD: 2 Spalten
             cols = st.columns(2)
             
-        # Spalten füllen
         for col in cols:
             if current_idx >= total_items:
                 break
@@ -422,19 +406,20 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
             switch_idx_str = sorted_keys[current_idx]
             cfg = shelly_config[switch_idx_str]
             
-            # Konfig Werte
             name = cfg.get("name", f"Switch {switch_idx_str}")
             icon_type = cfg.get("icon", "bolt")
             standby_min = cfg.get("standby_min")
             
-            # WICHTIG: Welches physische Gerät ist das?
-            # Wenn 'device_id' in Config steht -> Nimm das (Plug S)
-            # Sonst -> Nimm Default (Power Strip)
             target_dev_id = cfg.get("device_id", shelly_client.default_device_id)
-            target_channel = cfg.get("channel", int(switch_idx_str)) # Wenn Channel explizit (für Plug S meist 0)
+            target_channel = cfg.get("channel", int(switch_idx_str))
             
-            # Status aus dem großen Cache-Topf holen
+            # Daten holen
             device_data = all_devices_status.get(target_dev_id, {})
+            
+            # 1. NEU: Online Status prüfen!
+            # Wenn der Key fehlt, nehmen wir False an (Offline)
+            is_online = device_data.get("_is_online", False)
+            
             switch_key = f"switch:{target_channel}"
             switch_data = device_data.get(switch_key, {})
             
@@ -442,30 +427,27 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
             power = float(switch_data.get("apower", 0.0))
             
             with col:
-                # Unique Key muss ID beinhalten, damit Streamlit Status nicht verwechselt
+                # 2. NEU: Parameter is_offline übergeben
                 toggle_clicked = render_power_card(
                     name=name,
                     is_on=is_on,
                     power=power,
-                    switch_id=target_channel, # Channel (0-3)
-                    key_prefix=f"{printer_key}_{target_dev_id}", # Prefix mit Device ID
+                    switch_id=target_channel,
+                    key_prefix=f"{printer_key}_{target_dev_id}", 
                     icon_type=icon_type,
-                    standby_min=standby_min
+                    standby_min=standby_min,
+                    is_offline=(not is_online)  # <--- Das sorgt für das Wolken-Icon!
                 )
 
                 if toggle_clicked:
                     new_state = not is_on
                     st.toast(f"Schalte {name} {'AN' if new_state else 'AUS'}...", icon="🔌")
-                    
-                    # Explizit das richtige Gerät schalten
                     shelly_client.set_switch(target_channel, new_state, specific_device_id=target_dev_id)
-                    
                     fetch_shelly_cached.clear()
                     time.sleep(0.5)
                     st.rerun()
             
             current_idx += 1
-
 
 
 # --------------------------------------------------------------------
