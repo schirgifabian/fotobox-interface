@@ -339,31 +339,27 @@ def show_history(media_factor: int, cost_per_roll: float) -> None:
 
 
 # --------------------------------------------------------------------
-# Stabilisierte Fragment-Funktion für Shelly (Multi-Device & RGB)
+# Fragment-Funktion für Shelly Steckdosen (Multi-Device & Offline-Status)
 # --------------------------------------------------------------------
 
-@st.cache_data(ttl=12, show_spinner=False) 
+@st.cache_data(ttl=10, show_spinner=False) 
 def fetch_shelly_cached(_client, shelly_config):
     """
-    Holt den Status für alle Geräte mit verbesserter Fehlerbehandlung.
+    Holt den Status für ALLE konfigurierten Geräte.
     """
     combined_status = {}
-    # Erstelle eine Liste aller einzigartigen Device-IDs aus der Config
     unique_ids = {_client.default_device_id}
+    
     for cfg in shelly_config.values():
         if "device_id" in cfg:
             unique_ids.add(cfg["device_id"])
             
     for dev_id in unique_ids:
         try:
-            # Versuche den Status abzurufen
+            # Holt Status + Online-Info (_is_online)
             status = _client.get_status(specific_device_id=dev_id)
-            if status:
-                combined_status[dev_id] = status
-            else:
-                combined_status[dev_id] = {"_is_online": False}
-        except Exception as e:
-            # Bei Fehlern Gerät als Offline markieren, um App-Crash zu verhindern
+            combined_status[dev_id] = status
+        except Exception:
             combined_status[dev_id] = {"_is_online": False}
             
     return combined_status
@@ -374,8 +370,14 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
         st.warning("Shelly Client nicht initialisiert.")
         return
 
-    # Status-Update holen
-    all_devices_status = fetch_shelly_cached(shelly_client, shelly_config)
+    try:
+        all_devices_status = fetch_shelly_cached(shelly_client, shelly_config)
+    except Exception:
+        all_devices_status = {}
+
+    if not all_devices_status:
+        st.caption("⚠️ Keine Verbindung zur Shelly Cloud / Offline.")
+        return
 
     sorted_keys = sorted(shelly_config.keys())
     total_items = len(sorted_keys)
@@ -384,69 +386,65 @@ def render_shelly_monitor(printer_key, shelly_client, shelly_config):
         st.info("Keine Steckdosen konfiguriert.")
         return
 
-    # Grid-Layout berechnen
+    # Layout Logik (2-2-1 Grid)
     rows_needed = (total_items + 1) // 2 
     current_idx = 0
     
     for row in range(rows_needed):
-        cols = st.columns(2) if not (row == rows_needed - 1 and total_items % 2 != 0) else [st.container()]
+        is_last_row = (row == rows_needed - 1)
+        is_odd_orphan = (total_items % 2 != 0)
+        
+        if is_last_row and is_odd_orphan:
+            cols = [st.container()]
+        else:
+            cols = st.columns(2)
             
         for col in cols:
-            if current_idx >= total_items: break
+            if current_idx >= total_items:
+                break
                 
             switch_idx_str = sorted_keys[current_idx]
             cfg = shelly_config[switch_idx_str]
             
-            # Parameter extrahieren
-            target_dev_id = cfg.get("device_id", shelly_client.default_device_id)
-            target_channel = cfg.get("channel", int(switch_idx_str))
+            name = cfg.get("name", f"Switch {switch_idx_str}")
+            icon_type = cfg.get("icon", "bolt")
             standby_min = cfg.get("standby_min")
             
-            # Status-Daten für dieses Gerät
+            target_dev_id = cfg.get("device_id", shelly_client.default_device_id)
+            target_channel = cfg.get("channel", int(switch_idx_str))
+            
+            # Daten holen
             device_data = all_devices_status.get(target_dev_id, {})
+            
+            # 1. NEU: Online Status prüfen!
+            # Wenn der Key fehlt, nehmen wir False an (Offline)
             is_online = device_data.get("_is_online", False)
             
-            # Default-Werte falls offline
-            is_on = False
-            power = 0.0
+            switch_key = f"switch:{target_channel}"
+            switch_data = device_data.get(switch_key, {})
             
-            if is_online:
-                switch_key = f"switch:{target_channel}"
-                switch_data = device_data.get(switch_key, {})
-                is_on = switch_data.get("output", False)
-                power = float(switch_data.get("apower", 0.0))
-
-                # --- RGB LOGIK MIT SCHUTZ VOR API-OVERLOAD ---
-                # Wir bestimmen die Zielfarbe
-                if not is_on:
-                    target_rgb = (255, 0, 0) # ROT
-                elif standby_min is not None and power <= standby_min:
-                    target_rgb = (0, 0, 255) # BLAU
-                else:
-                    target_rgb = (0, 255, 0) # GRÜN
-                
-                # Sende Befehl NUR wenn die Farbe im Session-State noch nicht gespeichert ist
-                state_key = f"last_rgb_{target_dev_id}_{target_channel}"
-                if st.session_state.get(state_key) != target_rgb:
-                    # Sende Befehl asynchron (ohne auf Erfolg zu warten, um UI nicht zu blockieren)
-                    if shelly_client.set_rgb_color(target_rgb[0], target_rgb[1], target_rgb[2], specific_device_id=target_dev_id):
-                        st.session_state[state_key] = target_rgb
-
+            is_on = switch_data.get("output", False)
+            power = float(switch_data.get("apower", 0.0))
+            
             with col:
-                # [cite_start]Rendere die Karte [cite: 1]
-                if render_power_card(
-                    name=cfg.get("name", f"Switch {switch_idx_str}"),
+                # 2. NEU: Parameter is_offline übergeben
+                toggle_clicked = render_power_card(
+                    name=name,
                     is_on=is_on,
                     power=power,
                     switch_id=target_channel,
                     key_prefix=f"{printer_key}_{target_dev_id}", 
-                    icon_type=cfg.get("icon", "bolt"),
+                    icon_type=icon_type,
                     standby_min=standby_min,
-                    is_offline=(not is_online)
-                ):
-                    # Bei Klick schalten
-                    shelly_client.set_switch(target_channel, not is_on, specific_device_id=target_dev_id)
+                    is_offline=(not is_online)  # <--- Das sorgt für das Wolken-Icon!
+                )
+
+                if toggle_clicked:
+                    new_state = not is_on
+                    st.toast(f"Schalte {name} {'AN' if new_state else 'AUS'}...", icon="🔌")
+                    shelly_client.set_switch(target_channel, new_state, specific_device_id=target_dev_id)
                     fetch_shelly_cached.clear()
+                    time.sleep(0.5)
                     st.rerun()
             
             current_idx += 1
@@ -643,7 +641,7 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                     st.error("❌ Client konnte nicht geladen werden. Prüfe Google Sheets!")
                 else:
                     st.markdown(f"**Auth Key (Maskiert):** `{client.auth_key[:5]}...{client.auth_key[-5:]}`")
-                    st.markdown(f"**Device ID:** `{client.default_device_id}`")
+                    st.markdown(f"**Device ID:** `{client.device_id}`")
                     
                     test_urls = [
                         "https://shelly-api-eu.shelly.cloud/device/rpc",  # Haupt-Server
@@ -657,14 +655,13 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                         
                         payload = {
                             "auth_key": client.auth_key,
-                            "id": client.default_device_id,
+                            "id": client.device_id,
                             "method": "Shelly.GetStatus",
-                            "params": {} # Hier als echtes Dict, kein String
+                            "params": "{}" 
                         }
                         
                         try:
-                            # Wir nutzen json=payload, damit requests automatisch den Header Content-Type: application/json setzt
-                            r = requests.post(url, json=payload, timeout=10) 
+                            r = requests.post(url, data=payload, timeout=10)
                             st.write(f"Status Code: `{r.status_code}`")
                             
                             if r.status_code == 200:
