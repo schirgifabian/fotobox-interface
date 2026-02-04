@@ -3,7 +3,7 @@ import requests
 from typing import Dict, Any, Optional
 
 class ShellyClient:
-    def __init__(self, cloud_url: str, auth_key: str, device_id: str):
+    def __init__(self, cloud_url: str, auth_key: str, default_device_id: str):
         self.base_url = cloud_url.strip().rstrip("/")
         # URL Bereinigung
         if ":6022" in self.base_url:
@@ -14,27 +14,28 @@ class ShellyClient:
             self.base_url = self.base_url.split("/device")[0]
             
         self.auth_key = auth_key.strip()
-        self.device_id = device_id.strip()
+        self.default_device_id = default_device_id.strip()
         
-        # PERFORMANCE: Timeout auf 2.0 Sekunden reduziert!
-        # Wenn Shelly Cloud länger braucht, ist sie eh zu langsam für UI.
+        # Timeout performance optimization
         self.timeout = 2.0 
 
-    def _post(self, endpoint: str, params: Dict[str, Any]) -> Optional[Dict]:
+    def _post(self, endpoint: str, params: Dict[str, Any], override_device_id: str = None) -> Optional[Dict]:
         """
-        Hilfsfunktion für Requests an die Standard Cloud API.
-        Fail-Fast Strategie: Kein Retry, kurzes Timeout.
+        Sendet Request an Shelly Cloud. 
+        Wenn override_device_id gesetzt ist, wird dieses Gerät angesprochen, sonst das Standardgerät.
         """
         url = f"{self.base_url}{endpoint}"
         
+        # Wähle die korrekte ID (Plug S oder Power Strip)
+        target_id = override_device_id if override_device_id else self.default_device_id
+        
         data = {
             "auth_key": self.auth_key,
-            "id": self.device_id
+            "id": target_id
         }
         data.update(params)
         
         try:
-            # Sendet Form-Data
             response = requests.post(url, data=data, timeout=self.timeout)
             
             if response.status_code == 200:
@@ -42,27 +43,26 @@ class ShellyClient:
                     json_resp = response.json()
                     if json_resp.get("isok") == True:
                         return json_resp.get("data", {})
-                    # Keine Fehler-Prints mehr im UI-Thread, das verlangsamt nur
                     return None
                 except ValueError:
                     return None
             return None
             
         except Exception:
-            # Silent Fail für Performance
             return None
 
-    def get_status(self) -> Dict[str, Any]:
-        data = self._post("/device/status", {})
+    def get_status(self, specific_device_id: str = None) -> Dict[str, Any]:
+        """Holt Status. Wenn ID angegeben, dann von spezifischem Gerät."""
+        data = self._post("/device/status", {}, override_device_id=specific_device_id)
         if not data: return {}
             
-        # Normalisierung
-        source_data = data
-        if "device_status" in data:
-            source_data = data["device_status"]
+        source_data = data.get("device_status", data)
             
-        found_switches = False
+        # Normalisierung: Wir geben nur relevante Switch-Daten zurück
         normalized = {}
+        found_switches = False
+        
+        # Daten flachklopfen für einfachere Verarbeitung
         for k, v in source_data.items():
             if k.startswith("switch:"):
                 normalized[k] = v
@@ -71,10 +71,11 @@ class ShellyClient:
         if found_switches: return normalized
         return source_data
 
-    def set_switch(self, switch_id: int, turn_on: bool) -> bool:
+    def set_switch(self, channel: int, turn_on: bool, specific_device_id: str = None) -> bool:
+        """Schaltet Relay. Wenn ID angegeben, dann auf spezifischem Gerät."""
         params = {
-            "channel": switch_id,
+            "channel": channel,
             "turn": "on" if turn_on else "off"
         }
-        res = self._post("/device/relay/control", params)
+        res = self._post("/device/relay/control", params, override_device_id=specific_device_id)
         return res is not None
