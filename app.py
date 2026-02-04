@@ -659,11 +659,12 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                             "auth_key": client.auth_key,
                             "id": client.default_device_id,
                             "method": "Shelly.GetStatus",
-                            "params": "{}" 
+                            "params": {} # Hier als echtes Dict, kein String
                         }
                         
                         try:
-                            r = requests.post(url, data=payload, timeout=10)
+                            # Wir nutzen json=payload, damit requests automatisch den Header Content-Type: application/json setzt
+                            r = requests.post(url, json=payload, timeout=10) 
                             st.write(f"Status Code: `{r.status_code}`")
                             
                             if r.status_code == 200:
