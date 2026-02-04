@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional
 class ShellyClient:
     def __init__(self, cloud_url: str, auth_key: str, default_device_id: str):
         self.base_url = cloud_url.strip().rstrip("/")
-        # URL Bereinigung
+        # URL Bereinigung für verschiedene API Endpoints
         if ":6022" in self.base_url:
             self.base_url = self.base_url.split(":6022")[0]
         if "/jrpc" in self.base_url:
@@ -15,18 +15,10 @@ class ShellyClient:
             
         self.auth_key = auth_key.strip()
         self.default_device_id = default_device_id.strip()
-        
-        # Timeout performance optimization
-        self.timeout = 2.0 
+        self.timeout = 3.0 # Etwas erhöht für Stabilität
 
     def _post(self, endpoint: str, params: Dict[str, Any], override_device_id: str = None) -> Optional[Dict]:
-        """
-        Sendet Request an Shelly Cloud. 
-        Wenn override_device_id gesetzt ist, wird dieses Gerät angesprochen, sonst das Standardgerät.
-        """
         url = f"{self.base_url}{endpoint}"
-        
-        # Wähle die korrekte ID (Plug S oder Power Strip)
         target_id = override_device_id if override_device_id else self.default_device_id
         
         data = {
@@ -37,7 +29,6 @@ class ShellyClient:
         
         try:
             response = requests.post(url, data=data, timeout=self.timeout)
-            
             if response.status_code == 200:
                 try:
                     json_resp = response.json()
@@ -47,32 +38,40 @@ class ShellyClient:
                 except ValueError:
                     return None
             return None
-            
         except Exception:
             return None
 
     def get_status(self, specific_device_id: str = None) -> Dict[str, Any]:
-        """Holt Status. Wenn ID angegeben, dann von spezifischem Gerät."""
+        """
+        Holt Status + Online Info.
+        """
         data = self._post("/device/status", {}, override_device_id=specific_device_id)
-        if not data: return {}
+        if not data: 
+            return {"_is_online": False} # API Fehler -> Als Offline werten
             
+        # WICHTIG: Prüfen ob Gerät online ist
+        is_online = data.get("online", False)
+        
         source_data = data.get("device_status", data)
             
-        # Normalisierung: Wir geben nur relevante Switch-Daten zurück
-        normalized = {}
-        found_switches = False
+        normalized = {"_is_online": is_online}
         
-        # Daten flachklopfen für einfachere Verarbeitung
+        # Nur relevante Switch-Daten übernehmen
+        found_switches = False
         for k, v in source_data.items():
-            if k.startswith("switch:"):
+            if k.startswith("switch:") or k.startswith("sys"):
                 normalized[k] = v
                 found_switches = True
                 
-        if found_switches: return normalized
+        # Wenn wir Switches gefunden haben, geben wir diese zurück + Online Status
+        # Wenn nicht, geben wir die Rohdaten zurück + Online Status
+        if found_switches:
+            return normalized
+            
+        source_data["_is_online"] = is_online
         return source_data
 
     def set_switch(self, channel: int, turn_on: bool, specific_device_id: str = None) -> bool:
-        """Schaltet Relay. Wenn ID angegeben, dann auf spezifischem Gerät."""
         params = {
             "channel": channel,
             "turn": "on" if turn_on else "off"
