@@ -657,7 +657,7 @@ def render_admin_panel(printer_cfg: Dict[str, Any], warning_threshold: int, prin
                         
                         payload = {
                             "auth_key": client.auth_key,
-                            "id": client.device_id,
+                            "id": client.default_device_id,
                             "method": "Shelly.GetStatus",
                             "params": "{}" 
                         }
